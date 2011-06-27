@@ -1,5 +1,5 @@
-CC		= gcc
-#CC		= i586-mingw32msvc-gcc
+#CC		= gcc
+CC		= i586-mingw32msvc-gcc
 CFLAGS		= -Wall -g -O -DMINGW32 -Ilibusb-win32
 LDFLAGS		= -s
 LIBS		= -Llibusb-win32/x86 -lusb0_x86
@@ -13,8 +13,8 @@ pic32prog.exe:	$(PROG_OBJS)
 		$(CC) $(LDFLAGS) -o $@ $(PROG_OBJS) $(LIBS)
 
 ###
-adapter-mpsse.o: adapter-mpsse.c /opt/local/include/usb.h adapter.h
-adapter-pickit2.o: adapter-pickit2.c /opt/local/include/usb.h adapter.h pickit2.h pic32.h
+adapter-mpsse.o: adapter-mpsse.c adapter.h
+adapter-pickit2.o: adapter-pickit2.c adapter.h pickit2.h pic32.h
 executive.o: executive.c pic32.h
 pic32prog.o: pic32prog.c target.h localize.h
 target.o: target.c target.h adapter.h localize.h pic32.h

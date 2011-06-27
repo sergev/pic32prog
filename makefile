@@ -36,8 +36,8 @@ install:	pic32prog #pic32prog-ru.mo
 		install -c -s pic32prog /usr/local/bin/pic32prog
 #		install -c -m 444 pic32prog-ru.mo /usr/local/share/locale/ru/LC_MESSAGES/pic32prog.mo
 ###
-adapter-mpsse.o: adapter-mpsse.c /opt/local/include/usb.h adapter.h
-adapter-pickit2.o: adapter-pickit2.c /opt/local/include/usb.h adapter.h pickit2.h pic32.h
+adapter-mpsse.o: adapter-mpsse.c adapter.h
+adapter-pickit2.o: adapter-pickit2.c adapter.h pickit2.h pic32.h
 executive.o: executive.c pic32.h
 pic32prog.o: pic32prog.c target.h localize.h
 target.o: target.c target.h adapter.h localize.h pic32.h
