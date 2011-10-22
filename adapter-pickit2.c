@@ -792,24 +792,32 @@ failed: usb_release_interface (a->usbdev, IFACE);
     unsigned status = a->reply[0] | a->reply[1] << 8;
     if (debug_level > 0)
         fprintf (stderr, "PICkit2: status %04x\n", status);
-    if ((status & ~STATUS_RESET) != (STATUS_VDD_GND_ON | STATUS_VPP_GND_ON)) {
+
+    switch (status & ~STATUS_RESET) {
+    case STATUS_VPP_GND_ON | STATUS_VPP_ON:
+        /* Explorer 16 board: no need to enable power. */
+        break;
+
+    case STATUS_VDD_GND_ON | STATUS_VPP_GND_ON:
+        /* Enable power to the board. */
+        pickit2_send (a, 4, CMD_EXECUTE_SCRIPT, 2,
+            SCRIPT_VDD_GND_OFF,
+            SCRIPT_VDD_ON);
+
+        /* Read board status. */
+        pickit2_send (a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_READ_STATUS);
+        pickit2_recv (a);
+        status = a->reply[0] | a->reply[1] << 8;
+        if (debug_level > 0)
+            fprintf (stderr, "PICkit2: status %04x\n", status);
+        if (status != (STATUS_VDD_ON | STATUS_VPP_GND_ON)) {
+            fprintf (stderr, "PICkit2: invalid status = %04x.\n", status);
+            goto failed;
+        }
+        break;
+
+    default:
         fprintf (stderr, "PICkit2: invalid status = %04x\n", status);
-        goto failed;
-    }
-
-    /* Enable power to the board. */
-    pickit2_send (a, 4, CMD_EXECUTE_SCRIPT, 2,
-        SCRIPT_VDD_GND_OFF,
-        SCRIPT_VDD_ON);
-
-    /* Read board status. */
-    pickit2_send (a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_READ_STATUS);
-    pickit2_recv (a);
-    status = a->reply[0] | a->reply[1] << 8;
-    if (debug_level > 0)
-        fprintf (stderr, "PICkit2: status %04x\n", status);
-    if (status != (STATUS_VDD_ON | STATUS_VPP_GND_ON)) {
-        fprintf (stderr, "PICkit2: invalid status = %04x.\n", status);
         goto failed;
     }
 
