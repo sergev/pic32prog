@@ -794,6 +794,7 @@ failed: usb_release_interface (a->usbdev, IFACE);
         fprintf (stderr, "PICkit2: status %04x\n", status);
 
     switch (status & ~STATUS_RESET) {
+    case STATUS_VPP_GND_ON:
     case STATUS_VPP_GND_ON | STATUS_VPP_ON:
         /* Explorer 16 board: no need to enable power. */
         break;

@@ -439,7 +439,7 @@ void do_program (char *filename)
                 progress (1);
             }
         }
-        printf (_("# done\n"));
+        printf (_("# done      \n"));
         if (! boot_dirty [BOOT_KBYTES-1]) {
             /* Write chip configuration. */
             target_program_word (target, BOOTV_BASE + BOOT_SIZE - 16, DEVCFG3);
@@ -472,7 +472,7 @@ void do_program (char *filename)
                 exit (0);
         }
     }
-    printf (_("# done\n"));
+    printf (_(" done       \n"));
     printf (_("Rate: %ld bytes per second\n"),
         total_bytes * 1000L / mseconds_elapsed (t0));
 }
