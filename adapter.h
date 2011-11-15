@@ -23,6 +23,7 @@ struct _adapter_t {
 };
 
 adapter_t *adapter_open_pickit2 (void);
+adapter_t *adapter_open_boot (void);
 adapter_t *adapter_open_mpsse (void);
 
 void mdelay (unsigned msec);

@@ -130,6 +130,8 @@ target_t *target_open ()
     /* Find adapter. */
     t->adapter = adapter_open_pickit2 ();
     if (! t->adapter)
+        t->adapter = adapter_open_boot ();
+    if (! t->adapter)
         t->adapter = adapter_open_mpsse ();
     if (! t->adapter) {
         fprintf (stderr, _("No target found.\n"));
@@ -449,6 +451,7 @@ void target_print_devcfg (target_t *t)
     if (devcfg2 & DEVCFG2_UPLLDIS)
         printf ("                  %u    Disable USB PLL\n",
             DEVCFG2_UPLLDIS >> 12);
+    else
         printf ("                       Enable USB PLL\n");
 
     switch (devcfg2 & DEVCFG2_FPLLODIV_MASK) {

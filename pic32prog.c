@@ -598,7 +598,7 @@ int main (int argc, char **argv)
 
     setvbuf (stdout, (char *)NULL, _IOLBF, 0);
     setvbuf (stderr, (char *)NULL, _IOLBF, 0);
-    printf (_("Programmer for Mictochip PIC32 microcontrollers, Version %s\n"), VERSION);
+    printf (_("Programmer for Microchip PIC32 microcontrollers, Version %s\n"), VERSION);
     progname = argv[0];
     copyright = _("    Copyright: (C) 2011 Serge Vakulenko");
     signal (SIGINT, interrupted);
