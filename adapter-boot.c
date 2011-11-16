@@ -202,8 +202,9 @@ static void boot_command (boot_adapter_t *a, unsigned char cmd,
 static void boot_close (adapter_t *adapter, int power_on)
 {
     boot_adapter_t *a = (boot_adapter_t*) adapter;
-    //fprintf (stderr, "hidboot: close\n");
 
+    /* Jump to application. */
+    boot_command (a, CMD_JUMP_APP, 0, 0);
     free (a);
 }
 
@@ -217,39 +218,122 @@ static unsigned boot_get_idcode (adapter_t *adapter)
 }
 
 /*
- * Read a word from memory (without PE).
+ * Read a configuration word from memory.
  */
 static unsigned boot_read_word (adapter_t *adapter, unsigned addr)
 {
-//    boot_adapter_t *a = (boot_adapter_t*) adapter;
-/*TODO*/
+    /* Not supported by booloader. */
     return 0;
 }
 
 /*
- * Read a block of memory, multiple of 1 kbyte.
- */
-static void boot_read_data (adapter_t *adapter,
-    unsigned addr, unsigned nwords, unsigned *data)
-{
-    //fprintf (stderr, "hidboot: read %d bytes from %08x\n", nwords*4, addr);
-    for (; nwords > 0; nwords--) {
-        *data++ = boot_read_word (adapter, addr);
-        addr += 4;
-    }
-}
-
-/*
- * Write a word to flash memory.
+ * Write a configuration word to flash memory.
  */
 static void boot_program_word (adapter_t *adapter,
     unsigned addr, unsigned word)
 {
-//    boot_adapter_t *a = (boot_adapter_t*) adapter;
-
+    /* Not supported by booloader. */
     if (debug_level > 0)
         fprintf (stderr, "hidboot: program word at %08x: %08x\n", addr, word);
-/*TODO*/
+}
+
+/*
+ * Verify a block of memory.
+ */
+static void boot_verify_data (adapter_t *adapter,
+    unsigned addr, unsigned nwords, unsigned *data)
+{
+    boot_adapter_t *a = (boot_adapter_t*) adapter;
+    unsigned char request [8];
+    unsigned data_crc, flash_crc, nbytes = nwords * 4;
+
+    //fprintf (stderr, "hidboot: verify %d bytes at %08x\n", nbytes, addr);
+    request[0] = addr;
+    request[1] = addr >> 8;
+    request[2] = addr >> 16;
+    request[3] = (addr >> 24) + 0x80;
+    request[4] = nbytes;
+    request[5] = nbytes >> 8;
+    request[6] = nbytes >> 16;
+    request[7] = nbytes >> 24;
+    boot_command (a, CMD_READ_CRC, request, 8);
+    if (a->reply_len != 3 || a->reply[0] != CMD_READ_CRC) {
+        fprintf (stderr, "hidboot: cannot read crc at %08x\n", addr);
+        exit (-1);
+    }
+    flash_crc = a->reply[1] | a->reply[2] << 8;
+
+    data_crc = calculate_crc (0, (unsigned char*) data, nbytes);
+    if (flash_crc != data_crc) {
+        fprintf (stderr, "hidboot: checksum failed at %08x: sum=%04x, expected=%04x\n",
+            addr, flash_crc, data_crc);
+        //exit (-1);
+    }
+}
+
+static void set_flash_address (boot_adapter_t *a, unsigned addr)
+{
+    unsigned char request[7];
+    unsigned sum, i;
+
+    request[0] = 2;
+    request[1] = 0;
+    request[2] = 0;
+    request[3] = 4;             /* Type: linear address record */
+    request[4] = addr >> 24;
+    request[5] = addr >> 16;
+
+    /* Compute checksum. */
+    sum = 0;
+    for (i=0; i<6; i++)
+        sum += request[i];
+    request[6] = -sum;
+
+    boot_command (a, CMD_PROGRAM_FLASH, request, 7);
+    if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
+        fprintf (stderr, "hidboot: error setting flash address at %08x\n", addr);
+        exit (-1);
+    }
+}
+
+static void program_flash (boot_adapter_t *a,
+    unsigned addr, unsigned char *data, unsigned nbytes)
+{
+    unsigned char request[64];
+    unsigned sum, empty, i;
+
+    /* Skip empty blocks. */
+    empty = 1;
+    for (i=0; i<nbytes; i++) {
+        if (data[i] != 0xff) {
+            empty = 0;
+            break;
+        }
+    }
+    if (empty)
+        return;
+    //fprintf (stderr, "hidboot: program %d bytes at %08x: %02x-%02x-...-%02x\n",
+    //    nbytes, addr, data[0], data[1], data[31]);
+
+    request[0] = nbytes;
+    request[1] = addr >> 8;
+    request[2] = addr;
+    request[3] = 0;             /* Type: data record */
+    memcpy (request+4, data, nbytes);
+
+    /* Compute checksum. */
+    sum = 0;
+    empty = 1;
+    for (i=0; i<nbytes+4; i++) {
+        sum += request[i];
+    }
+    request[nbytes+4] = -sum;
+
+    boot_command (a, CMD_PROGRAM_FLASH, request, nbytes + 5);
+    if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
+        fprintf (stderr, "hidboot: error programming flash at %08x\n", addr);
+        exit (-1);
+    }
 }
 
 /*
@@ -258,12 +342,16 @@ static void boot_program_word (adapter_t *adapter,
 static void boot_program_block (adapter_t *adapter,
     unsigned addr, unsigned *data)
 {
-//    boot_adapter_t *a = (boot_adapter_t*) adapter;
-    unsigned nwords = 256;
+    boot_adapter_t *a = (boot_adapter_t*) adapter;
+    unsigned i;
 
-    if (debug_level > 0)
-        fprintf (stderr, "hidboot: program %d bytes at %08x\n", nwords*4, addr);
-/*TODO*/
+    set_flash_address (a, addr);
+    for (i=0; i<256; i+=8) {
+        /* 8 words per cycle. */
+        program_flash (a, addr, (unsigned char*) data, 32);
+        data += 8;
+        addr += 32;
+    }
 }
 
 /*
@@ -271,10 +359,14 @@ static void boot_program_block (adapter_t *adapter,
  */
 static void boot_erase_chip (adapter_t *adapter)
 {
-//    boot_adapter_t *a = (boot_adapter_t*) adapter;
+    boot_adapter_t *a = (boot_adapter_t*) adapter;
 
     //fprintf (stderr, "hidboot: erase chip\n");
-/*TODO*/
+    boot_command (a, CMD_ERASE_FLASH, 0, 0);
+    if (a->reply_len != 1 || a->reply[0] != CMD_ERASE_FLASH) {
+        fprintf (stderr, "hidboot: Erase failed\n");
+        exit (-1);
+    }
 }
 
 /*
@@ -309,7 +401,7 @@ adapter_t *adapter_open_boot (void)
     a->adapter.close = boot_close;
     a->adapter.get_idcode = boot_get_idcode;
     a->adapter.read_word = boot_read_word;
-    a->adapter.read_data = boot_read_data;
+    a->adapter.verify_data = boot_verify_data;
     a->adapter.erase_chip = boot_erase_chip;
     a->adapter.program_block = boot_program_block;
     a->adapter.program_word = boot_program_word;

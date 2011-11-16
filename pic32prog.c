@@ -349,8 +349,6 @@ void program_block (target_t *mc, unsigned addr)
 
 int verify_block (target_t *mc, unsigned addr)
 {
-    int i;
-    unsigned word, expected, block [BLOCKSZ/4];
     unsigned char *data;
     unsigned offset;
 
@@ -367,16 +365,7 @@ int verify_block (target_t *mc, unsigned addr)
         data = flash_data;
         offset = addr - FLASHP_BASE;
     }
-    target_read_block (mc, addr, BLOCKSZ/4, block);
-    for (i=0; i<BLOCKSZ; i+=4) {
-        expected = *(unsigned*) (data + offset + i);
-        word = block [i/4];
-        if (word != expected) {
-            printf (_("\nerror at address %08X: file=%08X, mem=%08X\n"),
-                addr + i, expected, word);
-            exit (1);
-        }
-    }
+    target_verify_block (mc, addr, BLOCKSZ/4, (unsigned*) (data + offset));
     return 1;
 }
 

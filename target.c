@@ -193,6 +193,9 @@ void target_print_devcfg (target_t *t)
     unsigned devcfg1 = t->adapter->read_word (t->adapter, DEVCFG1_ADDR);
     unsigned devcfg2 = t->adapter->read_word (t->adapter, DEVCFG2_ADDR);
     unsigned devcfg3 = t->adapter->read_word (t->adapter, DEVCFG3_ADDR);
+    if (! devcfg0 && ! devcfg1 && ! devcfg2 && ! devcfg3)
+        return;
+
     printf (_("Configuration:\n"));
 
     /*--------------------------------------
@@ -564,6 +567,11 @@ static unsigned virt_to_phys (unsigned addr)
 void target_read_block (target_t *t, unsigned addr,
     unsigned nwords, unsigned *data)
 {
+    if (! t->adapter->read_data) {
+        printf (_("\nData reading not supported by the adapter.\n"));
+        exit (1);
+    }
+
     addr = virt_to_phys (addr);
     //fprintf (stderr, "target_read_block (addr = %x, nwords = %d)\n", addr, nwords);
     while (nwords > 0) {
@@ -576,6 +584,32 @@ void target_read_block (target_t *t, unsigned addr,
         nwords -= n;
     }
     //fprintf (stderr, "    done (addr = %x)\n", addr);
+}
+
+/*
+ * Verify data.
+ */
+void target_verify_block (target_t *t, unsigned addr,
+    unsigned nwords, unsigned *data)
+{
+    unsigned i, word, expected, block[256];
+
+    addr = virt_to_phys (addr);
+    if (t->adapter->verify_data != 0) {
+        t->adapter->verify_data (t->adapter, addr, nwords, data);
+        return;
+    }
+
+    t->adapter->read_data (t->adapter, addr, 256, block);
+    for (i=0; i<256; i++) {
+        expected = data [i];
+        word = block [i];
+        if (word != expected) {
+            printf (_("\nerror at address %08X: file=%08X, mem=%08X\n"),
+                addr + i, expected, word);
+            exit (1);
+        }
+    }
 }
 
 /*
