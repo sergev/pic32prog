@@ -130,9 +130,11 @@ target_t *target_open ()
     /* Find adapter. */
     t->adapter = adapter_open_pickit2 ();
     if (! t->adapter)
-        t->adapter = adapter_open_boot ();
-    if (! t->adapter)
         t->adapter = adapter_open_mpsse ();
+    if (! t->adapter)
+        t->adapter = adapter_open_hidboot ();
+    if (! t->adapter)
+        t->adapter = adapter_open_an1388 ();
     if (! t->adapter) {
         fprintf (stderr, _("No target found.\n"));
         exit (-1);

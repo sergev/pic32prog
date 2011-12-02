@@ -1,5 +1,5 @@
 /*
- * Interface to PIC32 Microchip USB bootloader.
+ * Interface to PIC32 Microchip AN1388 USB bootloader (new).
  *
  * Copyright (C) 2011 Serge Vakulenko
  *
@@ -39,13 +39,13 @@ typedef struct {
     unsigned char reply [64];
     int reply_len;
 
-} boot_adapter_t;
+} an1388_adapter_t;
 
 /*
  * Identifiers of USB adapter.
  */
 #define MICROCHIP_VID           0x04d8
-#define BOOTLOADER_PID          0x003c  /* Microchip HID Bootloader */
+#define BOOTLOADER_PID          0x003c  /* Microchip AN1388 Bootloader */
 
 /*
  * USB endpoints.
@@ -76,7 +76,7 @@ static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbyte
     return crc & 0xffff;
 }
 
-static void boot_send (hid_device *hiddev, unsigned char *buf, unsigned nbytes)
+static void an1388_send (hid_device *hiddev, unsigned char *buf, unsigned nbytes)
 {
     if (debug_level > 0) {
         int k;
@@ -91,7 +91,7 @@ static void boot_send (hid_device *hiddev, unsigned char *buf, unsigned nbytes)
     hid_write (hiddev, buf, 64);
 }
 
-static int boot_recv (hid_device *hiddev, unsigned char *buf)
+static int an1388_recv (hid_device *hiddev, unsigned char *buf)
 {
     int n;
 
@@ -126,7 +126,7 @@ static inline unsigned add_byte (unsigned char c,
  * Send a request to the device.
  * Store the reply into the a->reply[] array.
  */
-static void boot_command (boot_adapter_t *a, unsigned char cmd,
+static void an1388_command (an1388_adapter_t *a, unsigned char cmd,
     unsigned char *data, unsigned data_len)
 {
     unsigned char buf [64];
@@ -158,13 +158,13 @@ static void boot_command (boot_adapter_t *a, unsigned char cmd,
     n = add_byte (crc >> 8, buf, n);
 
     buf[n++] = FRAME_EOT;
-    boot_send (a->hiddev, buf, n);
+    an1388_send (a->hiddev, buf, n);
 
     if (cmd == CMD_JUMP_APP) {
         /* No reply expected. */
         return;
     }
-    n = boot_recv (a->hiddev, buf);
+    n = an1388_recv (a->hiddev, buf);
     c = 0;
     for (i=0; i<n; ++i) {
         switch (buf[i]) {
@@ -199,19 +199,19 @@ static void boot_command (boot_adapter_t *a, unsigned char cmd,
     }
 }
 
-static void boot_close (adapter_t *adapter, int power_on)
+static void an1388_close (adapter_t *adapter, int power_on)
 {
-    boot_adapter_t *a = (boot_adapter_t*) adapter;
+    an1388_adapter_t *a = (an1388_adapter_t*) adapter;
 
     /* Jump to application. */
-    boot_command (a, CMD_JUMP_APP, 0, 0);
+    an1388_command (a, CMD_JUMP_APP, 0, 0);
     free (a);
 }
 
 /*
  * Return the Device Identification code
  */
-static unsigned boot_get_idcode (adapter_t *adapter)
+static unsigned an1388_get_idcode (adapter_t *adapter)
 {
     /* Assume 795F512L. */
     return 0x04307053;
@@ -220,7 +220,7 @@ static unsigned boot_get_idcode (adapter_t *adapter)
 /*
  * Read a configuration word from memory.
  */
-static unsigned boot_read_word (adapter_t *adapter, unsigned addr)
+static unsigned an1388_read_word (adapter_t *adapter, unsigned addr)
 {
     /* Not supported by booloader. */
     return 0;
@@ -229,7 +229,7 @@ static unsigned boot_read_word (adapter_t *adapter, unsigned addr)
 /*
  * Write a configuration word to flash memory.
  */
-static void boot_program_word (adapter_t *adapter,
+static void an1388_program_word (adapter_t *adapter,
     unsigned addr, unsigned word)
 {
     /* Not supported by booloader. */
@@ -240,10 +240,10 @@ static void boot_program_word (adapter_t *adapter,
 /*
  * Verify a block of memory.
  */
-static void boot_verify_data (adapter_t *adapter,
+static void an1388_verify_data (adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
-    boot_adapter_t *a = (boot_adapter_t*) adapter;
+    an1388_adapter_t *a = (an1388_adapter_t*) adapter;
     unsigned char request [8];
     unsigned data_crc, flash_crc, nbytes = nwords * 4;
 
@@ -256,7 +256,7 @@ static void boot_verify_data (adapter_t *adapter,
     request[5] = nbytes >> 8;
     request[6] = nbytes >> 16;
     request[7] = nbytes >> 24;
-    boot_command (a, CMD_READ_CRC, request, 8);
+    an1388_command (a, CMD_READ_CRC, request, 8);
     if (a->reply_len != 3 || a->reply[0] != CMD_READ_CRC) {
         fprintf (stderr, "hidboot: cannot read crc at %08x\n", addr);
         exit (-1);
@@ -271,7 +271,7 @@ static void boot_verify_data (adapter_t *adapter,
     }
 }
 
-static void set_flash_address (boot_adapter_t *a, unsigned addr)
+static void set_flash_address (an1388_adapter_t *a, unsigned addr)
 {
     unsigned char request[7];
     unsigned sum, i;
@@ -289,14 +289,14 @@ static void set_flash_address (boot_adapter_t *a, unsigned addr)
         sum += request[i];
     request[6] = -sum;
 
-    boot_command (a, CMD_PROGRAM_FLASH, request, 7);
+    an1388_command (a, CMD_PROGRAM_FLASH, request, 7);
     if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
         fprintf (stderr, "hidboot: error setting flash address at %08x\n", addr);
         exit (-1);
     }
 }
 
-static void program_flash (boot_adapter_t *a,
+static void program_flash (an1388_adapter_t *a,
     unsigned addr, unsigned char *data, unsigned nbytes)
 {
     unsigned char request[64];
@@ -329,7 +329,7 @@ static void program_flash (boot_adapter_t *a,
     }
     request[nbytes+4] = -sum;
 
-    boot_command (a, CMD_PROGRAM_FLASH, request, nbytes + 5);
+    an1388_command (a, CMD_PROGRAM_FLASH, request, nbytes + 5);
     if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
         fprintf (stderr, "hidboot: error programming flash at %08x\n", addr);
         exit (-1);
@@ -339,10 +339,10 @@ static void program_flash (boot_adapter_t *a,
 /*
  * Flash write, 1-kbyte blocks.
  */
-static void boot_program_block (adapter_t *adapter,
+static void an1388_program_block (adapter_t *adapter,
     unsigned addr, unsigned *data)
 {
-    boot_adapter_t *a = (boot_adapter_t*) adapter;
+    an1388_adapter_t *a = (an1388_adapter_t*) adapter;
     unsigned i;
 
     set_flash_address (a, addr);
@@ -357,12 +357,12 @@ static void boot_program_block (adapter_t *adapter,
 /*
  * Erase all flash memory.
  */
-static void boot_erase_chip (adapter_t *adapter)
+static void an1388_erase_chip (adapter_t *adapter)
 {
-    boot_adapter_t *a = (boot_adapter_t*) adapter;
+    an1388_adapter_t *a = (an1388_adapter_t*) adapter;
 
     //fprintf (stderr, "hidboot: erase chip\n");
-    boot_command (a, CMD_ERASE_FLASH, 0, 0);
+    an1388_command (a, CMD_ERASE_FLASH, 0, 0);
     if (a->reply_len != 1 || a->reply[0] != CMD_ERASE_FLASH) {
         fprintf (stderr, "hidboot: Erase failed\n");
         exit (-1);
@@ -374,14 +374,14 @@ static void boot_erase_chip (adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_boot (void)
+adapter_t *adapter_open_an1388 (void)
 {
-    boot_adapter_t *a;
+    an1388_adapter_t *a;
     hid_device *hiddev;
 
     hiddev = hid_open (MICROCHIP_VID, BOOTLOADER_PID, 0);
     if (! hiddev) {
-        /*fprintf (stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
+        /*fprintf (stderr, "AN1388 bootloader not found: vid=%04x, pid=%04x\n",
             MICROCHIP_VID, BOOTLOADER_PID);*/
         return 0;
     }
@@ -393,17 +393,17 @@ adapter_t *adapter_open_boot (void)
     a->hiddev = hiddev;
 
     /* Read version of adapter. */
-    boot_command (a, CMD_READ_VERSION, 0, 0);
-    printf ("      Adapter: HID Bootloader Version %d.%d\n",
+    an1388_command (a, CMD_READ_VERSION, 0, 0);
+    printf ("      Adapter: AN1388 Bootloader Version %d.%d\n",
         a->reply[1], a->reply[2]);
 
     /* User functions. */
-    a->adapter.close = boot_close;
-    a->adapter.get_idcode = boot_get_idcode;
-    a->adapter.read_word = boot_read_word;
-    a->adapter.verify_data = boot_verify_data;
-    a->adapter.erase_chip = boot_erase_chip;
-    a->adapter.program_block = boot_program_block;
-    a->adapter.program_word = boot_program_word;
+    a->adapter.close = an1388_close;
+    a->adapter.get_idcode = an1388_get_idcode;
+    a->adapter.read_word = an1388_read_word;
+    a->adapter.verify_data = an1388_verify_data;
+    a->adapter.erase_chip = an1388_erase_chip;
+    a->adapter.program_block = an1388_program_block;
+    a->adapter.program_word = an1388_program_word;
     return &a->adapter;
 }

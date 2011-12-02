@@ -4,11 +4,15 @@ CFLAGS          = -Wall -g -I/opt/local/include -Ihidapi -O
 LDFLAGS         = -g
 LIBS            = -L/opt/local/lib -lusb
 
+# Linux
+LIBS            += -ludev
+
 # Mac OS X
-LIBS            += -framework IOKit -framework CoreFoundation
+#LIBS            += -framework IOKit -framework CoreFoundation
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
-                  adapter-pickit2.o adapter-boot.o adapter-mpsse.o
+                  adapter-pickit2.o adapter-hidboot.o adapter-mpsse.o \
+                  adapter-an1388.o
 
 all:            pic32prog
 
@@ -31,7 +35,7 @@ pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo: pic32prog-ru.po
 		iconv -f utf-8 -t cp866 $< | sed 's/UTF-8/CP866/' | msgfmt -c -o $@ -
 		cp pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo
 
-hid.o:          hidapi/hid-mac.c
+hid.o:          hidapi/hid-linux.c #hidapi/hid-mac.c
 		$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:
