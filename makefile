@@ -1,14 +1,17 @@
 CC              = gcc
+SVNVERS         = $(shell svnversion)
 
-CFLAGS          = -Wall -g -I/opt/local/include -Ihidapi -O
+CFLAGS          = -Wall -g -O -I/opt/local/include -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -g
 LIBS            = -L/opt/local/lib -lusb
 
 # Linux
-LIBS            += -ludev
+#LIBS            += -ludev
+#HIDSRC          = hidapi/hid-linux.c
 
 # Mac OS X
-#LIBS            += -framework IOKit -framework CoreFoundation
+LIBS            += -framework IOKit -framework CoreFoundation
+HIDSRC          = hidapi/hid-mac.c
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-mpsse.o \
@@ -35,7 +38,7 @@ pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo: pic32prog-ru.po
 		iconv -f utf-8 -t cp866 $< | sed 's/UTF-8/CP866/' | msgfmt -c -o $@ -
 		cp pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo
 
-hid.o:          hidapi/hid-linux.c #hidapi/hid-mac.c
+hid.o:          $(HIDSRC)
 		$(CC) $(CFLAGS) -c -o $@ $<
 
 clean:

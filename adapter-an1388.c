@@ -48,14 +48,6 @@ typedef struct {
 #define BOOTLOADER_PID          0x003c  /* Microchip AN1388 Bootloader */
 
 /*
- * USB endpoints.
- */
-#define OUT_EP                  0x01
-#define IN_EP                   0x81
-
-#define TIMO_MSEC               1000
-
-/*
  * Calculate checksum.
  */
 static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbytes)

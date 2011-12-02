@@ -815,6 +815,8 @@ failed: usb_release_interface (a->usbdev, IFACE);
             fprintf (stderr, "PICkit2: invalid status = %04x.\n", status);
             goto failed;
         }
+        /* Wait for power to stabilize. */
+        usleep (500000);
         break;
 
     default:

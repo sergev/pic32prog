@@ -19,15 +19,14 @@
 #include "hidapi.h"
 #include "pic32.h"
 
-#define FRAME_SOH           0x01
-#define FRAME_EOT           0x04
-#define FRAME_DLE           0x10
-
-#define CMD_READ_VERSION    0x01
-#define CMD_ERASE_FLASH     0x02
-#define CMD_PROGRAM_FLASH   0x03
-#define CMD_READ_CRC        0x04
-#define CMD_JUMP_APP        0x05
+/* Bootloader commands */
+#define CMD_QUERY_DEVICE        0x02
+#define CMD_UNLOCK_CONFIG       0x03
+#define CMD_ERASE_DEVICE        0x04
+#define CMD_PROGRAM_DEVICE      0x05
+#define CMD_PROGRAM_COMPLETE    0x06
+#define CMD_GET_DATA            0x07
+#define CMD_RESET_DEVICE        0x08
 
 typedef struct {
     /* Common part */
@@ -39,163 +38,65 @@ typedef struct {
     unsigned char reply [64];
     int reply_len;
 
+    unsigned prog_start;
+    unsigned prog_size;
+
 } hidboot_adapter_t;
 
 /*
  * Identifiers of USB adapter.
  */
 #define MICROCHIP_VID           0x04d8
-#define BOOTLOADER_PID          0x003c  /* Microchip HID Bootloader */
+#define BOOTLOADER_PID          0x003c  /* Microchip HID bootloader */
 
-/*
- * USB endpoints.
- */
-#define OUT_EP                  0x01
-#define IN_EP                   0x81
-
-#define TIMO_MSEC               1000
-
-/*
- * Calculate checksum.
- */
-static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbytes)
-{
-    static const unsigned short crc_table [16] = {
-        0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
-        0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
-    };
-    unsigned i;
-
-    while (nbytes--) {
-        i = (crc >> 12) ^ (*data >> 4);
-        crc = crc_table[i & 0x0F] ^ (crc << 4);
-        i = (crc >> 12) ^ (*data >> 0);
-        crc = crc_table[i & 0x0F] ^ (crc << 4);
-        data++;
-    }
-    return crc & 0xffff;
-}
-
-static void hidboot_send (hid_device *hiddev, unsigned char *buf, unsigned nbytes)
-{
-    if (debug_level > 0) {
-        int k;
-        fprintf (stderr, "---Send");
-        for (k=0; k<nbytes; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", buf[k]);
-        }
-        fprintf (stderr, "\n");
-    }
-    hid_write (hiddev, buf, 64);
-}
-
-static int hidboot_recv (hid_device *hiddev, unsigned char *buf)
-{
-    int n;
-
-    n = hid_read (hiddev, buf, 64);
-    if (n <= 0) {
-        fprintf (stderr, "hidboot: error %d receiving packet\n", n);
-        exit (-1);
-    }
-    if (debug_level > 0) {
-        int k;
-        fprintf (stderr, "---Recv");
-        for (k=0; k<n; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", buf[k]);
-        }
-        fprintf (stderr, "\n");
-    }
-    return n;
-}
-
-static inline unsigned add_byte (unsigned char c,
-    unsigned char *buf, unsigned indx)
-{
-    if (c == FRAME_EOT || c == FRAME_SOH || c == FRAME_DLE)
-        buf[indx++] = FRAME_DLE;
-    buf[indx++] = c;
-    return indx;
-}
+#define OLIMEX_VID              0x15ba
+#define DUINOMITE_PID           0x0032  /* Olimex Duinomite bootloader */
 
 /*
  * Send a request to the device.
  * Store the reply into the a->reply[] array.
  */
 static void hidboot_command (hidboot_adapter_t *a, unsigned char cmd,
-    unsigned char *data, unsigned data_len)
+    unsigned char *data, unsigned nbytes)
 {
     unsigned char buf [64];
-    unsigned i, n, c, crc;
+    unsigned k;
+
+    memset (buf, 0, sizeof(buf));
+    buf[0] = cmd;
+    if (nbytes > 0)
+        memcpy (buf+1, data, nbytes);
 
     if (debug_level > 0) {
-        int k;
-        fprintf (stderr, "---Cmd%d", cmd);
-        for (k=0; k<data_len; ++k) {
+        fprintf (stderr, "---Send");
+        for (k=0; k<=nbytes; ++k) {
             if (k != 0 && (k & 15) == 0)
                 fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", data[k]);
+            fprintf (stderr, " %02x", buf[k]);
         }
         fprintf (stderr, "\n");
     }
-    memset (buf, FRAME_EOT, sizeof(buf));
-    n = 0;
-    buf[n++] = FRAME_SOH;
+    hid_write (a->hiddev, buf, 64);
 
-    n = add_byte (cmd, buf, n);
-    crc = calculate_crc (0, &cmd, 1);
-
-    if (data_len > 0) {
-        for (i=0; i<data_len; ++i)
-            n = add_byte (data[i], buf, n);
-        crc = calculate_crc (crc, data, data_len);
-    }
-    n = add_byte (crc, buf, n);
-    n = add_byte (crc >> 8, buf, n);
-
-    buf[n++] = FRAME_EOT;
-    hidboot_send (a->hiddev, buf, n);
-
-    if (cmd == CMD_JUMP_APP) {
+    if (cmd != CMD_QUERY_DEVICE && cmd != CMD_GET_DATA) {
         /* No reply expected. */
         return;
     }
-    n = hidboot_recv (a->hiddev, buf);
-    c = 0;
-    for (i=0; i<n; ++i) {
-        switch (buf[i]) {
-        default:
-            a->reply[c++] = buf[i];
-            continue;
-        case FRAME_DLE:
-            a->reply[c++] = buf[++i];
-            continue;
-        case FRAME_SOH:
-            c = 0;
-            continue;
-        case FRAME_EOT:
-            a->reply_len = 0;
-            if (c > 2) {
-                unsigned crc = a->reply[c-2] | (a->reply[c-1] << 8);
-                if (crc == calculate_crc (0, a->reply, c-2))
-                    a->reply_len = c - 2;
-            }
-            if (a->reply_len > 0 && debug_level > 0) {
-                int k;
-                fprintf (stderr, "--->>>>");
-                for (k=0; k<a->reply_len; ++k) {
-                    if (k != 0 && (k & 15) == 0)
-                        fprintf (stderr, "\n       ");
-                    fprintf (stderr, " %02x", a->reply[k]);
-                }
-                fprintf (stderr, "\n");
-            }
-            return;
+
+    memset (a->reply, 0, sizeof(a->reply));
+    a->reply_len = hid_read (a->hiddev, a->reply, 64);
+    if (a->reply_len != 64) {
+        fprintf (stderr, "hidboot: error %d receiving packet\n", a->reply_len);
+        exit (-1);
+    }
+    if (debug_level > 0) {
+        fprintf (stderr, "---Recv");
+        for (k=0; k<a->reply_len; ++k) {
+            if (k != 0 && (k & 15) == 0)
+                fprintf (stderr, "\n       ");
+            fprintf (stderr, " %02x", a->reply[k]);
         }
+        fprintf (stderr, "\n");
     }
 }
 
@@ -204,7 +105,7 @@ static void hidboot_close (adapter_t *adapter, int power_on)
     hidboot_adapter_t *a = (hidboot_adapter_t*) adapter;
 
     /* Jump to application. */
-    hidboot_command (a, CMD_JUMP_APP, 0, 0);
+    hidboot_command (a, CMD_RESET_DEVICE, 0, 0);
     free (a);
 }
 
@@ -222,7 +123,7 @@ static unsigned hidboot_get_idcode (adapter_t *adapter)
  */
 static unsigned hidboot_read_word (adapter_t *adapter, unsigned addr)
 {
-    /* Not supported by booloader. */
+    /* TODO */
     return 0;
 }
 
@@ -232,108 +133,74 @@ static unsigned hidboot_read_word (adapter_t *adapter, unsigned addr)
 static void hidboot_program_word (adapter_t *adapter,
     unsigned addr, unsigned word)
 {
-    /* Not supported by booloader. */
+    /* TODO */
     if (debug_level > 0)
         fprintf (stderr, "hidboot: program word at %08x: %08x\n", addr, word);
 }
 
 /*
- * Verify a block of memory.
+ * Read a block of memory.
  */
-static void hidboot_verify_data (adapter_t *adapter,
+static void hidboot_read_data (adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     hidboot_adapter_t *a = (hidboot_adapter_t*) adapter;
-    unsigned char request [8];
-    unsigned data_crc, flash_crc, nbytes = nwords * 4;
+    unsigned char request [64];
+    unsigned nbytes;
 
-    //fprintf (stderr, "hidboot: verify %d bytes at %08x\n", nbytes, addr);
-    request[0] = addr;
-    request[1] = addr >> 8;
-    request[2] = addr >> 16;
-    request[3] = (addr >> 24) + 0x80;
-    request[4] = nbytes;
-    request[5] = nbytes >> 8;
-    request[6] = nbytes >> 16;
-    request[7] = nbytes >> 24;
-    hidboot_command (a, CMD_READ_CRC, request, 8);
-    if (a->reply_len != 3 || a->reply[0] != CMD_READ_CRC) {
-        fprintf (stderr, "hidboot: cannot read crc at %08x\n", addr);
-        exit (-1);
-    }
-    flash_crc = a->reply[1] | a->reply[2] << 8;
+    for (; ; nwords-=14) {
+        /* 14 words = 56 bytes per packet. */
+        nbytes = nwords>14 ? 14*4 : nwords*4;
+        //fprintf (stderr, "hidboot: read %d bytes at %08x: %08x-%08x-...-%08x\n",
+        //    nbytes, addr, data[0], data[1], data[nwords-1]);
 
-    data_crc = calculate_crc (0, (unsigned char*) data, nbytes);
-    if (flash_crc != data_crc) {
-        fprintf (stderr, "hidboot: checksum failed at %08x: sum=%04x, expected=%04x\n",
-            addr, flash_crc, data_crc);
-        //exit (-1);
-    }
-}
+        memset (request, 0, nbytes + 8);
+        *(unsigned*) &request[0] = addr;
+        request[4] = nbytes;
 
-static void set_flash_address (hidboot_adapter_t *a, unsigned addr)
-{
-    unsigned char request[7];
-    unsigned sum, i;
+        hidboot_command (a, CMD_GET_DATA, request, 5);
+        memcpy (data, a->reply + 8, nbytes);
 
-    request[0] = 2;
-    request[1] = 0;
-    request[2] = 0;
-    request[3] = 4;             /* Type: linear address record */
-    request[4] = addr >> 24;
-    request[5] = addr >> 16;
-
-    /* Compute checksum. */
-    sum = 0;
-    for (i=0; i<6; i++)
-        sum += request[i];
-    request[6] = -sum;
-
-    hidboot_command (a, CMD_PROGRAM_FLASH, request, 7);
-    if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
-        fprintf (stderr, "hidboot: error setting flash address at %08x\n", addr);
-        exit (-1);
+        if (nwords <= 14)
+            break;
+        data += 14;
+        addr += 14*4;
     }
 }
 
 static void program_flash (hidboot_adapter_t *a,
-    unsigned addr, unsigned char *data, unsigned nbytes)
+    unsigned addr, unsigned *data, unsigned nwords)
 {
     unsigned char request[64];
-    unsigned sum, empty, i;
+    unsigned empty, i, nbytes;
 
     /* Skip empty blocks. */
     empty = 1;
-    for (i=0; i<nbytes; i++) {
-        if (data[i] != 0xff) {
+    for (i=0; i<nwords; i++) {
+        if (data[i] != 0xffffffff) {
             empty = 0;
             break;
         }
     }
     if (empty)
         return;
-    //fprintf (stderr, "hidboot: program %d bytes at %08x: %02x-%02x-...-%02x\n",
-    //    nbytes, addr, data[0], data[1], data[31]);
+    //fprintf (stderr, "hidboot: program %d bytes at %08x: %08x-%08x-...-%08x\n",
+    //    nbytes, addr, data[0], data[1], data[nwords-1]);
 
-    request[0] = nbytes;
-    request[1] = addr >> 8;
-    request[2] = addr;
-    request[3] = 0;             /* Type: data record */
-    memcpy (request+4, data, nbytes);
-
-    /* Compute checksum. */
-    sum = 0;
-    empty = 1;
-    for (i=0; i<nbytes+4; i++) {
-        sum += request[i];
+    nbytes = nwords * 4;
+    if (addr < a->prog_start ||
+        addr + nbytes >= a->prog_start + a->prog_size)
+    {
+        fprintf (stderr, "address %08x out of program area\n", addr);
+        return;
     }
-    request[nbytes+4] = -sum;
 
-    hidboot_command (a, CMD_PROGRAM_FLASH, request, nbytes + 5);
-    if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
-        fprintf (stderr, "hidboot: error programming flash at %08x\n", addr);
-        exit (-1);
-    }
+    memset (request, 0, nbytes + 7);
+    *(unsigned*) &request[0] = addr;
+    request[4] = nbytes;
+    memcpy (request+7, data, nbytes);
+
+    hidboot_command (a, CMD_PROGRAM_DEVICE, request, nbytes + 7);
 }
 
 /*
@@ -343,15 +210,15 @@ static void hidboot_program_block (adapter_t *adapter,
     unsigned addr, unsigned *data)
 {
     hidboot_adapter_t *a = (hidboot_adapter_t*) adapter;
-    unsigned i;
+    int nwords;
 
-    set_flash_address (a, addr);
-    for (i=0; i<256; i+=8) {
-        /* 8 words per cycle. */
-        program_flash (a, addr, (unsigned char*) data, 32);
-        data += 8;
-        addr += 32;
+    for (nwords=256; nwords>0; nwords-=14) {
+        /* 14 words = 56 bytes per packet. */
+        program_flash (a, addr, data, nwords>14 ? 14 : nwords);
+        data += 14;
+        addr += 14*4;
     }
+    hidboot_command (a, CMD_PROGRAM_COMPLETE, 0, 0);
 }
 
 /*
@@ -362,11 +229,10 @@ static void hidboot_erase_chip (adapter_t *adapter)
     hidboot_adapter_t *a = (hidboot_adapter_t*) adapter;
 
     //fprintf (stderr, "hidboot: erase chip\n");
-    hidboot_command (a, CMD_ERASE_FLASH, 0, 0);
-    if (a->reply_len != 1 || a->reply[0] != CMD_ERASE_FLASH) {
-        fprintf (stderr, "hidboot: Erase failed\n");
-        exit (-1);
-    }
+    hidboot_command (a, CMD_ERASE_DEVICE, 0, 0);
+
+    /* To wait when erase finished, query a reply. */
+    hidboot_command (a, CMD_QUERY_DEVICE, 0, 0);
 }
 
 /*
@@ -381,9 +247,12 @@ adapter_t *adapter_open_hidboot (void)
 
     hiddev = hid_open (MICROCHIP_VID, BOOTLOADER_PID, 0);
     if (! hiddev) {
-        /*fprintf (stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
-            MICROCHIP_VID, BOOTLOADER_PID);*/
-        return 0;
+        hiddev = hid_open (OLIMEX_VID, DUINOMITE_PID, 0);
+        if (! hiddev) {
+            /*fprintf (stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
+                MICROCHIP_VID, BOOTLOADER_PID);*/
+            return 0;
+        }
     }
     a = calloc (1, sizeof (*a));
     if (! a) {
@@ -393,15 +262,24 @@ adapter_t *adapter_open_hidboot (void)
     a->hiddev = hiddev;
 
     /* Read version of adapter. */
-    hidboot_command (a, CMD_READ_VERSION, 0, 0);
-    printf ("      Adapter: HID Bootloader Version %d.%d\n",
-        a->reply[1], a->reply[2]);
+    hidboot_command (a, CMD_QUERY_DEVICE, 0, 0);
+    if (a->reply[0] != CMD_QUERY_DEVICE ||
+        a->reply[1] != 56 ||                /* HID packet data size */
+        a->reply[2] != 3 ||                 /* PIC32 device family */
+        a->reply[3] != 1)                   /* program memory type */
+            return 0;
+
+    a->prog_start = *(unsigned*) &a->reply[4];
+    a->prog_size = *(unsigned*) &a->reply[8];
+    printf ("      Adapter: HID Bootloader\n");
+    printf (" Program area: %08x-%08x\n", a->prog_start,
+        a->prog_start + a->prog_size - 1);
 
     /* User functions. */
     a->adapter.close = hidboot_close;
     a->adapter.get_idcode = hidboot_get_idcode;
     a->adapter.read_word = hidboot_read_word;
-    a->adapter.verify_data = hidboot_verify_data;
+    a->adapter.read_data = hidboot_read_data;
     a->adapter.erase_chip = hidboot_erase_chip;
     a->adapter.program_block = hidboot_program_block;
     a->adapter.program_word = hidboot_program_word;

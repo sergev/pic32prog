@@ -23,7 +23,7 @@
 #include "target.h"
 #include "localize.h"
 
-#define VERSION         "1.0"
+#define VERSION         "1."SVNVERSION
 #define BLOCKSZ         1024
 #define FLASHV_BASE     0x9d000000
 #define BOOTV_BASE      0x9fc00000
@@ -114,8 +114,9 @@ void store_data (unsigned address, unsigned byte)
         flash_dirty [offset / 1024] = 1;
         flash_used = 1;
     } else {
-        fprintf (stderr, _("%08X: address out of flash memory\n"), address);
-        exit (1);
+        /* Ignore incorrect data. */
+        //fprintf (stderr, _("%08X: address out of flash memory\n"), address);
+        return;
     }
     total_bytes++;
 }
@@ -268,7 +269,7 @@ int read_hex (char *filename)
                 filename, record_type);
             exit (1);
         }
-
+        //printf ("%08x: %u bytes\n", address, bytes);
         for (i=0; i<bytes; i++) {
             store_data (address++, data [i]);
         }
