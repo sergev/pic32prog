@@ -48,6 +48,7 @@ typedef struct {
  */
 #define MICROCHIP_VID           0x04d8
 #define BOOTLOADER_PID          0x003c  /* Microchip HID bootloader */
+#define MAXIMITE_PID            0xfa8d  /* Maximite bootloader */
 
 #define OLIMEX_VID              0x15ba
 #define DUINOMITE_PID           0x0032  /* Olimex Duinomite bootloader */
@@ -157,9 +158,9 @@ static void hidboot_read_data (adapter_t *adapter,
         request[4] = nbytes;
 
         hidboot_command (a, CMD_GET_DATA, request, 5);
-        memcpy (data, a->reply + 8, nbytes);
-fprintf (stderr, "hidboot: read %d bytes at %08x: %08x-%08x-...-%08x\n",
-    nbytes, addr, data[0], data[1], data[7]);
+
+        /* Data is right aligned. */
+        memcpy (data, a->reply + 64 - nbytes, nbytes);
 
         if (nwords <= 14)
             break;
@@ -172,18 +173,8 @@ static void program_flash (hidboot_adapter_t *a,
     unsigned addr, unsigned *data, unsigned nwords)
 {
     unsigned char request[64];
-    unsigned empty, i, nbytes;
+    unsigned nbytes;
 
-    /* Skip empty blocks. */
-    empty = 1;
-    for (i=0; i<nwords; i++) {
-        if (data[i] != 0xffffffff) {
-            empty = 0;
-            break;
-        }
-    }
-    if (empty)
-        return;
     //fprintf (stderr, "hidboot: program %d bytes at %08x: %08x-%08x-...-%08x\n",
     //    nbytes, addr, data[0], data[1], data[nwords-1]);
 
@@ -195,13 +186,16 @@ static void program_flash (hidboot_adapter_t *a,
         return;
     }
 
+    memset (request, 0, sizeof(request));
     *(unsigned*) &request[0] = addr;
     request[4] = nbytes;
     request[5] = 0;
     request[6] = 0;
-    memcpy (request+7, data, nbytes);
 
-    hidboot_command (a, CMD_PROGRAM_DEVICE, request, nbytes + 7);
+    /* Data is right aligned. */
+    memcpy (request + 63 - nbytes, data, nbytes);
+
+    hidboot_command (a, CMD_PROGRAM_DEVICE, request, 63);
 }
 
 /*
@@ -247,13 +241,15 @@ adapter_t *adapter_open_hidboot (void)
     hid_device *hiddev;
 
     hiddev = hid_open (MICROCHIP_VID, BOOTLOADER_PID, 0);
-printf ("hid_open(%04x, %04x) returned %p\n", MICROCHIP_VID, BOOTLOADER_PID, hiddev);
     if (! hiddev) {
-        hiddev = hid_open (OLIMEX_VID, DUINOMITE_PID, 0);
+        hiddev = hid_open (MICROCHIP_VID, MAXIMITE_PID, 0);
         if (! hiddev) {
-            /*fprintf (stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
-                MICROCHIP_VID, BOOTLOADER_PID);*/
-            return 0;
+            hiddev = hid_open (OLIMEX_VID, DUINOMITE_PID, 0);
+            if (! hiddev) {
+                /*fprintf (stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
+                    MICROCHIP_VID, BOOTLOADER_PID);*/
+                return 0;
+            }
         }
     }
     a = calloc (1, sizeof (*a));

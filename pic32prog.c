@@ -369,7 +369,6 @@ int verify_block (target_t *mc, unsigned addr)
         data = flash_data;
         offset = addr - FLASHP_BASE;
     }
-printf ("<%p+%x>", data, offset);
     target_verify_block (mc, addr, BLOCKSZ/4, (unsigned*) (data + offset));
     return 1;
 }
