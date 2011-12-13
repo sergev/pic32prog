@@ -133,8 +133,8 @@ target_t *target_open ()
         t->adapter = adapter_open_mpsse ();
     if (! t->adapter)
         t->adapter = adapter_open_hidboot ();
-    if (! t->adapter)
-        t->adapter = adapter_open_an1388 ();
+//    if (! t->adapter)
+//        t->adapter = adapter_open_an1388 ();
     if (! t->adapter) {
         fprintf (stderr, _("No target found.\n"));
         exit (-1);
@@ -596,19 +596,19 @@ void target_verify_block (target_t *t, unsigned addr,
 {
     unsigned i, word, expected, block[256];
 
-    addr = virt_to_phys (addr);
     if (t->adapter->verify_data != 0) {
-        t->adapter->verify_data (t->adapter, addr, nwords, data);
+        t->adapter->verify_data (t->adapter, virt_to_phys (addr), nwords, data);
         return;
     }
 
-    t->adapter->read_data (t->adapter, addr, 256, block);
-    for (i=0; i<256; i++) {
+    t->adapter->read_data (t->adapter, addr, nwords, block);
+    for (i=0; i<nwords; i++) {
         expected = data [i];
         word = block [i];
+printf ("%08X: file=%08X, mem=%08X\n", addr + i*4, expected, word);
         if (word != expected) {
             printf (_("\nerror at address %08X: file=%08X, mem=%08X\n"),
-                addr + i, expected, word);
+                addr + i*4, expected, word);
             exit (1);
         }
     }

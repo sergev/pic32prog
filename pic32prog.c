@@ -45,6 +45,7 @@ unsigned char boot_data [BOOT_SIZE];
 unsigned char flash_data [FLASH_SIZE];
 unsigned char boot_dirty [BOOT_KBYTES];
 unsigned char flash_dirty [FLASH_KBYTES];
+unsigned boot_used;
 unsigned flash_used;
 int total_bytes;
 
@@ -92,6 +93,7 @@ void store_data (unsigned address, unsigned byte)
         boot_data [offset] = byte;
         if (address < CONFIGV_BASE)
             boot_dirty [offset / 1024] = 1;
+        boot_used = 1;
 
     } else if (address >= BOOTP_BASE && address < BOOTP_BASE + BOOT_SIZE) {
         /* Boot code, physical. */
@@ -99,6 +101,7 @@ void store_data (unsigned address, unsigned byte)
         boot_data [offset] = byte;
         if (address < CONFIGP_BASE)
             boot_dirty [offset / 1024] = 1;
+        boot_used = 1;
 
     } else if (address >= FLASHV_BASE && address < FLASHV_BASE + FLASH_SIZE) {
         /* Main flash memory, virtual. */
@@ -366,6 +369,7 @@ int verify_block (target_t *mc, unsigned addr)
         data = flash_data;
         offset = addr - FLASHP_BASE;
     }
+printf ("<%p+%x>", data, offset);
     target_verify_block (mc, addr, BLOCKSZ/4, (unsigned*) (data + offset));
     return 1;
 }
@@ -421,22 +425,24 @@ void do_program (char *filename)
             }
             printf (_("# done\n"));
         }
-	printf (_(" Program boot: ............\b\b\b\b\b\b\b\b\b\b\b\b"));
-        fflush (stdout);
-        for (addr=BOOTV_BASE; addr-BOOTV_BASE<BOOT_SIZE; addr+=BLOCKSZ) {
-            if (boot_dirty [(addr-BOOTV_BASE) / 1024]) {
-                program_block (target, addr);
-                progress (1);
+        if (boot_used) {
+            printf (_(" Program boot: ............\b\b\b\b\b\b\b\b\b\b\b\b"));
+            fflush (stdout);
+            for (addr=BOOTV_BASE; addr-BOOTV_BASE<BOOT_SIZE; addr+=BLOCKSZ) {
+                if (boot_dirty [(addr-BOOTV_BASE) / 1024]) {
+                    program_block (target, addr);
+                    progress (1);
+                }
             }
-        }
-        printf (_("# done      \n"));
-        if (! boot_dirty [BOOT_KBYTES-1]) {
-            /* Write chip configuration. */
-            target_program_word (target, BOOTV_BASE + BOOT_SIZE - 16, DEVCFG3);
-            target_program_word (target, BOOTV_BASE + BOOT_SIZE - 12, DEVCFG2);
-            target_program_word (target, BOOTV_BASE + BOOT_SIZE - 8, DEVCFG1);
-            target_program_word (target, BOOTV_BASE + BOOT_SIZE - 4, DEVCFG0);
-            boot_dirty [BOOT_KBYTES-1] = 1;
+            printf (_("# done      \n"));
+            if (! boot_dirty [BOOT_KBYTES-1]) {
+                /* Write chip configuration. */
+                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 16, DEVCFG3);
+                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 12, DEVCFG2);
+                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 8, DEVCFG1);
+                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 4, DEVCFG0);
+                boot_dirty [BOOT_KBYTES-1] = 1;
+            }
         }
     }
     if (flash_used) {
@@ -453,18 +459,21 @@ void do_program (char *filename)
         }
         printf (_("# done\n"));
     }
-    printf (_("  Verify boot: ............\b\b\b\b\b\b\b\b\b\b\b\b"));
-    fflush (stdout);
-    for (addr=BOOTV_BASE; addr-BOOTV_BASE<BOOT_SIZE; addr+=BLOCKSZ) {
-        if (boot_dirty [(addr-BOOTV_BASE) / 1024]) {
-            progress (1);
-            if (! verify_block (target, addr))
-                exit (0);
+    if (boot_used) {
+        printf (_("  Verify boot: ............\b\b\b\b\b\b\b\b\b\b\b\b"));
+        fflush (stdout);
+        for (addr=BOOTV_BASE; addr-BOOTV_BASE<BOOT_SIZE; addr+=BLOCKSZ) {
+            if (boot_dirty [(addr-BOOTV_BASE) / 1024]) {
+                progress (1);
+                if (! verify_block (target, addr))
+                    exit (0);
+            }
         }
+        printf (_(" done       \n"));
     }
-    printf (_(" done       \n"));
-    printf (_("Rate: %ld bytes per second\n"),
-        total_bytes * 1000L / mseconds_elapsed (t0));
+    if (boot_used || flash_used)
+        printf (_("Rate: %ld bytes per second\n"),
+            total_bytes * 1000L / mseconds_elapsed (t0));
 }
 
 void do_read (char *filename, unsigned base, unsigned nbytes)

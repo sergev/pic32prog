@@ -105,7 +105,8 @@ static void hidboot_close (adapter_t *adapter, int power_on)
     hidboot_adapter_t *a = (hidboot_adapter_t*) adapter;
 
     /* Jump to application. */
-    hidboot_command (a, CMD_RESET_DEVICE, 0, 0);
+    if (power_on)
+        hidboot_command (a, CMD_RESET_DEVICE, 0, 0);
     free (a);
 }
 
@@ -151,15 +152,14 @@ static void hidboot_read_data (adapter_t *adapter,
     for (; ; nwords-=14) {
         /* 14 words = 56 bytes per packet. */
         nbytes = nwords>14 ? 14*4 : nwords*4;
-        //fprintf (stderr, "hidboot: read %d bytes at %08x: %08x-%08x-...-%08x\n",
-        //    nbytes, addr, data[0], data[1], data[nwords-1]);
 
-        memset (request, 0, nbytes + 8);
         *(unsigned*) &request[0] = addr;
         request[4] = nbytes;
 
         hidboot_command (a, CMD_GET_DATA, request, 5);
         memcpy (data, a->reply + 8, nbytes);
+fprintf (stderr, "hidboot: read %d bytes at %08x: %08x-%08x-...-%08x\n",
+    nbytes, addr, data[0], data[1], data[7]);
 
         if (nwords <= 14)
             break;
@@ -195,9 +195,10 @@ static void program_flash (hidboot_adapter_t *a,
         return;
     }
 
-    memset (request, 0, nbytes + 7);
     *(unsigned*) &request[0] = addr;
     request[4] = nbytes;
+    request[5] = 0;
+    request[6] = 0;
     memcpy (request+7, data, nbytes);
 
     hidboot_command (a, CMD_PROGRAM_DEVICE, request, nbytes + 7);
@@ -246,6 +247,7 @@ adapter_t *adapter_open_hidboot (void)
     hid_device *hiddev;
 
     hiddev = hid_open (MICROCHIP_VID, BOOTLOADER_PID, 0);
+printf ("hid_open(%04x, %04x) returned %p\n", MICROCHIP_VID, BOOTLOADER_PID, hiddev);
     if (! hiddev) {
         hiddev = hid_open (OLIMEX_VID, DUINOMITE_PID, 0);
         if (! hiddev) {
