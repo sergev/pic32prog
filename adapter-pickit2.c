@@ -816,7 +816,7 @@ failed: usb_release_interface (a->usbdev, IFACE);
             goto failed;
         }
         /* Wait for power to stabilize. */
-        usleep (500000);
+        mdelay (500);
         break;
 
     default:

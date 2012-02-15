@@ -1,18 +1,33 @@
-#CC		= gcc
-CC		= i586-mingw32msvc-gcc
-CFLAGS		= -Wall -g -O -DMINGW32 -Ilibusb-win32
-LDFLAGS		= -s
-LIBS		= -Llibusb-win32/x86 -lusb0_x86
+CC		= gcc
+#CC		= i586-mingw32msvc-gcc
+SVNVERS         = 14 #$(shell svnversion)
+CFLAGS          = -Wall -g -O -DMINGW32 -Ilibusb-win32 -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
+LDFLAGS         = -s
+LIBS            = -Llibusb-win32/x86 -lusb0_x86 -lsetupapi
 
-PROG_OBJS       = pic32prog.o target.o executive.o \
-                  adapter-pickit2.o adapter-mpsse.o
+
+# Windows
+HIDSRC          = hidapi/hid-windows.c
+
+
+
+
+
+PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
+                  adapter-pickit2.o adapter-hidboot.o adapter-mpsse.o \
+                  adapter-an1388.o
 
 all:		pic32prog.exe
 
 pic32prog.exe:	$(PROG_OBJS)
 		$(CC) $(LDFLAGS) -o $@ $(PROG_OBJS) $(LIBS)
 
+hid.o:          $(HIDSRC)
+		$(CC) $(CFLAGS) -c -o $@ $<
+
 ###
+adapter-an1388.o: adapter-an1388.c adapter.h hidapi/hidapi.h pic32.h
+adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi.h pic32.h
 adapter-mpsse.o: adapter-mpsse.c adapter.h
 adapter-pickit2.o: adapter-pickit2.c adapter.h pickit2.h pic32.h
 executive.o: executive.c pic32.h
