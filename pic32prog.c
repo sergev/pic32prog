@@ -56,6 +56,7 @@ int total_bytes;
 
 unsigned progress_count;
 int verify_only;
+int skip_verify = 0;
 int debug_level;
 int power_on;
 target_t *target;
@@ -444,7 +445,7 @@ void do_program (char *filename)
             }
         }
     }
-    if (flash_used) {
+    if (flash_used && !skip_verify) {
         printf (_(" Verify flash: "));
         print_symbols ('.', progress_len);
         print_symbols ('\b', progress_len);
@@ -458,7 +459,7 @@ void do_program (char *filename)
         }
         printf (_("# done\n"));
     }
-    if (boot_used) {
+    if (boot_used && !skip_verify) {
         printf (_("  Verify boot: ............\b\b\b\b\b\b\b\b\b\b\b\b"));
         fflush (stdout);
         for (addr=BOOTV_BASE; addr-BOOTV_BASE<BOOT_SIZE; addr+=BLOCKSZ) {
@@ -577,6 +578,7 @@ int main (int argc, char **argv)
         { "warranty",    0, 0, 'W' },
         { "copying",     0, 0, 'C' },
         { "version",     0, 0, 'V' },
+        { "skip-verify", 0, 0, 'S' },
         { NULL,          0, 0, 0 },
     };
 
@@ -605,7 +607,7 @@ int main (int argc, char **argv)
 #endif
     signal (SIGTERM, interrupted);
 
-    while ((ch = getopt_long (argc, argv, "vDhrpCVW",
+    while ((ch = getopt_long (argc, argv, "vDhrpCVWS",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -631,6 +633,9 @@ int main (int argc, char **argv)
         case 'W':
             gpl_show_warranty ();
             return 0;
+        case 'S':
+            ++skip_verify;
+            continue;
         }
 usage:
         printf ("%s.\n\n", copyright);
@@ -657,6 +662,7 @@ usage:
         printf ("       -V, --version       Print version\n");
         printf ("       -C, --copying       Print copying information\n");
         printf ("       -W, --warranty      Print warranty information\n");
+        printf ("       -S, --skip-verify   Skip the write verification step\n");
         printf ("\n");
         return 0;
     }
