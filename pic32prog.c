@@ -27,10 +27,8 @@
 #define BLOCKSZ         1024
 #define FLASHV_BASE     0x9d000000
 #define BOOTV_BASE      0x9fc00000
-#define CONFIGV_BASE    0x9fc02ff0
 #define FLASHP_BASE     0x1d000000
 #define BOOTP_BASE      0x1fc00000
-#define CONFIGP_BASE    0x1fc02ff0
 #define FLASH_KBYTES    512
 #define BOOT_KBYTES     12
 #define FLASH_SIZE      (FLASH_KBYTES * 1024)
@@ -92,7 +90,7 @@ void store_data (unsigned address, unsigned byte)
         /* Boot code, virtual. */
         offset = address - BOOTV_BASE;
         boot_data [offset] = byte;
-        if (address < CONFIGV_BASE)
+        if (offset < BOOT_SIZE - 16)
             boot_dirty [offset / 1024] = 1;
         boot_used = 1;
 
@@ -100,7 +98,7 @@ void store_data (unsigned address, unsigned byte)
         /* Boot code, physical. */
         offset = address - BOOTP_BASE;
         boot_data [offset] = byte;
-        if (address < CONFIGP_BASE)
+        if (offset < BOOT_SIZE - 16)
             boot_dirty [offset / 1024] = 1;
         boot_used = 1;
 
@@ -487,7 +485,7 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
         perror (filename);
         exit (1);
     }
-    printf (_("Memory: total %d bytes\n"), nbytes);
+    printf (_("       Memory: total %d bytes\n"), nbytes);
 
     /* Open and detect the device. */
     atexit (quit);
@@ -502,7 +500,7 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
         if (len < 64)
             break;
     }
-    printf ("Read: " );
+    printf ("         Read: " );
     print_symbols ('.', len);
     print_symbols ('\b', len);
     fflush (stdout);
@@ -518,7 +516,7 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
         }
     }
     printf (_("# done\n"));
-    printf (_("Rate: %ld bytes per second\n"),
+    printf (_("         Rate: %ld bytes per second\n"),
         nbytes * 1000L / mseconds_elapsed (t0));
     fclose (fd);
 }
