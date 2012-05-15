@@ -26,72 +26,74 @@ struct _target_t {
     unsigned    cpuid;
     unsigned    flash_addr;
     unsigned    flash_bytes;
+    unsigned    boot_bytes;
 };
 
 static const struct {
     unsigned devid;
     const char *name;
-    unsigned bytes;
+    unsigned flash_kbytes;
+    unsigned boot_kbytes;
 } pic32mx_dev[] = {
-    {0x04A07053, "MX110F016B",  16*1024},
-    {0x04A09053, "MX110F016C",  16*1024},
-    {0x04A0B053, "MX110F016D",  16*1024},
-    {0x04A06053, "MX120F032B",  32*1024},
-    {0x04A08053, "MX120F032C",  32*1024},
-    {0x04A0A053, "MX120F032D",  32*1024},
-    {0x14D06053, "MX150F128B", 128*1024},
-    {0x04A01053, "MX210F016B",  16*1024},
-    {0x04A03053, "MX210F016C",  16*1024},
-    {0x04A05053, "MX210F016D",  16*1024},
-    {0x04A00053, "MX220F032B",  32*1024},
-    {0x04A02053, "MX220F032C",  32*1024},
-    {0x04A04053, "MX220F032D",  32*1024},
-    {0x14D00053, "MX250F128B", 128*1024},
-    {0x00938053, "MX360F512L", 512*1024},
-    {0x00934053, "MX360F256L", 256*1024},
-    {0x0092D053, "MX340F128L", 128*1024},
-    {0x0092A053, "MX320F128L", 128*1024},
-    {0x00916053, "MX340F512H", 512*1024},
-    {0x00912053, "MX340F256H", 256*1024},
-    {0x0090D053, "MX340F128H", 128*1024},
-    {0x0090A053, "MX320F128H", 128*1024},
-    {0x00906053, "MX320F064H",  64*1024},
-    {0x00902053, "MX320F032H",  32*1024},
-    {0x00978053, "MX460F512L", 512*1024},
-    {0x00974053, "MX460F256L", 256*1024},
-    {0x0096D053, "MX440F128L", 128*1024},
-    {0x00952053, "MX440F256H", 256*1024},
-    {0x00956053, "MX440F512H", 512*1024},
-    {0x0094D053, "MX440F128H", 128*1024},
-    {0x00942053, "MX420F032H",  32*1024},
-    {0x04307053, "MX795F512L", 512*1024},
-    {0x0430E053, "MX795F512H", 512*1024},
-    {0x04306053, "MX775F512L", 512*1024},
-    {0x0430D053, "MX775F512H", 512*1024},
-    {0x04312053, "MX775F256L", 256*1024},
-    {0x04303053, "MX775F256H", 256*1024},
-    {0x04417053, "MX764F128L", 128*1024},
-    {0x0440B053, "MX764F128H", 128*1024},
-    {0x04341053, "MX695F512L", 512*1024},
-    {0x04325053, "MX695F512H", 512*1024},
-    {0x04311053, "MX675F512L", 512*1024},
-    {0x0430C053, "MX675F512H", 512*1024},
-    {0x04305053, "MX675F256L", 256*1024},
-    {0x0430B053, "MX675F256H", 256*1024},
-    {0x04413053, "MX664F128L", 128*1024},
-    {0x04407053, "MX664F128H", 128*1024},
-    {0x04411053, "MX664F064L",  64*1024},
-    {0x04405053, "MX664F064H",  64*1024},
-    {0x0430F053, "MX575F512L", 512*1024},
-    {0x04309053, "MX575F512H", 512*1024},
-    {0x04333053, "MX575F256L", 256*1024},
-    {0x04317053, "MX575F256H", 256*1024},
-    {0x0440F053, "MX564F128L", 128*1024},
-    {0x04403053, "MX564F128H", 128*1024},
-    {0x0440D053, "MX564F064L",  64*1024},
-    {0x04401053, "MX564F064H",  64*1024},
-    {0x04400053, "MX534F064H",  64*1024},
-    {0x0440C053, "MX534F064L",  64*1024},
+    {0x04A07053, "MX110F016B",  16,  3},
+    {0x04A09053, "MX110F016C",  16,  3},
+    {0x04A0B053, "MX110F016D",  16,  3},
+    {0x04A06053, "MX120F032B",  32,  3},
+    {0x04A08053, "MX120F032C",  32,  3},
+    {0x04A0A053, "MX120F032D",  32,  3},
+    {0x14D06053, "MX150F128B", 128,  3},
+    {0x04A01053, "MX210F016B",  16,  3},
+    {0x04A03053, "MX210F016C",  16,  3},
+    {0x04A05053, "MX210F016D",  16,  3},
+    {0x04A00053, "MX220F032B",  32,  3},
+    {0x04A02053, "MX220F032C",  32,  3},
+    {0x04A04053, "MX220F032D",  32,  3},
+    {0x14D00053, "MX250F128B", 128,  3},
+    {0x00938053, "MX360F512L", 512, 12},
+    {0x00934053, "MX360F256L", 256, 12},
+    {0x0092D053, "MX340F128L", 128, 12},
+    {0x0092A053, "MX320F128L", 128, 12},
+    {0x00916053, "MX340F512H", 512, 12},
+    {0x00912053, "MX340F256H", 256, 12},
+    {0x0090D053, "MX340F128H", 128, 12},
+    {0x0090A053, "MX320F128H", 128, 12},
+    {0x00906053, "MX320F064H",  64, 12},
+    {0x00902053, "MX320F032H",  32, 12},
+    {0x00978053, "MX460F512L", 512, 12},
+    {0x00974053, "MX460F256L", 256, 12},
+    {0x0096D053, "MX440F128L", 128, 12},
+    {0x00952053, "MX440F256H", 256, 12},
+    {0x00956053, "MX440F512H", 512, 12},
+    {0x0094D053, "MX440F128H", 128, 12},
+    {0x00942053, "MX420F032H",  32, 12},
+    {0x04307053, "MX795F512L", 512, 12},
+    {0x0430E053, "MX795F512H", 512, 12},
+    {0x04306053, "MX775F512L", 512, 12},
+    {0x0430D053, "MX775F512H", 512, 12},
+    {0x04312053, "MX775F256L", 256, 12},
+    {0x04303053, "MX775F256H", 256, 12},
+    {0x04417053, "MX764F128L", 128, 12},
+    {0x0440B053, "MX764F128H", 128, 12},
+    {0x04341053, "MX695F512L", 512, 12},
+    {0x04325053, "MX695F512H", 512, 12},
+    {0x04311053, "MX675F512L", 512, 12},
+    {0x0430C053, "MX675F512H", 512, 12},
+    {0x04305053, "MX675F256L", 256, 12},
+    {0x0430B053, "MX675F256H", 256, 12},
+    {0x04413053, "MX664F128L", 128, 12},
+    {0x04407053, "MX664F128H", 128, 12},
+    {0x04411053, "MX664F064L",  64, 12},
+    {0x04405053, "MX664F064H",  64, 12},
+    {0x0430F053, "MX575F512L", 512, 12},
+    {0x04309053, "MX575F512H", 512, 12},
+    {0x04333053, "MX575F256L", 256, 12},
+    {0x04317053, "MX575F256H", 256, 12},
+    {0x0440F053, "MX564F128L", 128, 12},
+    {0x04403053, "MX564F128H", 128, 12},
+    {0x0440D053, "MX564F064L",  64, 12},
+    {0x04401053, "MX564F064H",  64, 12},
+    {0x04400053, "MX534F064H",  64, 12},
+    {0x0440C053, "MX534F064L",  64, 12},
     {0}
 };
 
@@ -155,7 +157,8 @@ target_t *target_open ()
     }
     t->cpu_name = pic32mx_dev[i].name;
     t->flash_addr = 0x1d000000;
-    t->flash_bytes = pic32mx_dev[i].bytes;
+    t->flash_bytes = pic32mx_dev[i].flash_kbytes * 1024;
+    t->boot_bytes = pic32mx_dev[i].boot_kbytes * 1024;
     return t;
 }
 
@@ -182,6 +185,11 @@ unsigned target_flash_bytes (target_t *t)
     return t->flash_bytes;
 }
 
+unsigned target_boot_bytes (target_t *t)
+{
+    return t->boot_bytes;
+}
+
 /*
  * Use PE for reading/writing/erasing memory.
  */
@@ -193,11 +201,14 @@ void target_use_executable (target_t *t)
 
 void target_print_devcfg (target_t *t)
 {
-    unsigned devcfg0 = t->adapter->read_word (t->adapter, DEVCFG0_ADDR);
-    unsigned devcfg1 = t->adapter->read_word (t->adapter, DEVCFG1_ADDR);
-    unsigned devcfg2 = t->adapter->read_word (t->adapter, DEVCFG2_ADDR);
-    unsigned devcfg3 = t->adapter->read_word (t->adapter, DEVCFG3_ADDR);
-    if (! devcfg0 && ! devcfg1 && ! devcfg2 && ! devcfg3)
+    unsigned devcfg3 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 16);
+    unsigned devcfg2 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 12);
+    unsigned devcfg1 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 8);
+    unsigned devcfg0 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 4);
+    if (devcfg3 == 0xffffffff &&
+        devcfg2 == 0xffffffff &&
+        devcfg1 == 0xffffffff &&
+        devcfg0 == 0x7fffffff)
         return;
 
     printf (_("Configuration:\n"));
@@ -635,6 +646,16 @@ void target_program_block (target_t *t, unsigned addr,
 {
     addr = virt_to_phys (addr);
     //fprintf (stderr, "target_program_block (addr = %x, nwords = %d)\n", addr, nwords);
+
+    if (target_boot_bytes (t) <= 3*1024) {
+        /* Temporary solution for mx1/mx2 series. */
+        while (nwords-- > 0) {
+            t->adapter->program_word (t->adapter, addr, *data++);
+            addr += 4;
+        }
+        return;
+    }
+
     while (nwords > 0) {
         unsigned n = nwords;
         if (n > 256)

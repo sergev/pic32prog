@@ -17,6 +17,7 @@ unsigned target_idcode (target_t *t);
 const char *target_cpu_name (target_t *t);
 unsigned target_flash_width (target_t *t);
 unsigned target_flash_bytes (target_t *t);
+unsigned target_boot_bytes (target_t *t);
 void target_print_devcfg (target_t *t);
 
 void target_read_block (target_t *t, unsigned addr,

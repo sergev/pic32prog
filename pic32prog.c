@@ -29,28 +29,28 @@
 #define BOOTV_BASE      0x9fc00000
 #define FLASHP_BASE     0x1d000000
 #define BOOTP_BASE      0x1fc00000
-#define FLASH_KBYTES    512
-#define BOOT_KBYTES     12
-#define FLASH_SIZE      (FLASH_KBYTES * 1024)
-#define BOOT_SIZE       (BOOT_KBYTES * 1024)
+#define FLASH_BYTES     (512 * 1024)
+#define BOOT_BYTES      (12 * 1024)
 
 /* Macros for converting between hex and binary. */
 #define NIBBLE(x)       (isdigit(x) ? (x)-'0' : tolower(x)+10-'a')
 #define HEX(buffer)     ((NIBBLE((buffer)[0])<<4) + NIBBLE((buffer)[1]))
 
 /* Data to write */
-unsigned char boot_data [BOOT_SIZE];
-unsigned char flash_data [FLASH_SIZE];
-unsigned char boot_dirty [BOOT_KBYTES];
-unsigned char flash_dirty [FLASH_KBYTES];
+unsigned char boot_data [BOOT_BYTES];
+unsigned char flash_data [FLASH_BYTES];
+unsigned char boot_dirty [BOOT_BYTES / BLOCKSZ];
+unsigned char flash_dirty [FLASH_BYTES / BLOCKSZ];
 unsigned boot_used;
 unsigned flash_used;
+unsigned boot_bytes;
+unsigned flash_bytes;
 int total_bytes;
 
-#define DEVCFG3 *(unsigned*) (boot_data + BOOT_SIZE - 16)
-#define DEVCFG2 *(unsigned*) (boot_data + BOOT_SIZE - 12)
-#define DEVCFG1 *(unsigned*) (boot_data + BOOT_SIZE - 8)
-#define DEVCFG0 *(unsigned*) (boot_data + BOOT_SIZE - 4)
+#define DEVCFG3_ADDR(base) (base + boot_bytes - 16)
+#define DEVCFG2_ADDR(base) (base + boot_bytes - 12)
+#define DEVCFG1_ADDR(base) (base + boot_bytes - 8)
+#define DEVCFG0_ADDR(base) (base + boot_bytes - 4)
 
 unsigned progress_count;
 int verify_only;
@@ -86,30 +86,30 @@ void store_data (unsigned address, unsigned byte)
 {
     unsigned offset;
 
-    if (address >= BOOTV_BASE && address < BOOTV_BASE + BOOT_SIZE) {
+    if (address >= BOOTV_BASE && address < BOOTV_BASE + BOOT_BYTES) {
         /* Boot code, virtual. */
         offset = address - BOOTV_BASE;
         boot_data [offset] = byte;
-        if (offset < BOOT_SIZE - 16)
+        if (offset < BOOT_BYTES - 16)
             boot_dirty [offset / 1024] = 1;
         boot_used = 1;
 
-    } else if (address >= BOOTP_BASE && address < BOOTP_BASE + BOOT_SIZE) {
+    } else if (address >= BOOTP_BASE && address < BOOTP_BASE + BOOT_BYTES) {
         /* Boot code, physical. */
         offset = address - BOOTP_BASE;
         boot_data [offset] = byte;
-        if (offset < BOOT_SIZE - 16)
+        if (offset < BOOT_BYTES - 16)
             boot_dirty [offset / 1024] = 1;
         boot_used = 1;
 
-    } else if (address >= FLASHV_BASE && address < FLASHV_BASE + FLASH_SIZE) {
+    } else if (address >= FLASHV_BASE && address < FLASHV_BASE + FLASH_BYTES) {
         /* Main flash memory, virtual. */
         offset = address - FLASHV_BASE;
         flash_data [offset] = byte;
         flash_dirty [offset / 1024] = 1;
         flash_used = 1;
 
-    } else if (address >= FLASHP_BASE && address < FLASHP_BASE + FLASH_SIZE) {
+    } else if (address >= FLASHP_BASE && address < FLASHP_BASE + FLASH_BYTES) {
         /* Main flash memory, physical. */
         offset = address - FLASHP_BASE;
         flash_data [offset] = byte;
@@ -323,6 +323,7 @@ void do_probe ()
     printf (_("    Processor: %s (id %08X)\n"), target_cpu_name (target),
         target_idcode (target));
     printf (_(" Flash memory: %d kbytes\n"), target_flash_bytes (target) / 1024);
+    printf (_("  Boot memory: %d kbytes\n"), target_boot_bytes (target) / 1024);
     target_print_devcfg (target);
 }
 
@@ -333,14 +334,16 @@ void program_block (target_t *mc, unsigned addr)
 {
     unsigned char *data;
     unsigned offset;
+    unsigned flash_bytes = target_flash_bytes (mc);
+    unsigned boot_bytes = target_boot_bytes (mc);
 
-    if (addr >= BOOTV_BASE && addr < BOOTV_BASE+BOOT_SIZE) {
+    if (addr >= BOOTV_BASE && addr < BOOTV_BASE + boot_bytes) {
         data = boot_data;
         offset = addr - BOOTV_BASE;
-    } else if (addr >= BOOTP_BASE && addr < BOOTP_BASE+BOOT_SIZE) {
+    } else if (addr >= BOOTP_BASE && addr < BOOTP_BASE + boot_bytes) {
         data = boot_data;
         offset = addr - BOOTP_BASE;
-    } else if (addr >= FLASHV_BASE && addr < FLASHV_BASE + FLASH_SIZE) {
+    } else if (addr >= FLASHV_BASE && addr < FLASHV_BASE + flash_bytes) {
         data = flash_data;
         offset = addr - FLASHV_BASE;
     } else {
@@ -354,14 +357,16 @@ int verify_block (target_t *mc, unsigned addr)
 {
     unsigned char *data;
     unsigned offset;
+    unsigned flash_bytes = target_flash_bytes (mc);
+    unsigned boot_bytes = target_boot_bytes (mc);
 
-    if (addr >= BOOTV_BASE && addr < BOOTV_BASE+BOOT_SIZE) {
+    if (addr >= BOOTV_BASE && addr < BOOTV_BASE + boot_bytes) {
         data = boot_data;
         offset = addr - BOOTV_BASE;
-    } else if (addr >= BOOTP_BASE && addr < BOOTP_BASE+BOOT_SIZE) {
+    } else if (addr >= BOOTP_BASE && addr < BOOTP_BASE + boot_bytes) {
         data = boot_data;
         offset = addr - BOOTP_BASE;
-    } else if (addr >= FLASHV_BASE && addr < FLASHV_BASE + FLASH_SIZE) {
+    } else if (addr >= FLASHV_BASE && addr < FLASHV_BASE + flash_bytes) {
         data = flash_data;
         offset = addr - FLASHV_BASE;
     } else {
@@ -377,6 +382,7 @@ void do_program (char *filename)
     unsigned addr;
     int progress_len, progress_step;
     void *t0;
+    unsigned flash_bytes, boot_bytes;
 
     /* Open and detect the device. */
     atexit (quit);
@@ -385,15 +391,18 @@ void do_program (char *filename)
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+    flash_bytes = target_flash_bytes (target);
+    boot_bytes = target_boot_bytes (target);
     printf (_("    Processor: %s\n"), target_cpu_name (target));
-    printf (_(" Flash memory: %d kbytes\n"), target_flash_bytes (target) / 1024);
+    printf (_(" Flash memory: %d kbytes\n"), flash_bytes / 1024);
+    printf (_("  Boot memory: %d kbytes\n"), boot_bytes / 1024);
     printf (_("         Data: %d bytes\n"), total_bytes);
-    if (DEVCFG0 & 0x80000000) {
+    if (*(unsigned*) DEVCFG0_ADDR(boot_data) & 0x80000000) {
         /* Default configuration. */
-        DEVCFG0 = 0x7ffffffd;
-        DEVCFG1 = 0xff6afd5b;
-        DEVCFG2 = 0xfff879d9;
-        DEVCFG3 = 0x3affffff;
+        *(unsigned*) DEVCFG0_ADDR(boot_data) = 0x7ffffffd;
+        *(unsigned*) DEVCFG1_ADDR(boot_data) = 0xff6afd5b;
+        *(unsigned*) DEVCFG2_ADDR(boot_data) = 0xfff879d9;
+        *(unsigned*) DEVCFG3_ADDR(boot_data) = 0x3affffff;
     }
 
     if (! verify_only) {
@@ -415,7 +424,7 @@ void do_program (char *filename)
             print_symbols ('.', progress_len);
             print_symbols ('\b', progress_len);
             fflush (stdout);
-            for (addr=FLASHV_BASE; addr-FLASHV_BASE<FLASH_SIZE; addr+=BLOCKSZ) {
+            for (addr=FLASHV_BASE; addr-FLASHV_BASE<flash_bytes; addr+=BLOCKSZ) {
                 if (flash_dirty [(addr-FLASHV_BASE) / 1024]) {
                     program_block (target, addr);
                     progress (progress_step);
@@ -426,20 +435,20 @@ void do_program (char *filename)
         if (boot_used) {
             printf (_(" Program boot: ............\b\b\b\b\b\b\b\b\b\b\b\b"));
             fflush (stdout);
-            for (addr=BOOTV_BASE; addr-BOOTV_BASE<BOOT_SIZE; addr+=BLOCKSZ) {
+            for (addr=BOOTV_BASE; addr-BOOTV_BASE<boot_bytes; addr+=BLOCKSZ) {
                 if (boot_dirty [(addr-BOOTV_BASE) / 1024]) {
                     program_block (target, addr);
                     progress (1);
                 }
             }
             printf (_("# done      \n"));
-            if (! boot_dirty [BOOT_KBYTES-1]) {
+            if (! boot_dirty [boot_bytes / 1024 - 1]) {
                 /* Write chip configuration. */
-                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 16, DEVCFG3);
-                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 12, DEVCFG2);
-                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 8, DEVCFG1);
-                target_program_word (target, BOOTV_BASE + BOOT_SIZE - 4, DEVCFG0);
-                boot_dirty [BOOT_KBYTES-1] = 1;
+                target_program_word (target, DEVCFG3_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG3_ADDR(boot_data));
+                target_program_word (target, DEVCFG2_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG2_ADDR(boot_data));
+                target_program_word (target, DEVCFG1_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG1_ADDR(boot_data));
+                target_program_word (target, DEVCFG0_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG0_ADDR(boot_data));
+                boot_dirty [boot_bytes / 1024 - 1] = 1;
             }
         }
     }
@@ -448,7 +457,7 @@ void do_program (char *filename)
         print_symbols ('.', progress_len);
         print_symbols ('\b', progress_len);
         fflush (stdout);
-        for (addr=FLASHV_BASE; addr-FLASHV_BASE<FLASH_SIZE; addr+=BLOCKSZ) {
+        for (addr=FLASHV_BASE; addr-FLASHV_BASE<flash_bytes; addr+=BLOCKSZ) {
             if (flash_dirty [(addr-FLASHV_BASE) / 1024]) {
                 progress (progress_step);
                 if (! verify_block (target, addr))
@@ -460,7 +469,7 @@ void do_program (char *filename)
     if (boot_used && !skip_verify) {
         printf (_("  Verify boot: ............\b\b\b\b\b\b\b\b\b\b\b\b"));
         fflush (stdout);
-        for (addr=BOOTV_BASE; addr-BOOTV_BASE<BOOT_SIZE; addr+=BLOCKSZ) {
+        for (addr=BOOTV_BASE; addr-BOOTV_BASE<boot_bytes; addr+=BLOCKSZ) {
             if (boot_dirty [(addr-BOOTV_BASE) / 1024]) {
                 progress (1);
                 if (! verify_block (target, addr))
@@ -668,8 +677,8 @@ usage:
     argc -= optind;
     argv += optind;
 
-    memset (boot_data, ~0, BOOT_SIZE);
-    memset (flash_data, ~0, FLASH_SIZE);
+    memset (boot_data, ~0, BOOT_BYTES);
+    memset (flash_data, ~0, FLASH_BYTES);
 
     switch (argc) {
     case 0:

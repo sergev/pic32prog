@@ -61,14 +61,6 @@ extern const unsigned pic32_pe[];
 #define MCHP_STATUS_DEVRST 0x01 // Device reset is active
 
 /*
- * Configuration registers.
- */
-#define DEVCFG3_ADDR    0x1fc02ff0
-#define DEVCFG2_ADDR    0x1fc02ff4
-#define DEVCFG1_ADDR    0x1fc02ff8
-#define DEVCFG0_ADDR    0x1fc02ffc
-
-/*
  * Config0 register, inverted.
  */
 #define DEVCFG0_DEBUG_MASK      0x00000003 /* Debugger enable bits */
