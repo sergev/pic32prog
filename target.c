@@ -145,7 +145,7 @@ target_t *target_open ()
     }
 
     /* Check CPU identifier. */
-    t->cpuid = t->adapter->get_idcode (t->adapter);
+    t->cpuid = t->adapter->get_idcode (t->adapter) & 0x0fffffff;
     unsigned i;
     for (i=0; t->cpuid != pic32mx_dev[i].devid; i++) {
         if (pic32mx_dev[i].devid == 0) {
