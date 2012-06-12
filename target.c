@@ -133,8 +133,10 @@ target_t *target_open ()
 
     /* Find adapter. */
     t->adapter = adapter_open_pickit2 ();
+#if 0
     if (! t->adapter)
         t->adapter = adapter_open_mpsse ();
+#endif
     if (! t->adapter)
         t->adapter = adapter_open_hidboot ();
     if (! t->adapter)
@@ -647,15 +649,29 @@ void target_program_block (target_t *t, unsigned addr,
     addr = virt_to_phys (addr);
     //fprintf (stderr, "target_program_block (addr = %x, nwords = %d)\n", addr, nwords);
 
-    if (target_boot_bytes (t) <= 3*1024) {
-        /* Temporary solution for mx1/mx2 series. */
-        while (nwords-- > 0) {
-            t->adapter->program_word (t->adapter, addr, *data++);
-            addr += 4;
+    if (! t->adapter->program_block) {
+        if (target_boot_bytes (t) <= 3*1024) {
+            while (nwords > 0) {
+                unsigned n = nwords;
+                if (n > 32)
+                    n = 32;
+                t->adapter->program_row32 (t->adapter, addr, data);
+                addr += n<<2;
+                data += n;
+                nwords -= n;
+            }
+            return;
         }
-        return;
+        while (nwords > 0) {
+            unsigned n = nwords;
+            if (n > 128)
+                n = 128;
+            t->adapter->program_row128 (t->adapter, addr, data);
+            addr += n<<2;
+            data += n;
+            nwords -= n;
+        }
     }
-
     while (nwords > 0) {
         unsigned n = nwords;
         if (n > 256)

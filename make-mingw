@@ -1,12 +1,11 @@
-CC		= gcc
-#CC		= i586-mingw32msvc-gcc
-SVNVERS         = 14 #$(shell svnversion)
+#CC		= gcc
+CC		= i586-mingw32msvc-gcc
+SVNVERS         = $(shell svnversion)
 CFLAGS          = -Wall -g -O -DMINGW32 -Ilibusb-win32 -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -s
-LIBS            = -Llibusb-win32/x86 -lusb0_x86 -lsetupapi
-
 
 # Windows
+LIBS            += -lsetupapi
 HIDSRC          = hidapi/hid-windows.c
 
 
@@ -14,8 +13,9 @@ HIDSRC          = hidapi/hid-windows.c
 
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
-                  adapter-pickit2.o adapter-hidboot.o adapter-mpsse.o \
-                  adapter-an1388.o
+                  adapter-pickit2.o adapter-hidboot.o adapter-an1388.o
+#PROG_OBJS      += adapter-mpsse.o
+#LIBS           += -Llibusb-win32/x86 -lusb0_x86
 
 all:		pic32prog.exe
 

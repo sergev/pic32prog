@@ -1,9 +1,8 @@
 CC              = gcc
-SVNVERS         = $(shell svnversion)
 
+SVNVERS         = $(shell svnversion)
 CFLAGS          = -Wall -g -O -I/opt/local/include -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -g
-LIBS            = -L/opt/local/lib -lusb
 
 # Linux
 LIBS            += -ludev
@@ -14,8 +13,9 @@ HIDSRC          = hidapi/hid-linux.c
 #HIDSRC          = hidapi/hid-mac.c
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
-                  adapter-pickit2.o adapter-hidboot.o adapter-mpsse.o \
-                  adapter-an1388.o
+                  adapter-pickit2.o adapter-hidboot.o adapter-an1388.o
+#PROG_OBJS      += adapter-mpsse.o
+#LIBS           += -L/opt/local/lib -lusb
 
 all:            pic32prog
 
