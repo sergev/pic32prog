@@ -1,11 +1,11 @@
-#CC		= gcc
-CC		= i586-mingw32msvc-gcc
+CC		= gcc
+#CC		= i586-mingw32msvc-gcc
 SVNVERS         = $(shell svnversion)
 CFLAGS          = -Wall -g -O -DMINGW32 -Ilibusb-win32 -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -s
 
 # Windows
-LIBS            += -lsetupapi
+LIBS            += -lhid -lsetupapi
 HIDSRC          = hidapi/hid-windows.c
 
 

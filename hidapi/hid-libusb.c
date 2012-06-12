@@ -8,6 +8,7 @@
  8/22/2009
  Linux Version - 6/2/2010
  Libusb Version - 8/13/2010
+ FreeBSD Version - 11/1/2011
 
  Copyright 2009, All Rights Reserved.
  
@@ -62,7 +63,7 @@ extern "C" {
 /* Uncomment to enable the retrieval of Usage and Usage Page in
 hid_enumerate(). Warning, this is very invasive as it requires the detach
 and re-attach of the kernel driver. See comments inside hid_enumerate().
-Linux/libusb HIDAPI programs are encouraged to use the interface number
+libusb HIDAPI programs are encouraged to use the interface number
 instead to differentiate between interfaces on a composite HID device. */
 /*#define INVASIVE_GET_USAGE*/
 
@@ -106,7 +107,7 @@ struct hid_device_ {
 	struct input_report *input_reports;
 };
 
-static int initialized = 0;
+static libusb_context *usb_context = NULL;
 
 uint16_t get_usb_code_for_current_locale(void);
 static int return_data(hid_device *dev, unsigned char *data, size_t length);
@@ -114,18 +115,7 @@ static int return_data(hid_device *dev, unsigned char *data, size_t length);
 static hid_device *new_hid_device(void)
 {
 	hid_device *dev = calloc(1, sizeof(hid_device));
-	dev->device_handle = NULL;
-	dev->input_endpoint = 0;
-	dev->output_endpoint = 0;
-	dev->input_ep_max_packet_size = 0;
-	dev->interface = 0;
-	dev->manufacturer_index = 0;
-	dev->product_index = 0;
-	dev->serial_index = 0;
 	dev->blocking = 1;
-	dev->shutdown_thread = 0;
-	dev->transfer = NULL;
-	dev->input_reports = NULL;
 	
 	pthread_mutex_init(&dev->mutex, NULL);
 	pthread_cond_init(&dev->condition, NULL);
@@ -146,7 +136,7 @@ static void free_hid_device(hid_device *dev)
 }
 
 #if 0
-//TODO: Implement this funciton on Linux.
+//TODO: Implement this funciton on hidapi/libusb..
 static void register_error(hid_device *device, const char *op)
 {
 
@@ -255,6 +245,27 @@ static int get_usage(uint8_t *report_descriptor, size_t size,
 }
 #endif // INVASIVE_GET_USAGE
 
+#ifdef __FreeBSD__
+/* The FreeBSD version of libusb doesn't have this funciton. In mainline
+   libusb, it's inlined in libusb.h. This function will bear a striking
+   resemblence to that one, because there's about one way to code it.
+
+   Note that the data parameter is Unicode in UTF-16LE encoding.
+   Return value is the number of bytes in data, or LIBUSB_ERROR_*.
+ */
+static inline int libusb_get_string_descriptor(libusb_device_handle *dev,
+	uint8_t descriptor_index, uint16_t lang_id,
+	unsigned char *data, int length)
+{
+	return libusb_control_transfer(dev,
+		LIBUSB_ENDPOINT_IN | 0x0, /* Endpoint 0 IN */
+		LIBUSB_REQUEST_GET_DESCRIPTOR,
+		(LIBUSB_DT_STRING << 8) | descriptor_index,
+		lang_id, data, (uint16_t) length, 1000);
+}
+
+#endif
+
 
 /* Get the first language the device says it reports. This comes from
    USB string #0. */
@@ -317,7 +328,11 @@ static wchar_t *get_usb_string(libusb_device_handle *dev, uint8_t idx)
 	size_t inbytes;
 	size_t outbytes;
 	size_t res;
+#ifdef __FreeBSD__
+	const char *inptr;
+#else
 	char *inptr;
+#endif
 	char *outptr;
 
 	/* Determine which language to use. */
@@ -335,25 +350,27 @@ static wchar_t *get_usb_string(libusb_device_handle *dev, uint8_t idx)
 	if (len < 0)
 		return NULL;
 	
-	buf[sizeof(buf)-1] = '\0';
-	
-	if (len+1 < sizeof(buf))
-		buf[len+1] = '\0';
+	/* buf does not need to be explicitly NULL-terminated because
+	   it is only passed into iconv() which does not need it. */
 	
 	/* Initialize iconv. */
-	ic = iconv_open("UTF-32", "UTF-16");
-	if (ic == (iconv_t)-1)
+	ic = iconv_open("WCHAR_T", "UTF-16LE");
+	if (ic == (iconv_t)-1) {
+		LOG("iconv_open() failed\n");
 		return NULL;
+	}
 	
-	/* Convert to UTF-32 (wchar_t on glibc systems).
+	/* Convert to native wchar_t (UTF-32 on glibc/BSD systems).
 	   Skip the first character (2-bytes). */
 	inptr = buf+2;
 	inbytes = len-2;
 	outptr = (char*) wbuf;
 	outbytes = sizeof(wbuf);
 	res = iconv(ic, &inptr, &inbytes, &outptr, &outbytes);
-	if (res == (size_t)-1)
+	if (res == (size_t)-1) {
+		LOG("iconv() failed\n");
 		goto err;
+	}
 
 	/* Write the terminating NULL. */
 	wbuf[sizeof(wbuf)/sizeof(wbuf[0])-1] = 0x00000000;
@@ -361,7 +378,7 @@ static wchar_t *get_usb_string(libusb_device_handle *dev, uint8_t idx)
 		*((wchar_t*)outptr) = 0x00000000;
 	
 	/* Allocate and copy the string. */
-	str = wcsdup(wbuf+1);
+	str = wcsdup(wbuf);
 
 err:
 	iconv_close(ic);
@@ -384,10 +401,17 @@ static char *make_path(libusb_device *dev, int interface_number)
 
 int HID_API_EXPORT hid_init(void)
 {
-	if (!initialized) {
-		if (libusb_init(NULL))
+	if (!usb_context) {
+		const char *locale;
+
+		/* Init Libusb */
+		if (libusb_init(&usb_context))
 			return -1;
-		initialized = 1;
+
+		/* Set the locale if it's not set. */
+		locale = setlocale(LC_CTYPE, NULL);
+		if (!locale)
+			setlocale(LC_CTYPE, "");
 	}
 
 	return 0;
@@ -395,9 +419,9 @@ int HID_API_EXPORT hid_init(void)
 
 int HID_API_EXPORT hid_exit(void)
 {
-	if (initialized) {
-		libusb_exit(NULL);
-		initialized = 0;
+	if (usb_context) {
+		libusb_exit(usb_context);
+		usb_context = NULL;
 	}
 
 	return 0;
@@ -414,12 +438,9 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 	struct hid_device_info *root = NULL; // return object
 	struct hid_device_info *cur_dev = NULL;
 	
-	setlocale(LC_ALL,"");
-	
-	if (!initialized)
-		hid_init();
+	hid_init();
 
-	num_devs = libusb_get_device_list(NULL, &devs);
+	num_devs = libusb_get_device_list(usb_context, &devs);
 	if (num_devs < 0)
 		return NULL;
 	while ((dev = devs[i++]) != NULL) {
@@ -580,7 +601,7 @@ void  HID_API_EXPORT hid_free_enumeration(struct hid_device_info *devs)
 	}
 }
 
-hid_device * hid_open(unsigned short vendor_id, unsigned short product_id, wchar_t *serial_number)
+hid_device * hid_open(unsigned short vendor_id, unsigned short product_id, const wchar_t *serial_number)
 {
 	struct hid_device_info *devs, *cur_dev;
 	const char *path_to_open = NULL;
@@ -618,6 +639,7 @@ hid_device * hid_open(unsigned short vendor_id, unsigned short product_id, wchar
 static void read_callback(struct libusb_transfer *transfer)
 {
 	hid_device *dev = transfer->user_data;
+	int res;
 	
 	if (transfer->status == LIBUSB_TRANSFER_COMPLETED) {
 
@@ -670,7 +692,11 @@ static void read_callback(struct libusb_transfer *transfer)
 	}
 	
 	/* Re-submit the transfer object. */
-	libusb_submit_transfer(transfer);
+	res = libusb_submit_transfer(transfer);
+	if (res != 0) {
+		LOG("Unable to submit URB. libusb error code: %d\n", res);
+		dev->shutdown_thread = 1;
+	}
 }
 
 
@@ -702,10 +728,18 @@ static void *read_thread(void *param)
 	/* Handle all the events. */
 	while (!dev->shutdown_thread) {
 		int res;
-		res = libusb_handle_events(NULL);
+		res = libusb_handle_events(usb_context);
 		if (res < 0) {
-			/* There was an error. Break out of this loop. */
-			break;
+			/* There was an error. */
+			LOG("read_thread(): libusb reports error # %d\n", res);
+
+			/* Break out of this loop only on fatal error.*/
+			if (res != LIBUSB_ERROR_BUSY &&
+			    res != LIBUSB_ERROR_TIMEOUT &&
+			    res != LIBUSB_ERROR_OVERFLOW &&
+			    res != LIBUSB_ERROR_INTERRUPTED) {
+				break;
+			}
 		}
 	}
 	
@@ -713,7 +747,7 @@ static void *read_thread(void *param)
 	   if no transfers are pending, but that's OK. */
 	if (libusb_cancel_transfer(dev->transfer) == 0) {
 		/* The transfer was cancelled, so wait for its completion. */
-		libusb_handle_events(NULL);
+		libusb_handle_events(usb_context);
 	}
 	
 	/* Now that the read thread is stopping, Wake any threads which are
@@ -750,12 +784,9 @@ hid_device * HID_API_EXPORT hid_open_path(const char *path)
 	int d = 0;
 	int good_open = 0;
 	
-	setlocale(LC_ALL,"");
-	
-	if (!initialized)
-		hid_init();
+	hid_init();
 
-	num_devs = libusb_get_device_list(NULL, &devs);
+	num_devs = libusb_get_device_list(usb_context, &devs);
 	while ((usb_dev = devs[d++]) != NULL) {
 		struct libusb_device_descriptor desc;
 		struct libusb_config_descriptor *conf_desc = NULL;

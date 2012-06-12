@@ -9,7 +9,7 @@
  Linux Version - 6/2/2009
 
  Copyright 2009, All Rights Reserved.
-
+ 
  At the discretion of the user of this library,
  this software may be licensed under the terms of the
  GNU Public License v3, a BSD-Style license, or the
@@ -72,6 +72,11 @@ hid_device *new_hid_device()
 	return dev;
 }
 
+static void register_error(hid_device *device, const char *op)
+{
+
+}
+
 /* Get an attribute value from a udev_device and return it as a whar_t
    string. The returned string must be freed with free() when done.*/
 static wchar_t *copy_udev_string(struct udev_device *dev, const char *udev_name)
@@ -86,17 +91,17 @@ static wchar_t *copy_udev_string(struct udev_device *dev, const char *udev_name)
 		mbstowcs(ret, str, wlen+1);
 		ret[wlen] = 0x0000;
 	}
-
+	
 	return ret;
 }
 
 /* uses_numbered_reports() returns 1 if report_descriptor describes a device
-   which contains numbered reports. */
+   which contains numbered reports. */ 
 static int uses_numbered_reports(__u8 *report_descriptor, __u32 size) {
 	int i = 0;
 	int size_code;
 	int data_len, key_size;
-
+	
 	while (i < size) {
 		int key = report_descriptor[i];
 
@@ -106,9 +111,9 @@ static int uses_numbered_reports(__u8 *report_descriptor, __u32 size) {
 			   numbered reports. */
 			return 1;
 		}
-
+		
 		//printf("key: %02hhx\n", key);
-
+		
 		if ((key & 0xf0) == 0xf0) {
 			/* This is a Long Item. The next byte contains the
 			   length of the data section (value) for this key.
@@ -143,11 +148,11 @@ static int uses_numbered_reports(__u8 *report_descriptor, __u32 size) {
 			};
 			key_size = 1;
 		}
-
+		
 		/* Skip over this key and it's associated data */
 		i += data_len + key_size;
 	}
-
+	
 	/* Didn't find a Report ID key. Device doesn't use numbered reports. */
 	return 0;
 }
@@ -158,9 +163,7 @@ static int get_device_string(hid_device *dev, const char *key, wchar_t *string, 
 	struct udev_device *udev_dev, *parent;
 	struct stat s;
 	int ret = -1;
-
-	setlocale(LC_ALL,"");
-
+	
 	/* Create the udev object */
 	udev = udev_new();
 	if (!udev) {
@@ -183,7 +186,7 @@ static int get_device_string(hid_device *dev, const char *key, wchar_t *string, 
 			str = udev_device_get_sysattr_value(parent, key);
 			if (str) {
 				/* Convert the string from UTF-8 to wchar_t */
-				ret = mbstowcs(string, str, maxlen);
+				ret = (mbstowcs(string, str, maxlen) < 0)? -1: 0;
 				goto end;
 			}
 		}
@@ -200,7 +203,13 @@ end:
 
 int HID_API_EXPORT hid_init(void)
 {
-	/* Nothing to do for this in the Linux/hidraw implementation. */
+	const char *locale;
+
+	/* Set the locale if it's not set. */
+	locale = setlocale(LC_CTYPE, NULL);
+	if (!locale)
+		setlocale(LC_CTYPE, "");
+
 	return 0;
 }
 
@@ -215,11 +224,11 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 	struct udev *udev;
 	struct udev_enumerate *enumerate;
 	struct udev_list_entry *devices, *dev_list_entry;
-
+	
 	struct hid_device_info *root = NULL; // return object
 	struct hid_device_info *cur_dev = NULL;
 
-	setlocale(LC_ALL,"");
+	hid_init();
 
 	/* Create the udev object */
 	udev = udev_new();
@@ -244,13 +253,13 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 		struct udev_device *intf_dev; // The device's interface (in the USB sense).
 		unsigned short dev_vid;
 		unsigned short dev_pid;
-
+		
 		/* Get the filename of the /sys entry for the device
 		   and create a udev_device object (dev) representing it */
 		sysfs_path = udev_list_entry_get_name(dev_list_entry);
 		hid_dev = udev_device_new_from_syspath(udev, sysfs_path);
 		dev_path = udev_device_get_devnode(hid_dev);
-
+		
 		/* The device pointed to by hid_dev contains information about
 		   the hidraw device. In order to get information about the
 		   USB device, get the parent device with the
@@ -287,7 +296,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 				root = tmp;
 			}
 			cur_dev = tmp;
-
+			
 			/* Fill out the record */
 			cur_dev->next = NULL;
 			str = dev_path;
@@ -299,7 +308,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 			}
 			else
 				cur_dev->path = NULL;
-
+			
 			/* Serial Number */
 			cur_dev->serial_number
 				= copy_udev_string(dev, "serial");
@@ -309,7 +318,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 				= copy_udev_string(dev, "manufacturer");
 			cur_dev->product_string
 				= copy_udev_string(dev, "product");
-
+			
 			/* VID/PID */
 			cur_dev->vendor_id = dev_vid;
 			cur_dev->product_id = dev_pid;
@@ -317,7 +326,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 			/* Release Number */
 			str = udev_device_get_sysattr_value(dev, "bcdDevice");
 			cur_dev->release_number = (str)? strtol(str, NULL, 16): 0x0;
-
+			
 			/* Interface Number */
 			cur_dev->interface_number = -1;
 			/* Get a handle to the interface's udev node. */
@@ -342,7 +351,7 @@ struct hid_device_info  HID_API_EXPORT *hid_enumerate(unsigned short vendor_id, 
 	/* Free the enumerator and udev objects. */
 	udev_enumerate_unref(enumerate);
 	udev_unref(udev);
-
+	
 	return root;
 }
 
@@ -360,12 +369,12 @@ void  HID_API_EXPORT hid_free_enumeration(struct hid_device_info *devs)
 	}
 }
 
-hid_device * hid_open(unsigned short vendor_id, unsigned short product_id, wchar_t *serial_number)
+hid_device * hid_open(unsigned short vendor_id, unsigned short product_id, const wchar_t *serial_number)
 {
 	struct hid_device_info *devs, *cur_dev;
 	const char *path_to_open = NULL;
 	hid_device *handle = NULL;
-
+	
 	devs = hid_enumerate(vendor_id, product_id);
 	cur_dev = devs;
 	while (cur_dev) {
@@ -391,13 +400,15 @@ hid_device * hid_open(unsigned short vendor_id, unsigned short product_id, wchar
 	}
 
 	hid_free_enumeration(devs);
-
+	
 	return handle;
 }
 
 hid_device * HID_API_EXPORT hid_open_path(const char *path)
 {
 	hid_device *dev = NULL;
+
+	hid_init();
 
 	dev = new_hid_device();
 
@@ -445,7 +456,7 @@ hid_device * HID_API_EXPORT hid_open_path(const char *path)
 				uses_numbered_reports(rpt_desc.value,
 				                      rpt_desc.size);
 		}
-
+		
 		return dev;
 	}
 	else {
@@ -489,7 +500,7 @@ int HID_API_EXPORT hid_read_timeout(hid_device *dev, unsigned char *data, size_t
 	bytes_read = read(dev->device_handle, data, length);
 	if (bytes_read < 0 && errno == EAGAIN)
 		bytes_read = 0;
-
+	
 	if (bytes_read >= 0 &&
 	    kernel_version < KERNEL_VERSION(2,6,34) &&
 	    dev->uses_numbered_reports) {
