@@ -9,16 +9,16 @@ if len(sys.argv) != 2:
     sys.exit (1)
 
 addr0 = 0
-totlen = 0
+nbytes = 0
 
 def convert (addr, len, data):
-    global addr0, totlen
+    global addr0, nbytes
     if addr0 == 0:
         addr0 = addr
     addr -= addr0
-    if totlen != addr:
+    if nbytes != addr:
         print "*** non-continuous data! ***"
-    totlen = addr + len
+    nbytes = addr + len
     print "/*%04x*/" % addr,
     for i in range(0, len*2, 8):
         b0 = data[i:i+2]
@@ -41,4 +41,4 @@ for line in f.readlines():
     if type == 0:
         convert (addr, len, line[9:9+len*2])
 
-print "#define PIC32_PE_LEN %d" % totlen
+print "#define PIC32_PE_NWORDS %d" % ((nbytes + 3) / 4)

@@ -39,7 +39,7 @@ const unsigned short pic32_pe_loader [PIC32_PE_LOADER_LEN] = {
     0x0000, 0x0000,
 };
 
-const unsigned pic32_pe [(PIC32_PE_LEN + 9) / 10 * 10] =
+const unsigned pic32_pe [(PIC32_PE_NWORDS + 9) / 10 * 10] =
 {
 /*0000*/ 0x3c1ca000, 0x279c7ff0, 0x3c1da000, 0x37bd08fc,
 /*0010*/ 0x3c08a000, 0x25080be9, 0x01000008, 0x00000000,

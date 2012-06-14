@@ -41,14 +41,24 @@ static const struct {
     {0x4A06053, "MX120F032B",  32,  3},
     {0x4A08053, "MX120F032C",  32,  3},
     {0x4A0A053, "MX120F032D",  32,  3},
+    {0x4D07053, "MX130F064B",  64,  3},
+    {0x4D09053, "MX130F064C",  64,  3},
+    {0x4D0B053, "MX130F064D",  64,  3},
     {0x4D06053, "MX150F128B", 128,  3},
+    {0x4D08053, "MX150F128C", 128,  3},
+    {0x4D0A053, "MX150F128D", 128,  3},
     {0x4A01053, "MX210F016B",  16,  3},
     {0x4A03053, "MX210F016C",  16,  3},
     {0x4A05053, "MX210F016D",  16,  3},
     {0x4A00053, "MX220F032B",  32,  3},
     {0x4A02053, "MX220F032C",  32,  3},
     {0x4A04053, "MX220F032D",  32,  3},
+    {0x4D01053, "MX230F064B",  64,  3},
+    {0x4D03053, "MX230F064C",  64,  3},
+    {0x4D05053, "MX230F064D",  64,  3},
     {0x4D00053, "MX250F128B", 128,  3},
+    {0x4D02053, "MX250F128C", 128,  3},
+    {0x4D04053, "MX250F128D", 128,  3},
     {0x0938053, "MX360F512L", 512, 12},
     {0x0934053, "MX360F256L", 256, 12},
     {0x092D053, "MX340F128L", 128, 12},
@@ -641,6 +651,17 @@ int target_erase (target_t *t)
 }
 
 /*
+ * Test block for non 0xFFFFFFFF value
+ */
+static int target_test_empty_block (unsigned *data, unsigned nwords)
+{
+    while (nwords--)
+        if (*data++ != 0xFFFFFFFF)
+            return 0;
+    return 1;
+}
+
+/*
  * Write to flash memory.
  */
 void target_program_block (target_t *t, unsigned addr,
@@ -655,7 +676,8 @@ void target_program_block (target_t *t, unsigned addr,
                 unsigned n = nwords;
                 if (n > 32)
                     n = 32;
-                t->adapter->program_row32 (t->adapter, addr, data);
+		if (! target_test_empty_block (data, 32))
+                    t->adapter->program_row32 (t->adapter, addr, data);
                 addr += n<<2;
                 data += n;
                 nwords -= n;
@@ -666,7 +688,8 @@ void target_program_block (target_t *t, unsigned addr,
             unsigned n = nwords;
             if (n > 128)
                 n = 128;
-            t->adapter->program_row128 (t->adapter, addr, data);
+	    if (! target_test_empty_block (data, 128))
+                t->adapter->program_row128 (t->adapter, addr, data);
             addr += n<<2;
             data += n;
             nwords -= n;

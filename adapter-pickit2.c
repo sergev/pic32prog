@@ -226,16 +226,16 @@ static void pickit2_load_executable (adapter_t *adapter)
             SCRIPT_JT2_XFRFASTDAT_LIT,
                 0, 9, 0, 0xA0,                  // PE_ADDRESS = 0xA000_0900
             SCRIPT_JT2_XFRFASTDAT_LIT,
-                (unsigned char) PIC32_PE_LEN,   // PE_SIZE
-                (unsigned char) (PIC32_PE_LEN >> 8),
+                (unsigned char) PIC32_PE_NWORDS, // PE_SIZE
+                (unsigned char) (PIC32_PE_NWORDS >> 8),
                 0, 0);
     check_timeout (a, "step6");
 
     // Download the PE itself (step 7-B)
     if (debug_level > 0)
         fprintf (stderr, "PICkit2: download PE\n");
-    int nloops = (PIC32_PE_LEN + 9) / 10;
-    for (i=0; i<nloops; i++) {                  // download 10 at a time
+    int nloops = (PIC32_PE_NWORDS + 9) / 10;
+    for (i=0; i<nloops; i++) {                  // download 10 words at a time
         int j = i * 10;
         pickit2_send (a, 55, CMD_CLEAR_DOWNLOAD_BUFFER,
             CMD_DOWNLOAD_DATA, 40,
