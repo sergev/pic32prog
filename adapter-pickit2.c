@@ -156,15 +156,16 @@ static void pickit2_load_executable (adapter_t *adapter)
     if (debug_level > 0)
         fprintf (stderr, "PICkit2: download PE loader\n");
     pickit2_send (a, 45, CMD_CLEAR_DOWNLOAD_BUFFER,
-        CMD_DOWNLOAD_DATA, 28,
-            WORD_AS_BYTES (0x3c04bf88),         // step 1
-            WORD_AS_BYTES (0x34842000),
-            WORD_AS_BYTES (0x3c05001f),
-            WORD_AS_BYTES (0x34a50040),
-            WORD_AS_BYTES (0xac850000),
-            WORD_AS_BYTES (0x34050800),         // step 2
-            WORD_AS_BYTES (0xac850010),
-        CMD_EXECUTE_SCRIPT, 12,                 // execute
+        CMD_DOWNLOAD_DATA, 28,          //----------------- step 1
+            WORD_AS_BYTES (0x3c04bf88), // lui a0, 0xbf88
+            WORD_AS_BYTES (0x34842000), // ori a0, 0x2000 - address of BMXCON
+            WORD_AS_BYTES (0x3c05001f), // lui a1, 0x1f
+            WORD_AS_BYTES (0x34a50040), // ori a1, 0x40   - a1 has 001f0040
+            WORD_AS_BYTES (0xac850000), // sw  a1, 0(a0)  - BMXCON initialized
+                                        //----------------- step 2
+            WORD_AS_BYTES (0x34050800), // li  a1, 0x800  - a1 has 00000800
+            WORD_AS_BYTES (0xac850010), // sw  a1, 16(a0) - BMXDKPBA initialized
+        CMD_EXECUTE_SCRIPT, 12,         //----------------- execute
             SCRIPT_JT2_SENDCMD, TAP_SW_ETAP,
             SCRIPT_JT2_SETMODE, 6, 0x1F,
             SCRIPT_JT2_XFERINST_BUF,
@@ -177,13 +178,14 @@ static void pickit2_load_executable (adapter_t *adapter)
     check_timeout (a, "step1");
 
     pickit2_send (a, 30, CMD_CLEAR_DOWNLOAD_BUFFER,
-        CMD_DOWNLOAD_DATA, 20,
-            WORD_AS_BYTES (0x34058000),         // step 3
-            WORD_AS_BYTES (0xac850020),
-            WORD_AS_BYTES (0xac850030),
-            WORD_AS_BYTES (0x3c04a000),         // step 4
-            WORD_AS_BYTES (0x34840800),
-        CMD_EXECUTE_SCRIPT, 5,                  // execute
+        CMD_DOWNLOAD_DATA, 20,          //----------------- step 3
+            WORD_AS_BYTES (0x8c850040), // lw  a1, 64(a0) - load BMXDMSZ
+            WORD_AS_BYTES (0xac850020), // sw  a1, 32(a0) - BMXDUDBA initialized
+            WORD_AS_BYTES (0xac850030), // sw  a1, 48(a0) - BMXDUPBA initialized
+                                        //----------------- step 4
+            WORD_AS_BYTES (0x3c04a000), // lui a0, 0xa000
+            WORD_AS_BYTES (0x34840800), // ori a0, 0x800  - a0 has a0000800
+        CMD_EXECUTE_SCRIPT, 5,          //----------------- execute
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
@@ -195,12 +197,14 @@ static void pickit2_load_executable (adapter_t *adapter)
     int i;
     for (i=0; i<PIC32_PE_LOADER_LEN; i+=2) {
         pickit2_send (a, 25, CMD_CLEAR_DOWNLOAD_BUFFER,
-            CMD_DOWNLOAD_DATA, 16,
-                WORD_AS_BYTES ((0x3c060000 | pic32_pe_loader[i])),  // step 5
-                WORD_AS_BYTES ((0x34c60000 | pic32_pe_loader[i+1])),
-                WORD_AS_BYTES (0xac860000),
-                WORD_AS_BYTES (0x24840004),
-            CMD_EXECUTE_SCRIPT, 4,              // execute
+            CMD_DOWNLOAD_DATA, 16,          //------------- step 5
+                WORD_AS_BYTES ((0x3c060000  // lui a2, PE_loader_hi++
+                    | pic32_pe_loader[i])),
+                WORD_AS_BYTES ((0x34c60000  // ori a2, PE_loader_lo++
+                    | pic32_pe_loader[i+1])),
+                WORD_AS_BYTES (0xac860000), // sw  a2, 0(a0)
+                WORD_AS_BYTES (0x24840004), // addiu a0, 4
+            CMD_EXECUTE_SCRIPT, 4,          //------------- execute
                 SCRIPT_JT2_XFERINST_BUF,
                 SCRIPT_JT2_XFERINST_BUF,
                 SCRIPT_JT2_XFERINST_BUF,
@@ -210,12 +214,12 @@ static void pickit2_load_executable (adapter_t *adapter)
 
     // Jump to PE loader
     pickit2_send (a, 42, CMD_CLEAR_DOWNLOAD_BUFFER,
-        CMD_DOWNLOAD_DATA, 16,
-            WORD_AS_BYTES (0x3c19a000),         // step 6
-            WORD_AS_BYTES (0x37390800),
-            WORD_AS_BYTES (0x03200008),
-            WORD_AS_BYTES (0x00000000),
-        CMD_EXECUTE_SCRIPT, 21,                 // execute
+        CMD_DOWNLOAD_DATA, 16,          //----------------- step 6
+            WORD_AS_BYTES (0x3c19a000), // lui t9, 0xa000
+            WORD_AS_BYTES (0x37390800), // ori t9, 0x800  - t9 has a0000800
+            WORD_AS_BYTES (0x03200008), // jr  t9
+            WORD_AS_BYTES (0x00000000), // nop
+        CMD_EXECUTE_SCRIPT, 21,         //----------------- execute
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
