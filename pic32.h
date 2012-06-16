@@ -13,11 +13,10 @@
  * Described in PIC32MX Flash Programming Specification.
  */
 #define	PIC32_PE_LOADER_LEN 42
-#define PIC32_PE_NWORDS     422
-#define PIC32_PE_VERSION    0x0301
 
 extern const unsigned short pic32_pe_loader[];
-extern const unsigned pic32_pe[];
+extern const unsigned pic32_pemx1[];
+extern const unsigned pic32_pemx3[];
 
 /*
  * TAP instructions.

@@ -140,7 +140,8 @@ static void serial_execution (pickit2_adapter_t *a)
 /*
  * Download programming executable (PE).
  */
-static void pickit2_load_executable (adapter_t *adapter)
+static void pickit2_load_executable (adapter_t *adapter,
+    const unsigned *pe, unsigned nwords, unsigned pe_version)
 {
     pickit2_adapter_t *a = (pickit2_adapter_t*) adapter;
 
@@ -230,29 +231,28 @@ static void pickit2_load_executable (adapter_t *adapter)
             SCRIPT_JT2_XFRFASTDAT_LIT,
                 0, 9, 0, 0xA0,                  // PE_ADDRESS = 0xA000_0900
             SCRIPT_JT2_XFRFASTDAT_LIT,
-                (unsigned char) PIC32_PE_NWORDS, // PE_SIZE
-                (unsigned char) (PIC32_PE_NWORDS >> 8),
+                (unsigned char) nwords,         // PE_SIZE
+                (unsigned char) (nwords >> 8),
                 0, 0);
     check_timeout (a, "step6");
 
     // Download the PE itself (step 7-B)
     if (debug_level > 0)
         fprintf (stderr, "PICkit2: download PE\n");
-    int nloops = (PIC32_PE_NWORDS + 9) / 10;
-    for (i=0; i<nloops; i++) {                  // download 10 words at a time
-        int j = i * 10;
+    int nloops = (nwords + 9) / 10;
+    for (i=0; i<nloops; i++, pe+=10) {          // download 10 words at a time
         pickit2_send (a, 55, CMD_CLEAR_DOWNLOAD_BUFFER,
             CMD_DOWNLOAD_DATA, 40,
-                WORD_AS_BYTES (pic32_pe[j]),
-                WORD_AS_BYTES (pic32_pe[j+1]),
-                WORD_AS_BYTES (pic32_pe[j+2]),
-                WORD_AS_BYTES (pic32_pe[j+3]),
-                WORD_AS_BYTES (pic32_pe[j+4]),
-                WORD_AS_BYTES (pic32_pe[j+5]),
-                WORD_AS_BYTES (pic32_pe[j+6]),
-                WORD_AS_BYTES (pic32_pe[j+7]),
-                WORD_AS_BYTES (pic32_pe[j+8]),
-                WORD_AS_BYTES (pic32_pe[j+9]),
+                WORD_AS_BYTES (pe[0]),
+                WORD_AS_BYTES (pe[1]),
+                WORD_AS_BYTES (pe[2]),
+                WORD_AS_BYTES (pe[3]),
+                WORD_AS_BYTES (pe[4]),
+                WORD_AS_BYTES (pe[5]),
+                WORD_AS_BYTES (pe[6]),
+                WORD_AS_BYTES (pe[7]),
+                WORD_AS_BYTES (pe[8]),
+                WORD_AS_BYTES (pe[9]),
             CMD_EXECUTE_SCRIPT, 10,             // execute
                 SCRIPT_JT2_XFRFASTDAT_BUF,
                 SCRIPT_JT2_XFRFASTDAT_BUF,
@@ -296,9 +296,9 @@ static void pickit2_load_executable (adapter_t *adapter)
         exit (-1);
     }
     version = a->reply[1] | (a->reply[2] << 8);
-    if (version != PIC32_PE_VERSION) {
+    if (version != pe_version) {
         fprintf (stderr, "PICkit2: bad PE version = %04x, expected %04x\n",
-            version, PIC32_PE_VERSION);
+            version, pe_version);
         exit (-1);
     }
     if (debug_level > 0)
