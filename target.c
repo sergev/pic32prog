@@ -154,7 +154,7 @@ target_t *target_open ()
     t->cpu_name = "Unknown";
 
     /* Find adapter. */
-    t->adapter = adapter_open_pickit2 ();
+    t->adapter = adapter_open_pickit ();
 #if 0
     if (! t->adapter)
         t->adapter = adapter_open_mpsse ();

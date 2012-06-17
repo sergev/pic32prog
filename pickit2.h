@@ -57,6 +57,11 @@
 #define CMD_COPY_RAM_UPLOAD        0xB9     // {StartAddrL} {StartAddrH}
 
 /*
+ * PICkit3 Commands.
+ */
+#define CMD_GETVERSIONS_MPLAB      0x41     // Get firmware version
+
+/*
  * Status bits.
  */
 #define STATUS_VDD_GND_ON          0x0001   // Vdd GND On

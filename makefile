@@ -6,12 +6,12 @@ LDFLAGS         = -g
 
 # Linux
 #LIBS            += -ludev
-LIBS            += -lusb-1.0
-HIDSRC          = hidapi/hid-libusb.c
+#LIBS            += -lusb-1.0
+#HIDSRC          = hidapi/hid-libusb.c
 
 # Mac OS X
-#LIBS            += -framework IOKit -framework CoreFoundation
-#HIDSRC          = hidapi/hid-mac.c
+LIBS            += -framework IOKit -framework CoreFoundation
+HIDSRC          = hidapi/hid-mac.c
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o

@@ -1,7 +1,7 @@
 /*
  * Flash memory programmer for Microchip PIC32 microcontrollers.
  *
- * Copyright (C) 2011 Serge Vakulenko
+ * Copyright (C) 2011-2012 Serge Vakulenko
  *
  * This file is part of PIC32PROG project, which is distributed
  * under the terms of the GNU General Public License (GPL).
@@ -444,10 +444,14 @@ void do_program (char *filename)
             printf (_("# done      \n"));
             if (! boot_dirty [boot_bytes / 1024 - 1]) {
                 /* Write chip configuration. */
-                target_program_word (target, DEVCFG3_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG3_ADDR(boot_data));
-                target_program_word (target, DEVCFG2_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG2_ADDR(boot_data));
-                target_program_word (target, DEVCFG1_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG1_ADDR(boot_data));
-                target_program_word (target, DEVCFG0_ADDR(BOOTV_BASE), *(unsigned*) DEVCFG0_ADDR(boot_data));
+                target_program_word (target, DEVCFG3_ADDR(BOOTV_BASE),
+                                *(unsigned*) DEVCFG3_ADDR(boot_data));
+                target_program_word (target, DEVCFG2_ADDR(BOOTV_BASE),
+                                *(unsigned*) DEVCFG2_ADDR(boot_data));
+                target_program_word (target, DEVCFG1_ADDR(BOOTV_BASE),
+                                *(unsigned*) DEVCFG1_ADDR(boot_data));
+                target_program_word (target, DEVCFG0_ADDR(BOOTV_BASE),
+                                *(unsigned*) DEVCFG0_ADDR(boot_data));
                 boot_dirty [boot_bytes / 1024 - 1] = 1;
             }
         }
@@ -607,7 +611,7 @@ int main (int argc, char **argv)
     setvbuf (stderr, (char *)NULL, _IOLBF, 0);
     printf (_("Programmer for Microchip PIC32 microcontrollers, Version %s\n"), VERSION);
     progname = argv[0];
-    copyright = _("    Copyright: (C) 2011 Serge Vakulenko");
+    copyright = _("    Copyright: (C) 2011-2012 Serge Vakulenko");
     signal (SIGINT, interrupted);
 #ifdef __linux__
     signal (SIGHUP, interrupted);

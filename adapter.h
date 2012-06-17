@@ -26,7 +26,7 @@ struct _adapter_t {
     void (*erase_chip) (adapter_t *a);
 };
 
-adapter_t *adapter_open_pickit2 (void);
+adapter_t *adapter_open_pickit (void);
 adapter_t *adapter_open_an1388 (void);
 adapter_t *adapter_open_hidboot (void);
 adapter_t *adapter_open_mpsse (void);
