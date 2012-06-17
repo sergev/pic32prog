@@ -105,7 +105,7 @@ static void check_timeout (pickit_adapter_t *a, const char *message)
 {
     unsigned status;
 
-    pickit_send (a, 2, CMD_READ_STATUS);
+    pickit_send (a, 1, CMD_READ_STATUS);
     pickit_recv (a);
     status = a->reply[0] | a->reply[1] << 8;
     if (status & STATUS_ICD_TIMEOUT) {
@@ -841,7 +841,7 @@ adapter_t *adapter_open_pickit (void)
     if (debug_level > 0)
         fprintf (stderr, "%s: status %04x\n", a->name, status);
 
-    switch (status & ~STATUS_RESET) {
+    switch (status & ~(STATUS_RESET | STATUS_BUTTON_PRESSED)) {
     case STATUS_VPP_GND_ON:
     case STATUS_VPP_GND_ON | STATUS_VPP_ON:
         /* Explorer 16 board: no need to enable power. */
