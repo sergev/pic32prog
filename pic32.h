@@ -19,7 +19,7 @@ extern const unsigned pic32_pemx1[];
 extern const unsigned pic32_pemx3[];
 
 /*
- * TAP instructions.
+ * TAP instructions (5-bit).
  */
 #define TAP_SW_MTAP     4       // Switch to MCHP TAP controller
 #define TAP_SW_ETAP     5       // Switch to EJTAG TAP controller
@@ -40,7 +40,7 @@ extern const unsigned pic32_pemx3[];
 #define ETAP_FASTDATA   14      // Select FastData register
 
 /*
- * MCHP commands.
+ * Microchip DR commands (32-bit).
  */
 #define MCHP_STATUS        0x00 // Return Status
 #define MCHP_ASSERT_RST    0xD1 // Assert device reset

@@ -17,6 +17,7 @@
 #include <usb.h>
 
 #include "adapter.h"
+#include "pic32.h"
 
 typedef struct {
     /* Common part */
@@ -37,6 +38,9 @@ typedef struct {
     unsigned long long high_byte_mask;
     unsigned long long high_bit_mask;
     unsigned high_byte_bits;
+
+    unsigned use_executable;
+    unsigned serial_execution_mode;
 } mpsse_adapter_t;
 
 /*
@@ -77,20 +81,6 @@ typedef struct {
 #define WTDI                    0x10
 #define RTDO                    0x20
 #define WTMS                    0x40
-
-/* Microchip TAP instructions (5-bit). */
-#define MTAP_IDCODE             0x01    /* Select chip identification register */
-#define MTAP_SW_MTAP            0x04    /* Switch to MCHP TAP controller */
-#define MTAP_SW_ETAP            0x05    /* Switch to EJTAG TAP controller */
-#define MTAP_COMMAND            0x07    /* Connect to MCHP Command Register */
-
-/* Microchip DR commands (32-bit). */
-#define MCHP_STATUS             0x00    /* No action, read status */
-#define MCHP_ASSERT_RST         0xd1    /* Assert device reset */
-#define MCHP_DEASSERT_RST       0xd0    /* Deassert device reset */
-#define MCHP_ERASE              0xfc    /* Flash chip erase */
-#define MCHP_FLASH_ENABLE       0xfe    /* Enable access to flash from cpu */
-#define MCHP_FLASH_DISABLE      0xfd    /* Disable access to flash from cpu */
 
 /*
  * Send a packet to USB device.
@@ -387,29 +377,119 @@ static unsigned mpsse_get_idcode (adapter_t *adapter)
 }
 
 /*
+ * Put device to serial execution mode.
+ */
+static void serial_execution (mpsse_adapter_t *a)
+{
+    if (a->serial_execution_mode)
+        return;
+    a->serial_execution_mode = 1;
+
+    /* Enter serial execution. */
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: enter serial execution\n");
+
+    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
+    mpsse_send (a, 1, 1, 5, ETAP_EJTAGBOOT, 0); /* Send command. */
+
+    /* Check status. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
+    mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
+    mpsse_send (a, 0, 0, 32, MCHP_DEASSERT_RST, 0);
+    mpsse_send (a, 0, 0, 32, MCHP_FLASH_ENABLE, 0);
+    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    unsigned status = mpsse_recv (a);
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: status %04x\n", status);
+    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
+                   MCHP_STATUS_FAEN)) {
+        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
+        exit (-1);
+    }
+}
+
+static void xfer_instruction (mpsse_adapter_t *a, unsigned instruction)
+{
+    unsigned word;
+
+    // Select Control Register
+    mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
+
+    // Wait until CPU is ready
+    // Check if Processor Access bit (bit 18) is set
+    do {
+        mpsse_send (a, 0, 0, 32, 0x0004C000, 1);    /* Xfer data. */
+        word = mpsse_recv (a);
+    } while (! (word & 0x40000));
+
+    // Select Data Register
+    // Send the instruction
+    mpsse_send (a, 1, 1, 5, ETAP_DATA, 0);          /* Send command. */
+    mpsse_send (a, 0, 0, 32, instruction, 0);       /* Xfer data. */
+
+    // Tell CPU to execute instruction
+    mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
+    mpsse_send (a, 0, 0, 32, 0x0000C000, 0);        /* Xfer data. */
+}
+/*
+ * Read a word from memory (without PE).
+ */
+static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
+{
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+    unsigned addr_lo = addr & 0xFFFF;
+    unsigned addr_hi = (addr >> 16) & 0xFFFF;
+
+    serial_execution (a);
+
+    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
+    xfer_instruction (a, 0x3c04bf80);           // lui s3, 0xFF20
+    xfer_instruction (a, 0x3c080000 | addr_hi); // lui t0, addr_hi
+    xfer_instruction (a, 0x35080000 | addr_lo); // ori t0, addr_lo
+    xfer_instruction (a, 0x8d090000);           // lw t1, 0(t0)
+    xfer_instruction (a, 0xae690000);           // sw t1, 0(s3)
+
+    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    mpsse_send (a, 0, 0, 32, 0, 1);             /* Xfer data. */
+    unsigned word = mpsse_recv (a);
+
+    // TODO
+    return word;
+}
+
+/*
  * Read a memory block.
  */
 static void mpsse_read_data (adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+
+    //fprintf (stderr, "JTAG: read %d bytes from %08x\n", nwords*4, addr);
+    if (! a->use_executable) {
+        /* Without PE. */
+        for (; nwords > 0; nwords--) {
+            *data++ = mpsse_read_word (adapter, addr);
+            addr += 4;
+        }
+        return;
+    }
+
     // TODO
 }
 
 /*
  * Download programming executable (PE).
  */
-static void mpsse_load_executable (adapter_t *adapter)
+static void mpsse_load_executable (adapter_t *adapter,
+    const unsigned *pe, unsigned nwords, unsigned pe_version)
 {
-    // TODO
-}
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
-/*
- * Read a word from memory (without PE).
- */
-static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
-{
+    serial_execution (a);
+
     // TODO
-    return 0;
+    //a->use_executable = 1;
 }
 
 /*
@@ -418,15 +498,19 @@ static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
 static void mpsse_erase_chip (adapter_t *adapter)
 {
     // TODO
-}
+#if 0
+    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
+    mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
 
-/*
- * Flash write, 1-kbyte blocks.
- */
-static void mpsse_program_block (adapter_t *adapter,
-    unsigned addr, unsigned *data)
-{
-    // TODO
+    mpsse_send (a, 0, 0, 32, MCHP_ERASE, 0);    /* Xfer data. */
+    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    status = mpsse_recv (a);
+fprintf (stderr, "Status = %08x\n", status);
+    mdelay (1000);
+    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    status = mpsse_recv (a);
+fprintf (stderr, "Status = %08x\n", status);
+#endif
 }
 
 /*
@@ -435,6 +519,51 @@ static void mpsse_program_block (adapter_t *adapter,
 static void mpsse_program_word (adapter_t *adapter,
     unsigned addr, unsigned word)
 {
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: program word at %08x: %08x\n", addr, word);
+    if (! a->use_executable) {
+        /* Without PE. */
+        fprintf (stderr, "JTAG: slow flash write not implemented yet.\n");
+        exit (-1);
+    }
+    /* Use PE to write flash memory. */
+    // TODO
+}
+
+/*
+ * Flash write row of memory.
+ */
+static void mpsse_program_row32 (adapter_t *adapter, unsigned addr,
+    unsigned *data)
+{
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: row program 128 bytes at %08x\n", addr);
+    if (! a->use_executable) {
+        /* Without PE. */
+        fprintf (stderr, "JTAG: slow flash write not implemented yet.\n");
+        exit (-1);
+    }
+    /* Use PE to write flash memory. */
+    // TODO
+}
+
+static void mpsse_program_row128 (adapter_t *adapter, unsigned addr,
+    unsigned *data)
+{
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: row program 512 bytes at %08x\n", addr);
+    if (! a->use_executable) {
+        /* Without PE. */
+        fprintf (stderr, "JTAG: slow flash write not implemented yet.\n");
+        exit (-1);
+    }
+    /* Use PE to write flash memory. */
     // TODO
 }
 
@@ -538,49 +667,42 @@ failed: usb_release_interface (a->usbdev, 0);
     mdelay (10);
 
     /* Reset the JTAG TAP controller. */
-
-#if 1
     mpsse_send (a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
-#else
-    /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
-     * After reset, the IDCODE register is always selected.
-     * Read out 32 bits of data. */
-    mpsse_send (a, 6, 31, 32, 0, 1);
-    unsigned idcode = mpsse_recv (a);
-fprintf (stderr, "Idcode = %08x\n", idcode);
 
-    mpsse_send (a, 1, 1, 5, MTAP_IDCODE, 0);    /* Send command. */
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
-    idcode = mpsse_recv (a);
-fprintf (stderr, "Idcode = %08x\n", idcode);
-#endif
-
-
-
-    mpsse_send (a, 1, 1, 5, MTAP_SW_MTAP, 0);   /* Send command. */
+    /* Check status. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-
+    mpsse_send (a, 0, 0, 32, MCHP_ASSERT_RST, 0); /* Xfer data. */
     mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
     unsigned status = mpsse_recv (a);
-fprintf (stderr, "Status = %08x\n", status);
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: status %04x\n", status);
+    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
+                   MCHP_STATUS_DEVRST)) {
+        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
+        free (a);
+        return 0;
+    }
 
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
-    status = mpsse_recv (a);
-fprintf (stderr, "Status = %08x\n", status);
+    /* Deactivate /SYSRST. */
+    mpsse_reset (a, 0, 0, 1);
+    mdelay (10);
 
-#if 0
-    mpsse_send (a, 1, 1, 5, MTAP_SW_MTAP, 0);   /* Send command. */
+    /* Check status. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
+    mpsse_send (a, 0, 0, 32, MCHP_ASSERT_RST, 0); /* Xfer data. */
+    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    status = mpsse_recv (a);
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: status %04x\n", status);
+    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
+                   MCHP_STATUS_FAEN)) {
+        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
+        free (a);
+        return 0;
+    }
 
-    mpsse_send (a, 0, 0, 32, MCHP_ERASE, 0);   /* Xfer data. */
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
-    status = mpsse_recv (a);
-fprintf (stderr, "Status = %08x\n", status);
-    mdelay (1000);
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
-    status = mpsse_recv (a);
-fprintf (stderr, "Status = %08x\n", status);
-#endif
     /* User functions. */
     a->adapter.close = mpsse_close;
     a->adapter.get_idcode = mpsse_get_idcode;
@@ -588,7 +710,8 @@ fprintf (stderr, "Status = %08x\n", status);
     a->adapter.read_word = mpsse_read_word;
     a->adapter.read_data = mpsse_read_data;
     a->adapter.erase_chip = mpsse_erase_chip;
-    a->adapter.program_block = mpsse_program_block;
     a->adapter.program_word = mpsse_program_word;
+    a->adapter.program_row32 = mpsse_program_row32;
+    a->adapter.program_row128 = mpsse_program_row128;
     return &a->adapter;
 }
