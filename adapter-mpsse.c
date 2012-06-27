@@ -22,6 +22,7 @@
 typedef struct {
     /* Common part */
     adapter_t adapter;
+    const char *name;
 
     /* Device handle for libusb. */
     usb_dev_handle *usbdev;
@@ -353,8 +354,15 @@ static void mpsse_close (adapter_t *adapter, int power_on)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
+    /* Clear EJTAGBOOT mode. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
+    mpsse_send (a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
     mpsse_flush_output (a);
+
+    /* Toggle /SYSRST. */
+    mpsse_reset (a, 0, 1, 1);
     mpsse_reset (a, 0, 0, 0);
+
     usb_release_interface (a->usbdev, 0);
     usb_close (a->usbdev);
     free (a);
@@ -395,10 +403,25 @@ static void serial_execution (mpsse_adapter_t *a)
     /* Check status. */
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 32, MCHP_DEASSERT_RST, 0);
-    mpsse_send (a, 0, 0, 32, MCHP_FLASH_ENABLE, 0);
     mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
     unsigned status = mpsse_recv (a);
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: status %04x\n", status);
+    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
+                   MCHP_STATUS_DEVRST)) {
+        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
+        exit (-1);
+    }
+
+    /* Deactivate /SYSRST. */
+    mpsse_reset (a, 0, 0, 1);
+    mdelay (10);
+
+    /* Check status. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
+    mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
+    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    status = mpsse_recv (a);
     if (debug_level > 0)
         fprintf (stderr, "JTAG: status %04x\n", status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
@@ -412,13 +435,16 @@ static void xfer_instruction (mpsse_adapter_t *a, unsigned instruction)
 {
     unsigned word;
 
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: xfer instruction %08x\n", instruction);
+
     // Select Control Register
     mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
 
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
     do {
-        mpsse_send (a, 0, 0, 32, 0x0004C000, 1);    /* Xfer data. */
+        mpsse_send (a, 0, 0, 32, 0x0004D000, 1);    /* Xfer data. */
         word = mpsse_recv (a);
     } while (! (word & 0x40000));
 
@@ -431,6 +457,7 @@ static void xfer_instruction (mpsse_adapter_t *a, unsigned instruction)
     mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
     mpsse_send (a, 0, 0, 32, 0x0000C000, 0);        /* Xfer data. */
 }
+
 /*
  * Read a word from memory (without PE).
  */
@@ -442,6 +469,7 @@ static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
 
     serial_execution (a);
 
+    //fprintf (stderr, "JTAG: read word from %08x\n", addr);
     mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
     xfer_instruction (a, 0x3c04bf80);           // lui s3, 0xFF20
     xfer_instruction (a, 0x3c080000 | addr_hi); // lui t0, addr_hi
@@ -450,10 +478,11 @@ static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
     xfer_instruction (a, 0xae690000);           // sw t1, 0(s3)
 
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    mpsse_send (a, 0, 0, 32, 0, 1);             /* Xfer data. */
-    unsigned word = mpsse_recv (a);
+    mpsse_send (a, 0, 0, 33, 0, 1);             /* Xfer data. */
+    unsigned word = mpsse_recv (a) >> 1;
 
-    // TODO
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: read word at %08x -> %08x\n", addr, word);
     return word;
 }
 
@@ -577,6 +606,7 @@ adapter_t *adapter_open_mpsse (void)
     mpsse_adapter_t *a;
     struct usb_bus *bus;
     struct usb_device *dev;
+    char *name;
 
     usb_init();
     usb_find_busses();
@@ -586,6 +616,7 @@ adapter_t *adapter_open_mpsse (void)
             if (dev->descriptor.idVendor == OLIMEX_VID &&
                 (dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY ||
                  dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H))
+                name = "Olimex ARM-USB-Tiny";
                 goto found;
         }
     }
@@ -598,12 +629,13 @@ found:
         dev->descriptor.bcdDevice);*/
     a = calloc (1, sizeof (*a));
     if (! a) {
-        fprintf (stderr, "Out of memory\n");
+        fprintf (stderr, "%s: out of memory\n", name);
         return 0;
     }
+    a->name = name;
     a->usbdev = usb_open (dev);
     if (! a->usbdev) {
-        fprintf (stderr, "MPSSE adapter: usb_open() failed\n");
+        fprintf (stderr, "%s: usb_open() failed\n", a->name);
         free (a);
         return 0;
     }
@@ -614,9 +646,9 @@ found:
         USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
         SIO_RESET, 0, 1, 0, 0, 1000) != 0) {
         if (errno == EPERM)
-            fprintf (stderr, "MPSSE adapter: superuser privileges needed.\n");
+            fprintf (stderr, "%s: superuser privileges needed.\n", a->name);
         else
-            fprintf (stderr, "MPSSE adapter: FTDI reset failed\n");
+            fprintf (stderr, "%s: FTDI reset failed\n", a->name);
 failed: usb_release_interface (a->usbdev, 0);
         usb_close (a->usbdev);
         free (a);
@@ -627,34 +659,34 @@ failed: usb_release_interface (a->usbdev, 0);
     if (usb_control_msg (a->usbdev,
         USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
         SIO_SET_BITMODE, 0x20b, 1, 0, 0, 1000) != 0) {
-        fprintf (stderr, "Can't set sync mpsse mode\n");
+        fprintf (stderr, "%s: can't set sync mpsse mode\n", a->name);
         goto failed;
     }
 
-    unsigned divisor = 3000;
-    unsigned char latency_timer = 100;
+    unsigned divisor = 3;
+    unsigned char latency_timer = 1;
 
     if (usb_control_msg (a->usbdev,
         USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
         SIO_SET_LATENCY_TIMER, latency_timer, 1, 0, 0, 1000) != 0) {
-        fprintf (stderr, "unable to set latency timer\n");
+        fprintf (stderr, "%s: unable to set latency timer\n", a->name);
         goto failed;
     }
     if (usb_control_msg (a->usbdev,
         USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN,
         SIO_GET_LATENCY_TIMER, 0, 1, (char*) &latency_timer, 1, 1000) != 1) {
-        fprintf (stderr, "unable to get latency timer\n");
+        fprintf (stderr, "%s: unable to get latency timer\n", a->name);
         goto failed;
     }
     if (debug_level) {
-    	fprintf (stderr, "MPSSE: divisor: %u\n", divisor);
-    	fprintf (stderr, "MPSSE: latency timer: %u usec\n", latency_timer);
+    	fprintf (stderr, "%s: divisor: %u\n", a->name, divisor);
+    	fprintf (stderr, "%s: latency timer: %u usec\n", a->name, latency_timer);
     }
     mpsse_reset (a, 0, 0, 1);
 
     if (debug_level) {
      int baud = 6000000 / (divisor + 1);
-        fprintf (stderr, "MPSSE: speed %d samples/sec\n", baud);
+        fprintf (stderr, "%s: speed %d samples/sec\n", a->name, baud);
     }
     mpsse_speed (a, divisor);
 
@@ -672,36 +704,17 @@ failed: usb_release_interface (a->usbdev, 0);
     /* Check status. */
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 32, MCHP_ASSERT_RST, 0); /* Xfer data. */
     mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
     unsigned status = mpsse_recv (a);
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: status %04x\n", status);
+        fprintf (stderr, "%s: status %04x\n", a->name, status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
                    MCHP_STATUS_DEVRST)) {
-        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
+        fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
         free (a);
         return 0;
     }
-
-    /* Deactivate /SYSRST. */
-    mpsse_reset (a, 0, 0, 1);
-    mdelay (10);
-
-    /* Check status. */
-    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
-    mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 32, MCHP_ASSERT_RST, 0); /* Xfer data. */
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
-    status = mpsse_recv (a);
-    if (debug_level > 0)
-        fprintf (stderr, "JTAG: status %04x\n", status);
-    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
-                   MCHP_STATUS_FAEN)) {
-        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
-        free (a);
-        return 0;
-    }
+    printf ("      Adapter: %s\n", a->name);
 
     /* User functions. */
     a->adapter.close = mpsse_close;

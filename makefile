@@ -16,8 +16,9 @@ PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o
 
 # Olimex ARM-USB-Tiny JTAG adapter: not finished yet.
-#PROG_OBJS      += adapter-mpsse.o
-#LIBS           += -L/opt/local/lib -lusb
+CFLAGS         += -DUSE_MPSSE
+PROG_OBJS      += adapter-mpsse.o
+LIBS           += -L/opt/local/lib -lusb
 
 all:            pic32prog
 

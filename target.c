@@ -155,7 +155,7 @@ target_t *target_open ()
 
     /* Find adapter. */
     t->adapter = adapter_open_pickit ();
-#if 0
+#ifdef USE_MPSSE
     if (! t->adapter)
         t->adapter = adapter_open_mpsse ();
 #endif
