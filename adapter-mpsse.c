@@ -451,11 +451,40 @@ static void xfer_instruction (mpsse_adapter_t *a, unsigned instruction)
     // Select Data Register
     // Send the instruction
     mpsse_send (a, 1, 1, 5, ETAP_DATA, 0);          /* Send command. */
-    mpsse_send (a, 0, 0, 32, instruction, 0);       /* Xfer data. */
+    mpsse_send (a, 0, 0, 32, instruction, 0);       /* Send data. */
 
     // Tell CPU to execute instruction
     mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
-    mpsse_send (a, 0, 0, 32, 0x0000C000, 0);        /* Xfer data. */
+    mpsse_send (a, 0, 0, 32, 0x0000C000, 0);        /* Send data. */
+}
+
+static unsigned get_status (mpsse_adapter_t *a)
+{
+    unsigned word;
+
+    // Select Control Register
+    mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
+
+    // Wait until CPU is ready
+    // Check if Processor Access bit (bit 18) is set
+    do {
+        mpsse_send (a, 0, 0, 32, 0x0004D000, 1);    /* Xfer data. */
+        word = mpsse_recv (a);
+    } while (! (word & 0x40000));
+
+    // Select Data Register
+    // Send the instruction
+    mpsse_send (a, 1, 1, 5, ETAP_DATA, 0);          /* Send command. */
+    mpsse_send (a, 0, 0, 32, 0, 1);                 /* Get data. */
+    word = mpsse_recv (a);
+
+    // Tell CPU to execute NOP instruction
+    mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
+    mpsse_send (a, 0, 0, 32, 0x0000C000, 0);        /* Send data. */
+
+    if (debug_level > 0)
+        fprintf (stderr, "JTAG: get status %08x\n", word);
+    return word;
 }
 
 /*
@@ -478,7 +507,7 @@ static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
     xfer_instruction (a, 0xae690000);           // sw t1, 0(s3)
 
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    mpsse_send (a, 0, 0, 33, 0, 1);             /* Xfer data. */
+    mpsse_send (a, 0, 0, 33, 0, 1);             /* Get fastdata. */
     unsigned word = mpsse_recv (a) >> 1;
 
     if (debug_level > 0)
@@ -515,10 +544,84 @@ static void mpsse_load_executable (adapter_t *adapter,
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
+    a->use_executable = 1;
     serial_execution (a);
 
-    // TODO
-    //a->use_executable = 1;
+    if (debug_level > 0)
+        fprintf (stderr, "%s: download PE loader\n", a->name);
+
+    /* Step 1. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);
+    xfer_instruction (a, 0x3c04bf88);   // lui a0, 0xbf88
+    xfer_instruction (a, 0x34842000);   // ori a0, 0x2000 - address of BMXCON
+    xfer_instruction (a, 0x3c05001f);   // lui a1, 0x1f
+    xfer_instruction (a, 0x34a50040);   // ori a1, 0x40   - a1 has 001f0040
+    xfer_instruction (a, 0xac850000);   // sw  a1, 0(a0)  - BMXCON initialized
+
+    /* Step 2. */
+    xfer_instruction (a, 0x34050800);   // li  a1, 0x800  - a1 has 00000800
+    xfer_instruction (a, 0xac850010);   // sw  a1, 16(a0) - BMXDKPBA initialized
+
+    /* Step 3. */
+    xfer_instruction (a, 0x8c850040);   // lw  a1, 64(a0) - load BMXDMSZ
+    xfer_instruction (a, 0xac850020);   // sw  a1, 32(a0) - BMXDUDBA initialized
+    xfer_instruction (a, 0xac850030);   // sw  a1, 48(a0) - BMXDUPBA initialized
+
+    /* Step 4. */
+    xfer_instruction (a, 0x3c04a000);   // lui a0, 0xa000
+    xfer_instruction (a, 0x34840800);   // ori a0, 0x800  - a0 has a0000800
+
+    /* Download the PE loader. */
+    int i;
+    for (i=0; i<PIC32_PE_LOADER_LEN; i+=2) {
+        /* Step 5. */
+        unsigned opcode1 = 0x3c060000 | pic32_pe_loader[i];
+        unsigned opcode2 = 0x34c60000 | pic32_pe_loader[i+1];
+
+        xfer_instruction (a, opcode1);      // lui a2, PE_loader_hi++
+        xfer_instruction (a, opcode2);      // ori a2, PE_loader_lo++
+        xfer_instruction (a, 0xac860000);   // sw  a2, 0(a0)
+        xfer_instruction (a, 0x24840004);   // addiu a0, 4
+    }
+
+    /* Jump to PE loader (step 6). */
+    xfer_instruction (a, 0x3c19a000);   // lui t9, 0xa000
+    xfer_instruction (a, 0x37390800);   // ori t9, 0x800  - t9 has a0000800
+    xfer_instruction (a, 0x03200008);   // jr  t9
+    xfer_instruction (a, 0x00000000);   // nop
+
+    /* Send parameters for the loader:
+     * PE_ADDRESS = 0xA000_0900,
+     * PE_SIZE */
+    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    mpsse_send (a, 0, 0, 33, 0xa0000900<<1, 0); /* Send fastdata. */
+    mpsse_send (a, 0, 0, 33, nwords<<1, 0);     /* Send fastdata. */
+
+    /* Download the PE itself (step 7-B). */
+    if (debug_level > 0)
+        fprintf (stderr, "%s: download PE\n", a->name);
+    for (i=0; i<nwords; i++, pe++) {
+        mpsse_send (a, 0, 0, 33, *pe<<1, 0);    /* Send fastdata. */
+    }
+    mdelay (100);
+
+    /* Download the PE instructions. */
+    mpsse_send (a, 0, 0, 33, 0, 0);             /* Step 8 - jump to PE. */
+    mpsse_send (a, 0, 0, 33, 0xDEAD0000<<1, 0);
+    mdelay (100);
+
+    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    mpsse_send (a, 0, 0, 33, 0x00070000<<1, 0); /* EXEC_VERSION, length=0 */
+
+    unsigned version = get_status (a);
+    if (version != (0x0007 | pe_version)) {
+        fprintf (stderr, "%s: bad PE version = %08x, expected %08x\n",
+            a->name, version, 0x0007 | pe_version);
+        exit (-1);
+    }
+    if (debug_level > 0)
+        fprintf (stderr, "%s: PE version = %04x\n",
+            a->name, version & 0xffff);
 }
 
 /*
