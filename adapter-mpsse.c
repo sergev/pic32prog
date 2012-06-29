@@ -395,7 +395,7 @@ static void serial_execution (mpsse_adapter_t *a)
 
     /* Enter serial execution. */
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: enter serial execution\n");
+        fprintf (stderr, "%s: enter serial execution\n", a->name);
 
     mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, ETAP_EJTAGBOOT, 0); /* Send command. */
@@ -406,10 +406,10 @@ static void serial_execution (mpsse_adapter_t *a)
     mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
     unsigned status = mpsse_recv (a);
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: status %04x\n", status);
+        fprintf (stderr, "%s: status %04x\n", a->name, status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
                    MCHP_STATUS_DEVRST)) {
-        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
+        fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
         exit (-1);
     }
 
@@ -423,20 +423,29 @@ static void serial_execution (mpsse_adapter_t *a)
     mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
     status = mpsse_recv (a);
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: status %04x\n", status);
+        fprintf (stderr, "%s: status %04x\n", a->name, status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
                    MCHP_STATUS_FAEN)) {
-        fprintf (stderr, "JTAG: invalid status = %04x\n", status);
+        fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
         exit (-1);
     }
+
+    /* Leave it in ETAP mode. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
+    mpsse_flush_output (a);
+}
+
+static void xfer_fastdata (mpsse_adapter_t *a, unsigned word)
+{
+    mpsse_send (a, 0, 0, 33, (unsigned long long) word << 1, 0);
 }
 
 static void xfer_instruction (mpsse_adapter_t *a, unsigned instruction)
 {
-    unsigned word;
+    unsigned ctl;
 
-    if (debug_level > 0)
-        fprintf (stderr, "JTAG: xfer instruction %08x\n", instruction);
+    if (debug_level > 1)
+        fprintf (stderr, "%s: xfer instruction %08x\n", a->name, instruction);
 
     // Select Control Register
     mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
@@ -444,9 +453,12 @@ static void xfer_instruction (mpsse_adapter_t *a, unsigned instruction)
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
     do {
-        mpsse_send (a, 0, 0, 32, 0x0004D000, 1);    /* Xfer data. */
-        word = mpsse_recv (a);
-    } while (! (word & 0x40000));
+        mpsse_send (a, 0, 0, 32, CONTROL_PRACC |    /* Xfer data. */
+                                 CONTROL_PROBEN |
+                                 CONTROL_PROBTRAP |
+                                 CONTROL_EJTAGBRK, 1);
+        ctl = mpsse_recv (a);
+    } while (! (ctl & CONTROL_PRACC));
 
     // Select Data Register
     // Send the instruction
@@ -455,12 +467,13 @@ static void xfer_instruction (mpsse_adapter_t *a, unsigned instruction)
 
     // Tell CPU to execute instruction
     mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
-    mpsse_send (a, 0, 0, 32, 0x0000C000, 0);        /* Send data. */
+    mpsse_send (a, 0, 0, 32, CONTROL_PROBEN |       /* Send data. */
+                             CONTROL_PROBTRAP, 0);
 }
 
-static unsigned get_status (mpsse_adapter_t *a)
+static unsigned get_pe_response (mpsse_adapter_t *a)
 {
-    unsigned word;
+    unsigned ctl, response;
 
     // Select Control Register
     mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
@@ -468,23 +481,26 @@ static unsigned get_status (mpsse_adapter_t *a)
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
     do {
-        mpsse_send (a, 0, 0, 32, 0x0004D000, 1);    /* Xfer data. */
-        word = mpsse_recv (a);
-    } while (! (word & 0x40000));
+        mpsse_send (a, 0, 0, 32, CONTROL_PRACC |    /* Xfer data. */
+                                 CONTROL_PROBEN |
+                                 CONTROL_PROBTRAP |
+                                 CONTROL_EJTAGBRK, 1);
+        ctl = mpsse_recv (a);
+    } while (! (ctl & CONTROL_PRACC));
 
     // Select Data Register
     // Send the instruction
     mpsse_send (a, 1, 1, 5, ETAP_DATA, 0);          /* Send command. */
     mpsse_send (a, 0, 0, 32, 0, 1);                 /* Get data. */
-    word = mpsse_recv (a);
+    response = mpsse_recv (a);
 
     // Tell CPU to execute NOP instruction
     mpsse_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
-    mpsse_send (a, 0, 0, 32, 0x0000C000, 0);        /* Send data. */
-
-    if (debug_level > 0)
-        fprintf (stderr, "JTAG: get status %08x\n", word);
-    return word;
+    mpsse_send (a, 0, 0, 32, CONTROL_PROBEN |       /* Send data. */
+                             CONTROL_PROBTRAP, 0);
+    if (debug_level > 1)
+        fprintf (stderr, "%s: get PE response %08x\n", a->name, response);
+    return response;
 }
 
 /*
@@ -498,8 +514,7 @@ static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
 
     serial_execution (a);
 
-    //fprintf (stderr, "JTAG: read word from %08x\n", addr);
-    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
+    //fprintf (stderr, "%s: read word from %08x\n", a->name, addr);
     xfer_instruction (a, 0x3c04bf80);           // lui s3, 0xFF20
     xfer_instruction (a, 0x3c080000 | addr_hi); // lui t0, addr_hi
     xfer_instruction (a, 0x35080000 | addr_lo); // ori t0, addr_lo
@@ -511,7 +526,7 @@ static unsigned mpsse_read_word (adapter_t *adapter, unsigned addr)
     unsigned word = mpsse_recv (a) >> 1;
 
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: read word at %08x -> %08x\n", addr, word);
+        fprintf (stderr, "%s: read word at %08x -> %08x\n", a->name, addr, word);
     return word;
 }
 
@@ -523,7 +538,7 @@ static void mpsse_read_data (adapter_t *adapter,
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
-    //fprintf (stderr, "JTAG: read %d bytes from %08x\n", nwords*4, addr);
+    //fprintf (stderr, "%s: read %d bytes from %08x\n", a->name, nwords*4, addr);
     if (! a->use_executable) {
         /* Without PE. */
         for (; nwords > 0; nwords--) {
@@ -551,7 +566,6 @@ static void mpsse_load_executable (adapter_t *adapter,
         fprintf (stderr, "%s: download PE loader\n", a->name);
 
     /* Step 1. */
-    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);
     xfer_instruction (a, 0x3c04bf88);   // lui a0, 0xbf88
     xfer_instruction (a, 0x34842000);   // ori a0, 0x2000 - address of BMXCON
     xfer_instruction (a, 0x3c05001f);   // lui a1, 0x1f
@@ -590,33 +604,33 @@ static void mpsse_load_executable (adapter_t *adapter,
     xfer_instruction (a, 0x03200008);   // jr  t9
     xfer_instruction (a, 0x00000000);   // nop
 
-    /* Send parameters for the loader:
+    /* Switch from serial to fast execution mode. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);
+    mpsse_send (a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
+
+    /* Send parameters for the loader (step 7-A).
      * PE_ADDRESS = 0xA000_0900,
      * PE_SIZE */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    mpsse_send (a, 0, 0, 33, 0xa0000900<<1, 0); /* Send fastdata. */
-    mpsse_send (a, 0, 0, 33, nwords<<1, 0);     /* Send fastdata. */
+    xfer_fastdata (a, 0xa0000900);              /* Send fastdata. */
+    xfer_fastdata (a, nwords);                  /* Send fastdata. */
 
     /* Download the PE itself (step 7-B). */
     if (debug_level > 0)
         fprintf (stderr, "%s: download PE\n", a->name);
     for (i=0; i<nwords; i++, pe++) {
-        mpsse_send (a, 0, 0, 33, *pe<<1, 0);    /* Send fastdata. */
+        xfer_fastdata (a, *pe);                 /* Send fastdata. */
     }
-    mdelay (100);
 
     /* Download the PE instructions. */
-    mpsse_send (a, 0, 0, 33, 0, 0);             /* Step 8 - jump to PE. */
-    mpsse_send (a, 0, 0, 33, 0xDEAD0000<<1, 0);
-    mdelay (100);
+    xfer_fastdata (a, 0);                       /* Step 8 - jump to PE. */
+    xfer_fastdata (a, 0xDEAD0000);
+    xfer_fastdata (a, 0x00070000);              /* Send fastdata. */
 
-    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    mpsse_send (a, 0, 0, 33, 0x00070000<<1, 0); /* EXEC_VERSION, length=0 */
-
-    unsigned version = get_status (a);
-    if (version != (0x0007 | pe_version)) {
+    unsigned version = get_pe_response (a);
+    if (version != (0x00070000 | pe_version)) {
         fprintf (stderr, "%s: bad PE version = %08x, expected %08x\n",
-            a->name, version, 0x0007 | pe_version);
+            a->name, version, 0x00070000 | pe_version);
         exit (-1);
     }
     if (debug_level > 0)
@@ -654,10 +668,10 @@ static void mpsse_program_word (adapter_t *adapter,
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: program word at %08x: %08x\n", addr, word);
+        fprintf (stderr, "%s: program word at %08x: %08x\n", a->name, addr, word);
     if (! a->use_executable) {
         /* Without PE. */
-        fprintf (stderr, "JTAG: slow flash write not implemented yet.\n");
+        fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
     }
     /* Use PE to write flash memory. */
@@ -673,10 +687,10 @@ static void mpsse_program_row32 (adapter_t *adapter, unsigned addr,
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: row program 128 bytes at %08x\n", addr);
+        fprintf (stderr, "%s: row program 128 bytes at %08x\n", a->name, addr);
     if (! a->use_executable) {
         /* Without PE. */
-        fprintf (stderr, "JTAG: slow flash write not implemented yet.\n");
+        fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
     }
     /* Use PE to write flash memory. */
@@ -689,10 +703,10 @@ static void mpsse_program_row128 (adapter_t *adapter, unsigned addr,
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
     if (debug_level > 0)
-        fprintf (stderr, "JTAG: row program 512 bytes at %08x\n", addr);
+        fprintf (stderr, "%s: row program 512 bytes at %08x\n", a->name, addr);
     if (! a->use_executable) {
         /* Without PE. */
-        fprintf (stderr, "JTAG: slow flash write not implemented yet.\n");
+        fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
     }
     /* Use PE to write flash memory. */
