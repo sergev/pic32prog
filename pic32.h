@@ -86,6 +86,22 @@ extern const unsigned pic32_pemx3[];
 #define CONTROL_DM              (1 << 3)    /* Debug mode */
 
 /*
+ * PE command set.
+ */
+#define PE_ROW_PROGRAM          0x0     /* Program one row of flash memory */
+#define PE_READ                 0x1     /* Read N 32-bit words */
+#define PE_PROGRAM              0x2     /* Program flash memory */
+#define PE_WORD_PROGRAM         0x3     /* Program one word of flash memory */
+#define PE_CHIP_ERASE           0x4     /* Erase the entire chip */
+#define PE_PAGE_ERASE           0x5     /* Erase pages by address */
+#define PE_BLANK_CHECK          0x6     /* Check blank memory */
+#define PE_EXEC_VERSION         0x7     /* Read the PE software version */
+#define PE_GET_CRC              0x8     /* Get the checksum of memory */
+#define PE_PROGRAM_CLUSTER      0x9     /* Program N bytes */
+#define PE_GET_DEVICEID         0xA     /* Return the hardware ID of device */
+#define PE_CHANGE_CFG           0xB     /* Change PE settings */
+
+/*
  * Config0 register, inverted.
  */
 #define DEVCFG0_DEBUG_MASK      0x00000003 /* Debugger enable bits */

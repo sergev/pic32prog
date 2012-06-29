@@ -403,13 +403,15 @@ static void serial_execution (mpsse_adapter_t *a)
     /* Check status. */
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    mpsse_send (a, 0, 0, 8, MCHP_DEASSERT_RST, 0);  /* Xfer data. */
+    mpsse_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0);  /* Xfer data. */
+    mpsse_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
     unsigned status = mpsse_recv (a);
     if (debug_level > 0)
         fprintf (stderr, "%s: status %04x\n", a->name, status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
-                   MCHP_STATUS_DEVRST)) {
-        fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
+                   MCHP_STATUS_FAEN | MCHP_STATUS_DEVRST)) {
+        fprintf (stderr, "%s: invalid status = %04x (reset)\n", a->name, status);
         exit (-1);
     }
 
@@ -420,13 +422,13 @@ static void serial_execution (mpsse_adapter_t *a)
     /* Check status. */
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    mpsse_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
     status = mpsse_recv (a);
     if (debug_level > 0)
         fprintf (stderr, "%s: status %04x\n", a->name, status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
                    MCHP_STATUS_FAEN)) {
-        fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
+        fprintf (stderr, "%s: invalid status = %04x (no reset)\n", a->name, status);
         exit (-1);
     }
 
@@ -537,6 +539,7 @@ static void mpsse_read_data (adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+    unsigned words_read, i;
 
     //fprintf (stderr, "%s: read %d bytes from %08x\n", a->name, nwords*4, addr);
     if (! a->use_executable) {
@@ -548,7 +551,24 @@ static void mpsse_read_data (adapter_t *adapter,
         return;
     }
 
-    // TODO
+    /* Use PE to read memory. */
+    for (words_read = 0; words_read < nwords; words_read += 32) {
+
+        mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);
+        xfer_fastdata (a, PE_READ << 16 | 32);      /* Read 32 words */
+        xfer_fastdata (a, addr);                    /* Address */
+
+        unsigned response = get_pe_response (a);    /* Get response */
+        if (response != PE_READ << 16) {
+            fprintf (stderr, "%s: bad READ response = %08x, expected %08x\n",
+                a->name, response, PE_READ << 16);
+            exit (-1);
+        }
+        for (i=0; i<32; i++) {
+            *data++ = get_pe_response (a);          /* Get data */
+        }
+        addr += 32*4;
+    }
 }
 
 /*
@@ -612,25 +632,29 @@ static void mpsse_load_executable (adapter_t *adapter,
      * PE_ADDRESS = 0xA000_0900,
      * PE_SIZE */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, 0xa0000900);              /* Send fastdata. */
-    xfer_fastdata (a, nwords);                  /* Send fastdata. */
+    xfer_fastdata (a, 0xa0000900);
+    xfer_fastdata (a, nwords);
 
     /* Download the PE itself (step 7-B). */
     if (debug_level > 0)
         fprintf (stderr, "%s: download PE\n", a->name);
     for (i=0; i<nwords; i++, pe++) {
-        xfer_fastdata (a, *pe);                 /* Send fastdata. */
+        xfer_fastdata (a, *pe);
     }
+    //mpsse_flush_output (a);
+    //mdelay (100);
 
     /* Download the PE instructions. */
     xfer_fastdata (a, 0);                       /* Step 8 - jump to PE. */
     xfer_fastdata (a, 0xDEAD0000);
-    xfer_fastdata (a, 0x00070000);              /* Send fastdata. */
+    //mpsse_flush_output (a);
+    //mdelay (100);
+    xfer_fastdata (a, PE_EXEC_VERSION << 16);
 
     unsigned version = get_pe_response (a);
-    if (version != (0x00070000 | pe_version)) {
+    if (version != (PE_EXEC_VERSION << 16 | pe_version)) {
         fprintf (stderr, "%s: bad PE version = %08x, expected %08x\n",
-            a->name, version, 0x00070000 | pe_version);
+            a->name, version, PE_EXEC_VERSION << 16 | pe_version);
         exit (-1);
     }
     if (debug_level > 0)
@@ -643,20 +667,26 @@ static void mpsse_load_executable (adapter_t *adapter,
  */
 static void mpsse_erase_chip (adapter_t *adapter)
 {
-    // TODO
-#if 0
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
+    mpsse_send (a, 0, 0, 8, MCHP_ERASE, 0);     /* Xfer data. */
+    mpsse_flush_output (a);
+    mdelay (400);
 
-    mpsse_send (a, 0, 0, 32, MCHP_ERASE, 0);    /* Xfer data. */
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
-    status = mpsse_recv (a);
-fprintf (stderr, "Status = %08x\n", status);
-    mdelay (1000);
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
-    status = mpsse_recv (a);
-fprintf (stderr, "Status = %08x\n", status);
-#endif
+    /* Check status. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
+    mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
+    mpsse_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
+    unsigned status = mpsse_recv (a);
+    if (debug_level > 0)
+        fprintf (stderr, "%s: status %04x\n", a->name, status);
+    if ((status & ~MCHP_STATUS_FAEN) != (MCHP_STATUS_CPS |
+                   MCHP_STATUS_CFGRDY | MCHP_STATUS_DEVRST)) {
+        fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
+        exit (-1);
+    }
 }
 
 /*
@@ -821,12 +851,13 @@ failed: usb_release_interface (a->usbdev, 0);
     /* Check status. */
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 32, MCHP_STATUS, 1);   /* Xfer data. */
+    mpsse_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0);  /* Xfer data. */
+    mpsse_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
     unsigned status = mpsse_recv (a);
     if (debug_level > 0)
         fprintf (stderr, "%s: status %04x\n", a->name, status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
-                   MCHP_STATUS_DEVRST)) {
+                   MCHP_STATUS_FAEN | MCHP_STATUS_DEVRST)) {
         fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
         free (a);
         return 0;
