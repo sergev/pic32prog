@@ -659,17 +659,17 @@ static void mpsse_load_executable (adapter_t *adapter,
     /* Download the PE itself (step 7-B). */
     if (debug_level > 0)
         fprintf (stderr, "%s: download PE\n", a->name);
-    for (i=0; i<nwords; i++, pe++) {
-        xfer_fastdata (a, *pe);
+    for (i=0; i<nwords; i++) {
+        xfer_fastdata (a, *pe++);
     }
-    //mpsse_flush_output (a);
-    //mdelay (100);
+    mpsse_flush_output (a);
+    mdelay (10);
 
     /* Download the PE instructions. */
     xfer_fastdata (a, 0);                       /* Step 8 - jump to PE. */
     xfer_fastdata (a, 0xDEAD0000);
-    //mpsse_flush_output (a);
-    //mdelay (100);
+    mpsse_flush_output (a);
+    mdelay (10);
     xfer_fastdata (a, PE_EXEC_VERSION << 16);
 
     unsigned version = get_pe_response (a);
@@ -696,10 +696,6 @@ static void mpsse_erase_chip (adapter_t *adapter)
     mpsse_flush_output (a);
     mdelay (400);
 
-    mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
-    mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0);  /* Xfer data. */
-
     /* Leave it in ETAP mode. */
     mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
 }
@@ -723,7 +719,9 @@ static void mpsse_program_word (adapter_t *adapter,
     /* Use PE to write flash memory. */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
     xfer_fastdata (a, PE_WORD_PROGRAM << 16 | 2);
+    mpsse_flush_output (a);
     xfer_fastdata (a, addr);                    /* Send address. */
+    mpsse_flush_output (a);
     xfer_fastdata (a, word);                    /* Send word. */
 
     unsigned response = get_pe_response (a);
@@ -754,12 +752,16 @@ static void mpsse_program_row32 (adapter_t *adapter, unsigned addr,
     /* Use PE to write flash memory. */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
     xfer_fastdata (a, PE_ROW_PROGRAM << 16 | 32);
+    mpsse_flush_output (a);
     xfer_fastdata (a, addr);                    /* Send address. */
 
     /* Download 128 bytes of data. */
     for (i = 0; i < 32; i++) {
+        if ((i & 7) == 0)
+            mpsse_flush_output (a);
         xfer_fastdata (a, *data++);             /* Send word. */
     }
+    mpsse_flush_output (a);
 
     unsigned response = get_pe_response (a);
     if (response != (PE_ROW_PROGRAM << 16)) {
@@ -786,12 +788,16 @@ static void mpsse_program_row128 (adapter_t *adapter, unsigned addr,
     /* Use PE to write flash memory. */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
     xfer_fastdata (a, PE_ROW_PROGRAM << 16 | 128);
+    mpsse_flush_output (a);
     xfer_fastdata (a, addr);                    /* Send address. */
 
     /* Download 512 bytes of data. */
     for (i = 0; i < 128; i++) {
+        if ((i & 7) == 0)
+            mpsse_flush_output (a);
         xfer_fastdata (a, *data++);             /* Send word. */
     }
+    mpsse_flush_output (a);
 
     unsigned response = get_pe_response (a);
     if (response != (PE_ROW_PROGRAM << 16)) {
@@ -820,7 +826,9 @@ static void mpsse_verify_data (adapter_t *adapter,
     /* Use PE to get CRC of flash memory. */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
     xfer_fastdata (a, PE_GET_CRC << 16);
+    mpsse_flush_output (a);
     xfer_fastdata (a, addr);                    /* Send address. */
+    mpsse_flush_output (a);
     xfer_fastdata (a, nwords * 4);              /* Send length. */
 
     unsigned response = get_pe_response (a);
@@ -906,7 +914,9 @@ failed: usb_release_interface (a->usbdev, 0);
         goto failed;
     }
 
-    unsigned divisor = 3;
+    /* Optimal rate is 0.8 MHz.
+     * Divide base oscillator 12 MHz by 15. */
+    unsigned divisor = 15;
     unsigned char latency_timer = 1;
 
     if (usb_control_msg (a->usbdev,

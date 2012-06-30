@@ -57,6 +57,7 @@ extern const unsigned pic32_pemx3[];
  * MCHP status value.
  */
 #define MCHP_STATUS_CPS    0x80 // Device is NOT code-protected
+#define MCHP_STATUS_NVMERR 0x20 // Error occured during NVM operation
 #define MCHP_STATUS_CFGRDY 0x08 // Configuration has been read and
                                 // Code-Protect State bit is valid
 #define MCHP_STATUS_FCBUSY 0x04 // Flash Controller is Busy (erase is in progress)
