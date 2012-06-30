@@ -380,9 +380,9 @@ static void pickit_finish (pickit_adapter_t *a, int power_on)
         SCRIPT_VPP_OFF,
         SCRIPT_MCLR_GND_ON,
         SCRIPT_VPP_PWM_OFF,
-        SCRIPT_SET_ICSP_PINS, 6,
-        SCRIPT_SET_ICSP_PINS, 2,
-        SCRIPT_SET_ICSP_PINS, 3,
+        SCRIPT_SET_ICSP_PINS, 6,                // set PGC high, PGD input
+        SCRIPT_SET_ICSP_PINS, 2,                // set PGC low, PGD input
+        SCRIPT_SET_ICSP_PINS, 3,                // set PGC and PGD as input
         SCRIPT_DELAY_LONG, 10,                  // 50 msec
         SCRIPT_BUSY_LED_OFF);
 
@@ -878,7 +878,7 @@ adapter_t *adapter_open_pickit (void)
         SCRIPT_MCLR_GND_ON,
         SCRIPT_VPP_PWM_ON,
         SCRIPT_BUSY_LED_ON,
-        SCRIPT_SET_ICSP_PINS, 0,
+        SCRIPT_SET_ICSP_PINS, 0,                // set PGC and PGD output low
         SCRIPT_DELAY_LONG, 20,                  // 100 msec
         SCRIPT_MCLR_GND_OFF,
         SCRIPT_VPP_ON,
@@ -886,14 +886,14 @@ adapter_t *adapter_open_pickit (void)
         SCRIPT_VPP_OFF,
         SCRIPT_MCLR_GND_ON,
         SCRIPT_DELAY_SHORT, 47,                 // 2 msec
-        SCRIPT_WRITE_BYTE_LITERAL, 0xb2,
+        SCRIPT_WRITE_BYTE_LITERAL, 0xb2,        // magic word
         SCRIPT_WRITE_BYTE_LITERAL, 0xc2,
         SCRIPT_WRITE_BYTE_LITERAL, 0x12,
         SCRIPT_WRITE_BYTE_LITERAL, 0x0a,
         SCRIPT_MCLR_GND_OFF,
         SCRIPT_VPP_ON,
         SCRIPT_DELAY_LONG, 2,                   // 10 msec
-        SCRIPT_SET_ICSP_PINS, 2,
+        SCRIPT_SET_ICSP_PINS, 2,                // set PGC low, PGD input
         SCRIPT_JT2_SETMODE, 6, 0x1f,
         SCRIPT_JT2_SENDCMD, TAP_SW_MTAP,
         SCRIPT_JT2_SENDCMD, MTAP_COMMAND,

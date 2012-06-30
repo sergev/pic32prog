@@ -84,6 +84,27 @@ typedef struct {
 #define WTMS                    0x40
 
 /*
+ * Calculate checksum.
+ */
+static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbytes)
+{
+    static const unsigned short crc_table [16] = {
+        0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
+        0x8108, 0x9129, 0xa14a, 0xb16b, 0xc18c, 0xd1ad, 0xe1ce, 0xf1ef,
+    };
+    unsigned i;
+
+    while (nbytes--) {
+        i = (crc >> 12) ^ (*data >> 4);
+        crc = crc_table[i & 0x0F] ^ (crc << 4);
+        i = (crc >> 12) ^ (*data >> 0);
+        crc = crc_table[i & 0x0F] ^ (crc << 4);
+        data++;
+    }
+    return crc & 0xffff;
+}
+
+/*
  * Send a packet to USB device.
  */
 static void bulk_write (mpsse_adapter_t *a, unsigned char *output, int nbytes)
@@ -675,18 +696,12 @@ static void mpsse_erase_chip (adapter_t *adapter)
     mpsse_flush_output (a);
     mdelay (400);
 
-    /* Check status. */
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     mpsse_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    mpsse_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
-    unsigned status = mpsse_recv (a);
-    if (debug_level > 0)
-        fprintf (stderr, "%s: status %04x\n", a->name, status);
-    if ((status & ~MCHP_STATUS_FAEN) != (MCHP_STATUS_CPS |
-                   MCHP_STATUS_CFGRDY | MCHP_STATUS_DEVRST)) {
-        fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
-        exit (-1);
-    }
+    mpsse_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0);  /* Xfer data. */
+
+    /* Leave it in ETAP mode. */
+    mpsse_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
 }
 
 /*
@@ -704,8 +719,19 @@ static void mpsse_program_word (adapter_t *adapter,
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
     }
+
     /* Use PE to write flash memory. */
-    // TODO
+    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    xfer_fastdata (a, PE_WORD_PROGRAM << 16 | 2);
+    xfer_fastdata (a, addr);                    /* Send address. */
+    xfer_fastdata (a, word);                    /* Send word. */
+
+    unsigned response = get_pe_response (a);
+    if (response != (PE_WORD_PROGRAM << 16)) {
+        fprintf (stderr, "%s: failed to program word %08x at %08x, reply = %08x\n",
+            a->name, word, addr, response);
+        exit (-1);
+    }
 }
 
 /*
@@ -715,6 +741,7 @@ static void mpsse_program_row32 (adapter_t *adapter, unsigned addr,
     unsigned *data)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+    int i;
 
     if (debug_level > 0)
         fprintf (stderr, "%s: row program 128 bytes at %08x\n", a->name, addr);
@@ -723,14 +750,30 @@ static void mpsse_program_row32 (adapter_t *adapter, unsigned addr,
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
     }
+
     /* Use PE to write flash memory. */
-    // TODO
+    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | 32);
+    xfer_fastdata (a, addr);                    /* Send address. */
+
+    /* Download 128 bytes of data. */
+    for (i = 0; i < 32; i++) {
+        xfer_fastdata (a, *data++);             /* Send word. */
+    }
+
+    unsigned response = get_pe_response (a);
+    if (response != (PE_ROW_PROGRAM << 16)) {
+        fprintf (stderr, "%s: failed to program row at %08x, reply = %08x\n",
+            a->name, addr, response);
+        exit (-1);
+    }
 }
 
 static void mpsse_program_row128 (adapter_t *adapter, unsigned addr,
     unsigned *data)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+    int i;
 
     if (debug_level > 0)
         fprintf (stderr, "%s: row program 512 bytes at %08x\n", a->name, addr);
@@ -739,8 +782,61 @@ static void mpsse_program_row128 (adapter_t *adapter, unsigned addr,
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
     }
+
     /* Use PE to write flash memory. */
-    // TODO
+    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | 128);
+    xfer_fastdata (a, addr);                    /* Send address. */
+
+    /* Download 512 bytes of data. */
+    for (i = 0; i < 128; i++) {
+        xfer_fastdata (a, *data++);             /* Send word. */
+    }
+
+    unsigned response = get_pe_response (a);
+    if (response != (PE_ROW_PROGRAM << 16)) {
+        fprintf (stderr, "%s: failed to program row at %08x, reply = %08x\n",
+            a->name, addr, response);
+        exit (-1);
+    }
+}
+
+/*
+ * Verify a block of memory.
+ */
+static void mpsse_verify_data (adapter_t *adapter,
+    unsigned addr, unsigned nwords, unsigned *data)
+{
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+    unsigned data_crc, flash_crc;
+
+    //fprintf (stderr, "%s: verify %d words at %08x\n", a->name, nwords, addr);
+    if (! a->use_executable) {
+        /* Without PE. */
+        fprintf (stderr, "%s: slow verify not implemented yet.\n", a->name);
+        exit (-1);
+    }
+
+    /* Use PE to get CRC of flash memory. */
+    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    xfer_fastdata (a, PE_GET_CRC << 16);
+    xfer_fastdata (a, addr);                    /* Send address. */
+    xfer_fastdata (a, nwords * 4);              /* Send length. */
+
+    unsigned response = get_pe_response (a);
+    if (response != (PE_GET_CRC << 16)) {
+        fprintf (stderr, "%s: failed to verify %d words at %08x, reply = %08x\n",
+            a->name, nwords, addr, response);
+        exit (-1);
+    }
+    flash_crc = get_pe_response (a) & 0xffff;
+
+    data_crc = calculate_crc (0xffff, (unsigned char*) data, nwords * 4);
+    if (flash_crc != data_crc) {
+        fprintf (stderr, "%s: checksum failed at %08x: sum=%04x, expected=%04x\n",
+            a->name, addr, flash_crc, data_crc);
+        //exit (-1);
+    }
 }
 
 /*
@@ -870,6 +966,7 @@ failed: usb_release_interface (a->usbdev, 0);
     a->adapter.load_executable = mpsse_load_executable;
     a->adapter.read_word = mpsse_read_word;
     a->adapter.read_data = mpsse_read_data;
+    a->adapter.verify_data = mpsse_verify_data;
     a->adapter.erase_chip = mpsse_erase_chip;
     a->adapter.program_word = mpsse_program_word;
     a->adapter.program_row32 = mpsse_program_row32;
