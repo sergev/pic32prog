@@ -9,7 +9,7 @@ microcontrollers.  Supported adapters:
 When called without parameters, pic32prog utility detects a type of microcontroller
 and device configuration.  For example:
 
-    % milprog
+    % pic32prog
     Programmer for Mictochip PIC32 microcontrollers, Version 1.0
         Copyright: (C) 2011 Serge Vakulenko
           Adapter: PICkit2 Version 2.32.0
@@ -44,12 +44,12 @@ and device configuration.  For example:
 
 Writing to flash memory:
 
-    milprog [-v] file.srec
-    milprog [-v] file.hex
+    pic32prog [-v] file.srec
+    pic32prog [-v] file.hex
 
 Reading memory to file:
 
-    milprog -r file.bin address length
+    pic32prog -r file.bin address length
 
 Parameters:
 

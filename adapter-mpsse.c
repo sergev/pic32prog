@@ -914,9 +914,9 @@ failed: usb_release_interface (a->usbdev, 0);
         goto failed;
     }
 
-    /* Optimal rate is 0.8 MHz.
-     * Divide base oscillator 12 MHz by 15. */
-    unsigned divisor = 15;
+    /* Optimal rate is 0.5 MHz.
+     * Divide base oscillator 6 MHz by 12. */
+    unsigned divisor = 12 - 1;
     unsigned char latency_timer = 1;
 
     if (usb_control_msg (a->usbdev,
