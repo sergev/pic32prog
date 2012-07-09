@@ -106,7 +106,7 @@ static const struct {
     {0x4401053, "MX564F064H",  64, 12, 0},
     {0x4400053, "MX534F064H",  64, 12, 0},
     {0x440C053, "MX534F064L",  64, 12, 0},
-    {0xEAFBOOB, "Bootloader", 512, 12, 0},  /* USB bootloader */
+    {0xEAFB00B, "Bootloader", 512, 12, 0},  /* USB bootloader */
     {0}
 };
 
