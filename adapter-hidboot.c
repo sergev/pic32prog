@@ -116,8 +116,7 @@ static void hidboot_close (adapter_t *adapter, int power_on)
  */
 static unsigned hidboot_get_idcode (adapter_t *adapter)
 {
-    /* Assume 795F512L. */
-    return 0x04307053;
+    return 0xDEAFB00B;
 }
 
 /*
