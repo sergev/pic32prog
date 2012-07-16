@@ -847,6 +847,11 @@ adapter_t *adapter_open_pickit (void)
         /* Explorer 16 board: no need to enable power. */
         break;
 
+    case STATUS_VDD_GND_ON | STATUS_VDD_ON | STATUS_VPP_GND_ON:
+    case STATUS_VDD_GND_ON | STATUS_VDD_ON | STATUS_VPP_GND_ON | STATUS_VPP_ON:
+        /* Microstick II board: no need to enable power. */
+        break;
+
     case STATUS_VDD_GND_ON | STATUS_VPP_GND_ON:
         /* Enable power to the board. */
         pickit_send (a, 4, CMD_EXECUTE_SCRIPT, 2,

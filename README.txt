@@ -10,7 +10,7 @@ When called without parameters, pic32prog utility detects a type of microcontrol
 and device configuration.  For example:
 
     % pic32prog
-    Programmer for Mictochip PIC32 microcontrollers, Version 1.0
+    Programmer for Microchip PIC32 microcontrollers, Version 1.0
         Copyright: (C) 2011 Serge Vakulenko
           Adapter: PICkit2 Version 2.32.0
         Processor: 795F512L (id 04307053)
