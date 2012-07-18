@@ -866,9 +866,10 @@ adapter_t *adapter_open_mpsse (void)
         for (dev = bus->devices; dev; dev = dev->next) {
             if (dev->descriptor.idVendor == OLIMEX_VID &&
                 (dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY ||
-                 dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H))
+                 dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H)) {
                 name = "Olimex ARM-USB-Tiny";
                 goto found;
+            }
         }
     }
     /*fprintf (stderr, "USB adapter not found: vid=%04x, pid=%04x\n",
