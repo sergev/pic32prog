@@ -865,9 +865,13 @@ adapter_t *adapter_open_mpsse (void)
     for (bus = usb_get_busses(); bus; bus = bus->next) {
         for (dev = bus->devices; dev; dev = dev->next) {
             if (dev->descriptor.idVendor == OLIMEX_VID &&
-                (dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY ||
-                 dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H)) {
+                dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY) {
                 name = "Olimex ARM-USB-Tiny";
+                goto found;
+            }
+            if (dev->descriptor.idVendor == OLIMEX_VID &&
+                dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H) {
+                name = "Olimex ARM-USB-Tiny-H";
                 goto found;
             }
         }
@@ -919,6 +923,8 @@ failed: usb_release_interface (a->usbdev, 0);
      * Divide base oscillator 6 MHz by 12. */
     unsigned divisor = 12 - 1;
     unsigned char latency_timer = 1;
+    if (dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H)
+        latency_timer = 0;
 
     if (usb_control_msg (a->usbdev,
         USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
@@ -939,7 +945,7 @@ failed: usb_release_interface (a->usbdev, 0);
     mpsse_reset (a, 0, 0, 1);
 
     if (debug_level) {
-     int baud = 6000000 / (divisor + 1);
+        int baud = 6000000 / (divisor + 1);
         fprintf (stderr, "%s: speed %d samples/sec\n", a->name, baud);
     }
     mpsse_speed (a, divisor);
