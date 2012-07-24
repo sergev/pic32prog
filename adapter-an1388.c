@@ -388,6 +388,11 @@ adapter_t *adapter_open_an1388 (void)
     printf ("      Adapter: AN1388 Bootloader Version %d.%d\n",
         a->reply[1], a->reply[2]);
 
+    a->adapter.user_start = 0x1d000000;
+    a->adapter.user_nbytes = 512 * 1024;
+    printf (" Program area: %08x-%08x\n", a->adapter.user_start,
+        a->adapter.user_start + a->adapter.user_nbytes - 1);
+
     /* User functions. */
     a->adapter.close = an1388_close;
     a->adapter.get_idcode = an1388_get_idcode;

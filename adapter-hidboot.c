@@ -38,9 +38,6 @@ typedef struct {
     unsigned char reply [64];
     int reply_len;
 
-    unsigned prog_start;
-    unsigned prog_size;
-
 } hidboot_adapter_t;
 
 /*
@@ -148,7 +145,7 @@ static void hidboot_read_data (adapter_t *adapter,
     hidboot_adapter_t *a = (hidboot_adapter_t*) adapter;
     unsigned char request [64];
     unsigned nbytes;
-
+// 07 00 30 00 9d 38
     for (; ; nwords-=14) {
         /* 14 words = 56 bytes per packet. */
         nbytes = nwords>14 ? 14*4 : nwords*4;
@@ -178,8 +175,8 @@ static void program_flash (hidboot_adapter_t *a,
     //    nbytes, addr, data[0], data[1], data[nwords-1]);
 
     nbytes = nwords * 4;
-    if (addr < a->prog_start ||
-        addr + nbytes >= a->prog_start + a->prog_size)
+    if (addr < a->adapter.user_start ||
+        addr + nbytes >= a->adapter.user_start + a->adapter.user_nbytes)
     {
         fprintf (stderr, "address %08x out of program area\n", addr);
         return;
@@ -266,11 +263,11 @@ adapter_t *adapter_open_hidboot (void)
         a->reply[3] != 1)                   /* program memory type */
             return 0;
 
-    a->prog_start = *(unsigned*) &a->reply[4];
-    a->prog_size = *(unsigned*) &a->reply[8];
+    a->adapter.user_start = *(unsigned*) &a->reply[4] & 0x1fffffff;
+    a->adapter.user_nbytes = *(unsigned*) &a->reply[8] & 0x0fffffff;
     printf ("      Adapter: HID Bootloader\n");
-    printf (" Program area: %08x-%08x\n", a->prog_start,
-        a->prog_start + a->prog_size - 1);
+    printf (" Program area: %08x-%08x\n", a->adapter.user_start,
+        a->adapter.user_start + a->adapter.user_nbytes - 1);
 
     /* User functions. */
     a->adapter.close = hidboot_close;

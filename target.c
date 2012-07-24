@@ -106,7 +106,7 @@ static const struct {
     {0x4401053, "MX564F064H",  64, 12, 0},
     {0x4400053, "MX534F064H",  64, 12, 0},
     {0x440C053, "MX534F064L",  64, 12, 0},
-    {0xEAFB00B, "Bootloader", 512, 12, 0},  /* USB bootloader */
+    {0xEAFB00B, "Bootloader",   0, 0,  0},  /* USB bootloader */
     {0}
 };
 
@@ -185,6 +185,10 @@ target_t *target_open ()
     t->flash_bytes = pic32mx_dev[i].flash_kbytes * 1024;
     t->boot_bytes = pic32mx_dev[i].boot_kbytes * 1024;
     t->pe = pic32mx_dev[i].pe;
+    if (! t->flash_bytes) {
+        t->flash_addr = t->adapter->user_start;
+        t->flash_bytes = t->adapter->user_nbytes;
+    }
     return t;
 }
 
@@ -232,10 +236,10 @@ void target_print_devcfg (target_t *t)
     unsigned devcfg2 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 12);
     unsigned devcfg1 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 8);
     unsigned devcfg0 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 4);
-    if (devcfg3 == 0xffffffff &&
-        devcfg2 == 0xffffffff &&
-        devcfg1 == 0xffffffff &&
-        devcfg0 == 0x7fffffff)
+    if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
+        devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
+        return;
+    if (devcfg3 == 0 && devcfg2 == 0 && devcfg1 == 0 && devcfg0 == 0)
         return;
 
     printf (_("Configuration:\n"));

@@ -12,6 +12,9 @@
 typedef struct _adapter_t adapter_t;
 
 struct _adapter_t {
+    unsigned user_start;                /* Start address of user area */
+    unsigned user_nbytes;               /* Size of user flah area */
+
     void (*close) (adapter_t *a, int power_on);
     unsigned (*get_idcode) (adapter_t *a);
     void (*load_executable) (adapter_t *a,
