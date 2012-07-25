@@ -82,7 +82,11 @@ static void hidboot_command (hidboot_adapter_t *a, unsigned char cmd,
     }
 
     memset (a->reply, 0, sizeof(a->reply));
-    a->reply_len = hid_read (a->hiddev, a->reply, 64);
+    a->reply_len = hid_read_timeout (a->hiddev, a->reply, 64, 1000);
+    if (a->reply_len == 0) {
+        fprintf (stderr, "Timed out.\n");
+        exit (-1);
+    }
     if (a->reply_len != 64) {
         fprintf (stderr, "hidboot: error %d receiving packet\n", a->reply_len);
         exit (-1);
@@ -145,7 +149,7 @@ static void hidboot_read_data (adapter_t *adapter,
     hidboot_adapter_t *a = (hidboot_adapter_t*) adapter;
     unsigned char request [64];
     unsigned nbytes;
-// 07 00 30 00 9d 38
+
     for (; ; nwords-=14) {
         /* 14 words = 56 bytes per packet. */
         nbytes = nwords>14 ? 14*4 : nwords*4;
