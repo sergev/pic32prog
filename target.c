@@ -171,6 +171,13 @@ target_t *target_open ()
 
     /* Check CPU identifier. */
     t->cpuid = t->adapter->get_idcode (t->adapter);
+    if (t->cpuid == 0) {
+        /* Device not responding. */
+        fprintf (stderr, _("Unknown CPUID=%08x.\n"), t->cpuid);
+        t->adapter->close (t->adapter, 0);
+        exit (1);
+    }
+
     unsigned i;
     for (i=0; (t->cpuid ^ pic32mx_dev[i].devid) & 0x0fffffff; i++) {
         if (pic32mx_dev[i].devid == 0) {

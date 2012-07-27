@@ -1,6 +1,9 @@
 /*
  * Interface to PIC32 JTAG port using FT2232-based USB adapter.
- * For example: Olimex ARM-USB-Tiny adapter.
+ * Supported hardware:
+ * 1) Olimex ARM-USB-Tiny adapter
+ * 2) Olimex ARM-USB-Tiny-H adapter
+ * 3) Bus Blaster v2 from Dangerous Prototypes
  *
  * Copyright (C) 2011 Serge Vakulenko
  *
@@ -40,6 +43,11 @@ typedef struct {
     unsigned long long high_bit_mask;
     unsigned high_byte_bits;
 
+    /* Mapping of /TRST, /SYSRST and LED control signals. */
+    unsigned trst_control, trst_inverted;
+    unsigned sysrst_control, sysrst_inverted;
+    unsigned led_control, led_inverted;
+
     unsigned use_executable;
     unsigned serial_execution_mode;
 } mpsse_adapter_t;
@@ -50,6 +58,9 @@ typedef struct {
 #define OLIMEX_VID              0x15ba
 #define OLIMEX_ARM_USB_TINY     0x0004  /* ARM-USB-Tiny */
 #define OLIMEX_ARM_USB_TINY_H   0x002a	/* ARM-USB-Tiny-H */
+
+#define DP_BUSBLASTER_VID       0x0403
+#define DP_BUSBLASTER_PID       0x6010  /* Bus Blaster v2 */
 
 /*
  * USB endpoints.
@@ -121,7 +132,7 @@ static void bulk_write (mpsse_adapter_t *a, unsigned char *output, int nbytes)
     bytes_written = usb_bulk_write (a->usbdev, IN_EP, (char*) output,
         nbytes, 1000);
     if (bytes_written < 0) {
-        fprintf (stderr, "usb bulk write failed\n");
+        fprintf (stderr, "usb bulk write failed: %d\n", bytes_written);
         exit (-1);
     }
     if (bytes_written != nbytes)
@@ -340,14 +351,20 @@ static void mpsse_reset (mpsse_adapter_t *a, int trst, int sysrst, int led)
     output [2] = low_direction;
     bulk_write (a, output, 3);
 
-    if (! trst)
-        high_output |= 1;
+    if (trst)
+        high_output |= a->trst_control;
+    if (a->trst_inverted)
+        high_output ^= a->trst_control;
 
     if (sysrst)
-        high_output |= 2;
+        high_output |= a->sysrst_control;
+    if (a->sysrst_inverted)
+        high_output ^= a->sysrst_control;
 
     if (led)
-        high_output |= 8;
+        high_output |= a->led_control;
+    if (a->led_inverted)
+        high_output ^= a->led_control;
 
     /* command "set data bits high byte" */
     output [0] = 0x82;
@@ -857,8 +874,13 @@ adapter_t *adapter_open_mpsse (void)
     mpsse_adapter_t *a;
     struct usb_bus *bus;
     struct usb_device *dev;
-    char *name;
+    char driver_name [100];
 
+    a = calloc (1, sizeof (*a));
+    if (! a) {
+        fprintf (stderr, "adapter_open_mpsse: out of memory\n");
+        return 0;
+    }
     usb_init();
     usb_find_busses();
     usb_find_devices();
@@ -866,34 +888,55 @@ adapter_t *adapter_open_mpsse (void)
         for (dev = bus->devices; dev; dev = dev->next) {
             if (dev->descriptor.idVendor == OLIMEX_VID &&
                 dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY) {
-                name = "Olimex ARM-USB-Tiny";
+                a->name = "Olimex ARM-USB-Tiny";
+                a->trst_control = 1;
+                a->trst_inverted = 1;
+                a->sysrst_control = 2;
+                a->led_control = 8;
                 goto found;
             }
             if (dev->descriptor.idVendor == OLIMEX_VID &&
                 dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H) {
-                name = "Olimex ARM-USB-Tiny-H";
+                a->name = "Olimex ARM-USB-Tiny-H";
+                a->trst_control = 1;
+                a->trst_inverted = 1;
+                a->sysrst_control = 2;
+                a->led_control = 8;
+                goto found;
+            }
+            if (dev->descriptor.idVendor == DP_BUSBLASTER_VID &&
+                dev->descriptor.idProduct == DP_BUSBLASTER_PID) {
+                a->name = "Dangerous Prototypes Bus Blaster";
+                a->trst_control = 1;
+                a->trst_inverted = 1;
+                a->sysrst_control = 2;
+                a->sysrst_inverted = 1;
                 goto found;
             }
         }
     }
     /*fprintf (stderr, "USB adapter not found: vid=%04x, pid=%04x\n",
         OLIMEX_VID, OLIMEX_PID);*/
+    free (a);
     return 0;
 found:
     /*fprintf (stderr, "found USB adapter: vid %04x, pid %04x, type %03x\n",
         dev->descriptor.idVendor, dev->descriptor.idProduct,
         dev->descriptor.bcdDevice);*/
-    a = calloc (1, sizeof (*a));
-    if (! a) {
-        fprintf (stderr, "%s: out of memory\n", name);
-        return 0;
-    }
-    a->name = name;
     a->usbdev = usb_open (dev);
     if (! a->usbdev) {
         fprintf (stderr, "%s: usb_open() failed\n", a->name);
         free (a);
         return 0;
+    }
+    if (usb_get_driver_np (a->usbdev, 0, driver_name, sizeof(driver_name)) == 0) {
+	if (usb_detach_kernel_driver_np (a->usbdev, 0) < 0) {
+            printf("%s: failed to detach the %s kernel driver.\n",
+                a->name, driver_name);
+            usb_close (a->usbdev);
+            free (a);
+            return 0;
+	}
     }
     usb_claim_interface (a->usbdev, 0);
 
@@ -972,6 +1015,7 @@ failed: usb_release_interface (a->usbdev, 0);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
                    MCHP_STATUS_FAEN | MCHP_STATUS_DEVRST)) {
         fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
+        mpsse_reset (a, 0, 0, 0);
         free (a);
         return 0;
     }
