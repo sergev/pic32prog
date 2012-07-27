@@ -874,7 +874,6 @@ adapter_t *adapter_open_mpsse (void)
     mpsse_adapter_t *a;
     struct usb_bus *bus;
     struct usb_device *dev;
-    char driver_name [100];
 
     a = calloc (1, sizeof (*a));
     if (! a) {
@@ -929,6 +928,8 @@ found:
         free (a);
         return 0;
     }
+#if ! defined (__CYGWIN32__) && ! defined (MINGW32)
+    char driver_name [100];
     if (usb_get_driver_np (a->usbdev, 0, driver_name, sizeof(driver_name)) == 0) {
 	if (usb_detach_kernel_driver_np (a->usbdev, 0) < 0) {
             printf("%s: failed to detach the %s kernel driver.\n",
@@ -938,6 +939,7 @@ found:
             return 0;
 	}
     }
+#endif
     usb_claim_interface (a->usbdev, 0);
 
     /* Reset the ftdi device. */

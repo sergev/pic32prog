@@ -87,36 +87,72 @@ hid_device *hid_open (
 }
 
 HID_API_EXPORT HID_API_CALL
-int hid_write (hid_device *device, const unsigned char *data, size_t size)
+int hid_write (hid_device *device, const unsigned char *data, size_t nbytes)
 {
     HANDLE dev = (HANDLE) device;
     int ret;
     unsigned long bytes_written = 0;
     BYTE buf [256];
 
-    if (! dev || size >= 256)
+    if (! dev || nbytes >= 256)
         return -1;
     buf[0] = 0;
-    memcpy (buf + 1, data, size);
+    memcpy (buf + 1, data, nbytes);
 
-    ret = WriteFile (dev, buf, size + 1, &bytes_written, NULL);
+    ret = WriteFile (dev, buf, nbytes + 1, &bytes_written, NULL);
     return ret;
 }
 
 HID_API_EXPORT HID_API_CALL
-int hid_read (hid_device *device, unsigned char *data, size_t size)
+int hid_read (hid_device *device, unsigned char *data, size_t nbytes)
 {
     HANDLE dev = (HANDLE) device;
     int ret;
     unsigned long bytes_read = 0;
     BYTE buf [256];
 
-    if (! dev || size >= 256)
+    if (! dev || nbytes >= 256)
         return -1;
 
-    ret = ReadFile (dev, buf, size + 1, &bytes_read, NULL);
+    ret = ReadFile (dev, buf, nbytes + 1, &bytes_read, NULL);
     if (ret <= 0)
         return ret;
+
+    memcpy (data, buf + 1, bytes_read - 1);
+    return bytes_read - 1;
+}
+
+HID_API_EXPORT HID_API_CALL
+int hid_read_timeout (hid_device *device, unsigned char *data, size_t nbytes, int milliseconds)
+{
+    HANDLE dev = (HANDLE) device;
+    unsigned long bytes_read = 0;
+    BYTE buf [256];
+    OVERLAPPED ol;
+    int ret;
+
+    // Start an Overlapped I/O read.
+    ResetEvent (ol.hEvent);
+    ret = ReadFile (dev, buf, nbytes + 1, &bytes_read, &ol);
+    if (! ret && GetLastError() != ERROR_IO_PENDING) {
+        // ReadFile failed.
+        CancelIo (dev);
+        return -1;
+    }
+
+    // See if there is any data yet.
+    ret = WaitForSingleObject (ol.hEvent, milliseconds);
+    if (ret != WAIT_OBJECT_0) {
+        // Timeout expired.
+        CancelIo (dev);
+        return -1;
+    }
+
+    // Get the number of bytes read. The actual data has been copied
+    // to the data[] array which was passed to ReadFile().
+    ret = GetOverlappedResult (dev, &ol, &bytes_read, 1 /*wait*/);
+    if (! ret)
+        return -1;
 
     memcpy (data, buf + 1, bytes_read - 1);
     return bytes_read - 1;
