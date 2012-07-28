@@ -987,7 +987,6 @@ failed: usb_release_interface (a->usbdev, 0);
     	fprintf (stderr, "%s: divisor: %u\n", a->name, divisor);
     	fprintf (stderr, "%s: latency timer: %u usec\n", a->name, latency_timer);
     }
-    mpsse_reset (a, 0, 0, 1);
 
     if (debug_level) {
         int baud = 6000000 / (divisor + 1);
@@ -999,12 +998,25 @@ failed: usb_release_interface (a->usbdev, 0);
     unsigned char enable_loopback[] = "\x85";
     bulk_write (a, enable_loopback, 1);
 
-    /* Activate /SYSRST. */
+    /* Activate LED. */
+    mpsse_reset (a, 0, 0, 1);
+
+    /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
+     * After reset, the IDCODE register is always selected.
+     * Read out 32 bits of data. */
+    unsigned idcode;
+    mpsse_send (a, 6, 31, 32, 0, 1);
+    idcode = mpsse_recv (a);
+    if ((idcode & 0xfff) != 0x053) {
+        fprintf (stderr, "IDCODE=%08x - incompatible CPU detected.\n", idcode);
+        mpsse_reset (a, 0, 0, 0);
+        free (a);
+        return 0;
+    }
+
+    /* Activate /SYSRST and LED. */
     mpsse_reset (a, 0, 1, 1);
     mdelay (10);
-
-    /* Reset the JTAG TAP controller. */
-    mpsse_send (a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
 
     /* Check status. */
     mpsse_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
