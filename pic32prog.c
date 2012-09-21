@@ -231,10 +231,6 @@ int read_hex (char *filename)
 	}
 
 	bytes = HEX (buf+1);
-        if (bytes & 1) {
-            fprintf (stderr, _("%s: odd length\n"), filename);
-            exit (1);
-        }
 	if (strlen ((char*) buf) < bytes * 2 + 11) {
             fprintf (stderr, _("%s: too short hex line\n"), filename);
             exit (1);

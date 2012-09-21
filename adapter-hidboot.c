@@ -82,7 +82,7 @@ static void hidboot_command (hidboot_adapter_t *a, unsigned char cmd,
     }
 
     memset (a->reply, 0, sizeof(a->reply));
-    a->reply_len = hid_read_timeout (a->hiddev, a->reply, 64, 1000);
+    a->reply_len = hid_read_timeout (a->hiddev, a->reply, 64, 4000);
     if (a->reply_len == 0) {
         fprintf (stderr, "Timed out.\n");
         exit (-1);
@@ -241,16 +241,13 @@ adapter_t *adapter_open_hidboot (void)
     hid_device *hiddev;
 
     hiddev = hid_open (MICROCHIP_VID, BOOTLOADER_PID, 0);
-    if (! hiddev) {
+    if (! hiddev)
         hiddev = hid_open (MICROCHIP_VID, MAXIMITE_PID, 0);
-        if (! hiddev) {
-            hiddev = hid_open (OLIMEX_VID, DUINOMITE_PID, 0);
-            if (! hiddev) {
-                /*fprintf (stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
-                    MICROCHIP_VID, BOOTLOADER_PID);*/
-                return 0;
-            }
-        }
+    if (! hiddev)
+        hiddev = hid_open (OLIMEX_VID, DUINOMITE_PID, 0);
+    if (! hiddev) {
+        /*fprintf (stderr, "HID bootloader not found\n");*/
+        return 0;
     }
     a = calloc (1, sizeof (*a));
     if (! a) {

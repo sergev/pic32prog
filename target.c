@@ -165,6 +165,7 @@ target_t *target_open ()
     if (! t->adapter)
         t->adapter = adapter_open_an1388 ();
     if (! t->adapter) {
+        fprintf (stderr, "\n");
         fprintf (stderr, _("No target found.\n"));
         exit (-1);
     }

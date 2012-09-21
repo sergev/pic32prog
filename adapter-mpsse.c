@@ -447,8 +447,8 @@ static void serial_execution (mpsse_adapter_t *a)
     unsigned status = mpsse_recv (a);
     if (debug_level > 0)
         fprintf (stderr, "%s: status %04x\n", a->name, status);
-    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
-                   MCHP_STATUS_FAEN | MCHP_STATUS_DEVRST)) {
+    if ((status & ~MCHP_STATUS_DEVRST) !=
+        (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY | MCHP_STATUS_FAEN)) {
         fprintf (stderr, "%s: invalid status = %04x (reset)\n", a->name, status);
         exit (-1);
     }
@@ -874,6 +874,8 @@ adapter_t *adapter_open_mpsse (void)
     mpsse_adapter_t *a;
     struct usb_bus *bus;
     struct usb_device *dev;
+    char product [256];
+    unsigned latency_timer = 1;
 
     a = calloc (1, sizeof (*a));
     if (! a) {
@@ -901,6 +903,7 @@ adapter_t *adapter_open_mpsse (void)
                 a->trst_inverted = 1;
                 a->sysrst_control = 2;
                 a->led_control = 8;
+                latency_timer = 0;
                 goto found;
             }
             if (dev->descriptor.idVendor == DP_BUSBLASTER_VID &&
@@ -910,6 +913,7 @@ adapter_t *adapter_open_mpsse (void)
                 a->trst_inverted = 1;
                 a->sysrst_control = 2;
                 a->sysrst_inverted = 1;
+                latency_timer = 0;
                 goto found;
             }
         }
@@ -928,6 +932,22 @@ found:
         free (a);
         return 0;
     }
+    if (dev->descriptor.iProduct) {
+        if (usb_get_string_simple (a->usbdev, dev->descriptor.iProduct,
+                                   product, sizeof(product)) > 0)
+        {
+            if (strcmp ("Flyswatter", product) == 0) {
+                /* TinCanTools Flyswatter.
+                 * PID/VID the same as Dangerous Prototypes Bus Blaster. */
+                a->name = "TinCanTools Flyswatter";
+                a->trst_control = 1;
+                a->trst_inverted = 1;
+                a->sysrst_control = 2;
+                a->sysrst_inverted = 1;
+            }
+        }
+    }
+
 #if ! defined (__CYGWIN32__) && ! defined (MINGW32)
     char driver_name [100];
     if (usb_get_driver_np (a->usbdev, 0, driver_name, sizeof(driver_name)) == 0) {
@@ -967,9 +987,6 @@ failed: usb_release_interface (a->usbdev, 0);
     /* Optimal rate is 0.5 MHz.
      * Divide base oscillator 6 MHz by 12. */
     unsigned divisor = 12 - 1;
-    unsigned char latency_timer = 1;
-    if (dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H)
-        latency_timer = 0;
 
     if (usb_control_msg (a->usbdev,
         USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
@@ -1008,7 +1025,10 @@ failed: usb_release_interface (a->usbdev, 0);
     mpsse_send (a, 6, 31, 32, 0, 1);
     idcode = mpsse_recv (a);
     if ((idcode & 0xfff) != 0x053) {
-        fprintf (stderr, "IDCODE=%08x - incompatible CPU detected.\n", idcode);
+        /* Microchip vendor ID is expected. */
+        if (debug_level > 0 || (idcode != 0 && idcode != 0xffffffff))
+            fprintf (stderr, "%s: incompatible CPU detected, IDCODE=%08x\n",
+                a->name, idcode);
         mpsse_reset (a, 0, 0, 0);
         free (a);
         return 0;
@@ -1026,8 +1046,8 @@ failed: usb_release_interface (a->usbdev, 0);
     unsigned status = mpsse_recv (a);
     if (debug_level > 0)
         fprintf (stderr, "%s: status %04x\n", a->name, status);
-    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
-                   MCHP_STATUS_FAEN | MCHP_STATUS_DEVRST)) {
+    if ((status & ~MCHP_STATUS_DEVRST) !=
+        (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY | MCHP_STATUS_FAEN)) {
         fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
         mpsse_reset (a, 0, 0, 0);
         free (a);
