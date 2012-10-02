@@ -48,6 +48,7 @@ typedef struct {
     unsigned sysrst_control, sysrst_inverted;
     unsigned led_control, led_inverted;
 
+    unsigned mhz;
     unsigned use_executable;
     unsigned serial_execution_mode;
 } mpsse_adapter_t;
@@ -341,15 +342,9 @@ static void mpsse_reset (mpsse_adapter_t *a, int trst, int sysrst, int led)
 {
     unsigned char output [3];
     unsigned low_output = 0x08; /* TCK idle high */
+    unsigned high_output = 0;
     unsigned low_direction = 0x1b;
     unsigned high_direction = 0x0f;
-    unsigned high_output = 0;
-
-    /* command "set data bits low byte" */
-    output [0] = 0x80;
-    output [1] = low_output;
-    output [2] = low_direction;
-    bulk_write (a, output, 3);
 
     if (trst)
         high_output |= a->trst_control;
@@ -366,26 +361,55 @@ static void mpsse_reset (mpsse_adapter_t *a, int trst, int sysrst, int led)
     if (a->led_inverted)
         high_output ^= a->led_control;
 
+    /* command "set data bits low byte" */
+    output [0] = 0x80;
+    output [1] = low_output;
+    output [2] = low_direction;
+    bulk_write (a, output, 3);
+
     /* command "set data bits high byte" */
     output [0] = 0x82;
     output [1] = high_output;
     output [2] = high_direction;
-
     bulk_write (a, output, 3);
+
     if (debug_level)
         fprintf (stderr, "mpsse_reset (trst=%d, sysrst=%d) high_output=0x%2.2x, high_direction: 0x%2.2x\n",
             trst, sysrst, high_output, high_direction);
 }
 
-static void mpsse_speed (mpsse_adapter_t *a, int divisor)
+static void mpsse_speed (mpsse_adapter_t *a, int khz)
 {
     unsigned char output [3];
+    int divisor = (a->mhz * 2000 / khz + 1) / 2 - 1;
 
-    /* command "set TCK divisor" */
+    if (divisor < 0)
+        divisor = 0;
+    if (debug_level)
+    	fprintf (stderr, "%s: divisor: %u\n", a->name, divisor);
+
+    if (a->mhz > 6) {
+        /* Use 60MHz master clock (disable divide by 5). */
+        output [0] = 0x8A;
+
+        /* Turn off adaptive clocking. */
+        output [1] = 0x97;
+
+        /* Disable three-phase clocking. */
+        output [2] = 0x8D;
+        bulk_write (a, output, 3);
+    }
+
+    /* Command "set TCK divisor". */
     output [0] = 0x86;
     output [1] = divisor;
     output [2] = divisor >> 8;
     bulk_write (a, output, 3);
+
+    if (debug_level) {
+        khz = (a->mhz * 2000 / (divisor + 1) + 1) / 2;
+        fprintf (stderr, "%s: clock rate %.1f MHz\n", a->name, khz / 1000.0);
+    }
 }
 
 static void mpsse_close (adapter_t *adapter, int power_on)
@@ -875,7 +899,6 @@ adapter_t *adapter_open_mpsse (void)
     struct usb_bus *bus;
     struct usb_device *dev;
     char product [256];
-    unsigned latency_timer = 1;
 
     a = calloc (1, sizeof (*a));
     if (! a) {
@@ -894,6 +917,7 @@ adapter_t *adapter_open_mpsse (void)
                 a->trst_inverted = 1;
                 a->sysrst_control = 2;
                 a->led_control = 8;
+                a->mhz = 6;
                 goto found;
             }
             if (dev->descriptor.idVendor == OLIMEX_VID &&
@@ -903,7 +927,7 @@ adapter_t *adapter_open_mpsse (void)
                 a->trst_inverted = 1;
                 a->sysrst_control = 2;
                 a->led_control = 8;
-                latency_timer = 0;
+                a->mhz = 30;
                 goto found;
             }
             if (dev->descriptor.idVendor == DP_BUSBLASTER_VID &&
@@ -913,7 +937,7 @@ adapter_t *adapter_open_mpsse (void)
                 a->trst_inverted = 1;
                 a->sysrst_control = 2;
                 a->sysrst_inverted = 1;
-                latency_timer = 0;
+                a->mhz = 30;
                 goto found;
             }
         }
@@ -944,6 +968,7 @@ found:
                 a->trst_inverted = 1;
                 a->sysrst_control = 2;
                 a->sysrst_inverted = 1;
+                a->mhz = 6;
             }
         }
     }
@@ -984,10 +1009,8 @@ failed: usb_release_interface (a->usbdev, 0);
         goto failed;
     }
 
-    /* Optimal rate is 0.5 MHz.
-     * Divide base oscillator 6 MHz by 12. */
-    unsigned divisor = 12 - 1;
-
+    /* Optimal latency timer is 1 for slow mode and 0 for fast mode. */
+    unsigned latency_timer = (a->mhz > 6) ? 0 : 1;
     if (usb_control_msg (a->usbdev,
         USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
         SIO_SET_LATENCY_TIMER, latency_timer, 1, 0, 0, 1000) != 0) {
@@ -1000,16 +1023,12 @@ failed: usb_release_interface (a->usbdev, 0);
         fprintf (stderr, "%s: unable to get latency timer\n", a->name);
         goto failed;
     }
-    if (debug_level) {
-    	fprintf (stderr, "%s: divisor: %u\n", a->name, divisor);
+    if (debug_level)
     	fprintf (stderr, "%s: latency timer: %u usec\n", a->name, latency_timer);
-    }
 
-    if (debug_level) {
-        int baud = 6000000 / (divisor + 1);
-        fprintf (stderr, "%s: speed %d samples/sec\n", a->name, baud);
-    }
-    mpsse_speed (a, divisor);
+    /* By default, use 500 kHz speed. */
+    int khz = 500;
+    mpsse_speed (a, khz);
 
     /* Disable TDI to TDO loopback. */
     unsigned char enable_loopback[] = "\x85";
