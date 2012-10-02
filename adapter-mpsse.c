@@ -47,6 +47,7 @@ typedef struct {
     unsigned trst_control, trst_inverted;
     unsigned sysrst_control, sysrst_inverted;
     unsigned led_control, led_inverted;
+    unsigned dir_control;
 
     unsigned mhz;
     unsigned use_executable;
@@ -340,42 +341,40 @@ static unsigned long long mpsse_recv (mpsse_adapter_t *a)
 
 static void mpsse_reset (mpsse_adapter_t *a, int trst, int sysrst, int led)
 {
-    unsigned char output [3];
-    unsigned low_output = 0x08; /* TCK idle high */
-    unsigned high_output = 0;
-    unsigned low_direction = 0x1b;
-    unsigned high_direction = 0x0f;
+    unsigned char buf [3];
+    unsigned output    = 0x0008;                    /* TCK idle high */
+    unsigned direction = 0x000b | a->dir_control;
 
     if (trst)
-        high_output |= a->trst_control;
+        output |= a->trst_control;
     if (a->trst_inverted)
-        high_output ^= a->trst_control;
+        output ^= a->trst_control;
 
     if (sysrst)
-        high_output |= a->sysrst_control;
+        output |= a->sysrst_control;
     if (a->sysrst_inverted)
-        high_output ^= a->sysrst_control;
+        output ^= a->sysrst_control;
 
     if (led)
-        high_output |= a->led_control;
+        output |= a->led_control;
     if (a->led_inverted)
-        high_output ^= a->led_control;
+        output ^= a->led_control;
 
     /* command "set data bits low byte" */
-    output [0] = 0x80;
-    output [1] = low_output;
-    output [2] = low_direction;
-    bulk_write (a, output, 3);
+    buf [0] = 0x80;
+    buf [1] = output;
+    buf [2] = direction;
+    bulk_write (a, buf, 3);
 
     /* command "set data bits high byte" */
-    output [0] = 0x82;
-    output [1] = high_output;
-    output [2] = high_direction;
-    bulk_write (a, output, 3);
+    buf [0] = 0x82;
+    buf [1] = output >> 8;
+    buf [2] = direction >> 8;
+    bulk_write (a, buf, 3);
 
     if (debug_level)
-        fprintf (stderr, "mpsse_reset (trst=%d, sysrst=%d) high_output=0x%2.2x, high_direction: 0x%2.2x\n",
-            trst, sysrst, high_output, high_direction);
+        fprintf (stderr, "mpsse_reset (trst=%d, sysrst=%d) output=%04x, direction: %04x\n",
+            trst, sysrst, output, direction);
 }
 
 static void mpsse_speed (mpsse_adapter_t *a, int khz)
@@ -913,31 +912,34 @@ adapter_t *adapter_open_mpsse (void)
             if (dev->descriptor.idVendor == OLIMEX_VID &&
                 dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY) {
                 a->name = "Olimex ARM-USB-Tiny";
-                a->trst_control = 1;
-                a->trst_inverted = 1;
-                a->sysrst_control = 2;
-                a->led_control = 8;
                 a->mhz = 6;
+                a->dir_control    = 0x0f10;
+                a->trst_control   = 0x0100;
+                a->trst_inverted  = 1;
+                a->sysrst_control = 0x0200;
+                a->led_control    = 0x0800;
                 goto found;
             }
             if (dev->descriptor.idVendor == OLIMEX_VID &&
                 dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H) {
                 a->name = "Olimex ARM-USB-Tiny-H";
-                a->trst_control = 1;
-                a->trst_inverted = 1;
-                a->sysrst_control = 2;
-                a->led_control = 8;
                 a->mhz = 30;
+                a->dir_control    = 0x0f10;
+                a->trst_control   = 0x0100;
+                a->trst_inverted  = 1;
+                a->sysrst_control = 0x0200;
+                a->led_control    = 0x0800;
                 goto found;
             }
             if (dev->descriptor.idVendor == DP_BUSBLASTER_VID &&
                 dev->descriptor.idProduct == DP_BUSBLASTER_PID) {
                 a->name = "Dangerous Prototypes Bus Blaster";
-                a->trst_control = 1;
-                a->trst_inverted = 1;
-                a->sysrst_control = 2;
-                a->sysrst_inverted = 1;
                 a->mhz = 30;
+                a->dir_control     = 0x0f10;
+                a->trst_control    = 0x0100;
+                a->trst_inverted   = 1;
+                a->sysrst_control  = 0x0200;
+                a->sysrst_inverted = 1;
                 goto found;
             }
         }
@@ -964,11 +966,14 @@ found:
                 /* TinCanTools Flyswatter.
                  * PID/VID the same as Dangerous Prototypes Bus Blaster. */
                 a->name = "TinCanTools Flyswatter";
-                a->trst_control = 1;
-                a->trst_inverted = 1;
-                a->sysrst_control = 2;
-                a->sysrst_inverted = 1;
                 a->mhz = 6;
+                a->dir_control     = 0x0cf0;
+                a->trst_control    = 0x0010;
+                a->trst_inverted   = 1;
+                a->sysrst_control  = 0x0020;
+                a->sysrst_inverted = 0;
+                a->led_control     = 0x0c00;
+                a->led_inverted    = 1;
             }
         }
     }
