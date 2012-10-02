@@ -60,6 +60,7 @@ typedef struct {
 #define OLIMEX_VID              0x15ba
 #define OLIMEX_ARM_USB_TINY     0x0004  /* ARM-USB-Tiny */
 #define OLIMEX_ARM_USB_TINY_H   0x002a	/* ARM-USB-Tiny-H */
+#define OLIMEX_ARM_USB_OCD_H    0x002b	/* ARM-USB-OCD-H */
 
 #define DP_BUSBLASTER_VID       0x0403
 #define DP_BUSBLASTER_PID       0x6010  /* Bus Blaster v2 */
@@ -931,6 +932,18 @@ adapter_t *adapter_open_mpsse (void)
                 a->led_control    = 0x0800;
                 goto found;
             }
+            if (dev->descriptor.idVendor == OLIMEX_VID &&
+                dev->descriptor.idProduct == OLIMEX_ARM_USB_OCD_H) {
+                a->name = "Olimex ARM-USB-OCD-H";
+                a->mhz = 30;
+                a->dir_control     = 0x0f10;
+                a->trst_control    = 0x0100;
+                a->trst_inverted   = 1;
+                a->sysrst_control  = 0x0200;
+                a->led_control     = 0x0800;
+                a->sysrst_inverted = 1;     /* changed for mips */
+                goto found;
+            }
             if (dev->descriptor.idVendor == DP_BUSBLASTER_VID &&
                 dev->descriptor.idProduct == DP_BUSBLASTER_PID) {
                 a->name = "Dangerous Prototypes Bus Blaster";
@@ -1054,8 +1067,7 @@ failed: usb_release_interface (a->usbdev, 0);
             fprintf (stderr, "%s: incompatible CPU detected, IDCODE=%08x\n",
                 a->name, idcode);
         mpsse_reset (a, 0, 0, 0);
-        free (a);
-        return 0;
+        goto failed;
     }
 
     /* Activate /SYSRST and LED. */
@@ -1074,8 +1086,7 @@ failed: usb_release_interface (a->usbdev, 0);
         (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY | MCHP_STATUS_FAEN)) {
         fprintf (stderr, "%s: invalid status = %04x\n", a->name, status);
         mpsse_reset (a, 0, 0, 0);
-        free (a);
-        return 0;
+        goto failed;
     }
     printf ("      Adapter: %s\n", a->name);
 
