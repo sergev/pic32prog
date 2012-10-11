@@ -825,7 +825,7 @@ adapter_t *adapter_open_pickit (void)
     unsigned vpp_limit = (unsigned) (2.26 * 18.61);
     pickit_send (a, 4, CMD_SET_VPP, 0x40, vpp, vpp_limit);
 
-    /* Setup serial speed. */
+    /* Setup serial speed as 8MHz/divisor. */
     unsigned divisor = 10;
     pickit_send (a, 4, CMD_EXECUTE_SCRIPT, 2,
         SCRIPT_SET_ICSP_SPEED, divisor);
