@@ -1,17 +1,18 @@
 CC              = gcc
 
 SVNVERS         = $(shell svnversion)
+UNAME           = $(shell uname)
 CFLAGS          = -Wall -g -O -I/opt/local/include -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -g
 
 # Linux
-ifneq (,$(wildcard /lib/i386-linux-gnu))
+ifeq ($(UNAME),Linux)
     LIBS        += -lusb-1.0
     HIDSRC      = hidapi/hid-libusb.c
 endif
 
 # Mac OS X
-ifneq (,$(wildcard /System/Library/Frameworks/CoreFoundation.framework))
+ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation
     HIDSRC      = hidapi/hid-mac.c
 endif
