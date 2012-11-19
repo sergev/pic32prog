@@ -263,11 +263,20 @@ void target_print_devcfg (target_t *t)
         printf ("                     %u Debugger disabled\n",
             devcfg0 & DEVCFG0_DEBUG_MASK);
 
-    if (~devcfg0 & DEVCFG0_ICESEL)
-        printf ("                       Use PGC1/PGD1\n");
-    else
-        printf ("                     %u Use PGC2/PGD2\n",
-            DEVCFG0_ICESEL);
+    switch (~devcfg0 & DEVCFG0_ICESEL_MASK) {
+    case DEVCFG0_ICESEL_PAIR1:
+        printf ("                    %02x Use PGC1/PGD1\n", devcfg0 & DEVCFG0_ICESEL_MASK);
+        break;
+    case DEVCFG0_ICESEL_PAIR2:
+        printf ("                    %02x Use PGC2/PGD2\n", devcfg0 & DEVCFG0_ICESEL_MASK);
+        break;
+    case DEVCFG0_ICESEL_PAIR3:
+        printf ("                    %02x Use PGC3/PGD3\n", devcfg0 & DEVCFG0_ICESEL_MASK);
+        break;
+    case DEVCFG0_ICESEL_PAIR4:
+        printf ("                    %02x Use PGC4/PGD4\n", devcfg0 & DEVCFG0_ICESEL_MASK);
+        break;
+    }
 
     if (~devcfg0 & DEVCFG0_PWP_MASK)
         printf ("                 %05x Program flash write protect\n",
@@ -329,7 +338,7 @@ void target_print_devcfg (target_t *t)
         printf ("                   %u   Primary oscillator: disabled\n", DEVCFG1_POSCMOD_DISABLE >> 8);
         break;
     }
-    if (devcfg1 & DEVCFG1_OSCIOFNC)
+    if (! (devcfg1 & DEVCFG1_OSCIOFNC))
         printf ("                   %u   CLKO output active\n",
             DEVCFG1_OSCIOFNC >> 8);
 

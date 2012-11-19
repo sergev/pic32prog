@@ -108,7 +108,11 @@ extern const unsigned pic32_pemx3[];
 #define DEVCFG0_DEBUG_MASK      0x00000003 /* Debugger enable bits */
 #define DEVCFG0_DEBUG_DISABLED  0x00000000 /* Debugger disabled */
 #define DEVCFG0_DEBUG_ENABLED   0x00000002 /* Debugger enabled */
-#define DEVCFG0_ICESEL          0x00000008 /* Use PGC1/PGD1 (default PGC2/PGD2) */
+#define DEVCFG0_ICESEL_MASK     0x00000018 /* Debugger channel select */
+#define DEVCFG0_ICESEL_PAIR1    0x00000000 /* Use PGC1/PGD1 */
+#define DEVCFG0_ICESEL_PAIR2    0x00000008 /* Use PGC2/PGD2 */
+#define DEVCFG0_ICESEL_PAIR3    0x00000010 /* Use PGC3/PGD3 */
+#define DEVCFG0_ICESEL_PAIR4    0x00000018 /* Use PGC4/PGD4 */
 #define DEVCFG0_PWP_MASK        0x000ff000 /* Program flash write protect */
 #define DEVCFG0_BWP             0x01000000 /* Boot flash write protect */
 #define DEVCFG0_CP              0x10000000 /* Code protect */

@@ -44,6 +44,7 @@ typedef struct {
 #define MICROCHIP_VID           0x04d8
 #define PICKIT2_PID             0x0033  /* Microchip PICkit 2 */
 #define PICKIT3_PID             0x900a  /* Microchip PICkit 3 */
+#define CHIPKIT_PID             0x8108  /* chipKIT Programmer */
 
 /*
  * USB endpoints.
@@ -767,6 +768,8 @@ adapter_t *adapter_open_pickit (void)
     hiddev = hid_open (MICROCHIP_VID, PICKIT2_PID, 0);
     if (! hiddev) {
         hiddev = hid_open (MICROCHIP_VID, PICKIT3_PID, 0);
+        if (! hiddev)
+            hiddev = hid_open (MICROCHIP_VID, CHIPKIT_PID, 0);
         if (! hiddev) {
             /*fprintf (stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
                 MICROCHIP_VID, BOOTLOADER_PID);*/

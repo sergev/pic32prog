@@ -139,7 +139,8 @@ static void bulk_write (mpsse_adapter_t *a, unsigned char *output, int nbytes)
     bytes_written = usb_bulk_write (a->usbdev, IN_EP, (char*) output,
         nbytes, 1000);
     if (bytes_written < 0) {
-        fprintf (stderr, "usb bulk write failed: %d\n", bytes_written);
+        fprintf (stderr, "usb bulk write failed: %d: %s\n",
+            bytes_written, usb_strerror());
         exit (-1);
     }
     if (bytes_written != nbytes)
