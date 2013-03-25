@@ -7,7 +7,7 @@ LDFLAGS         = -g
 
 # Linux
 ifeq ($(UNAME),Linux)
-    LIBS        += -lusb-1.0
+    LIBS        += -lusb-1.0 -lpthread
     HIDSRC      = hidapi/hid-libusb.c
 endif
 
