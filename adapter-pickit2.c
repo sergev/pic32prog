@@ -4,7 +4,7 @@
  * To use PICkit3, you would need to upgrade the firmware
  * using free PICkit 3 Scripting Tool from Microchip.
  *
- * Copyright (C) 2011-2012 Serge Vakulenko
+ * Copyright (C) 2011-2013 Serge Vakulenko
  *
  * This file is part of PIC32PROG project, which is distributed
  * under the terms of the GNU General Public License (GPL).

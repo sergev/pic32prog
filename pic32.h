@@ -1,7 +1,7 @@
 /*
  * Microchip PIC32 jtag definitions.
  *
- * Copyright (C) 2011 Serge Vakulenko
+ * Copyright (C) 2011-2013 Serge Vakulenko
  *
  * This file is part of PIC32PROG project, which is distributed
  * under the terms of the GNU General Public License (GPL).
@@ -17,6 +17,7 @@
 extern const unsigned short pic32_pe_loader[];
 extern const unsigned pic32_pemx1[];
 extern const unsigned pic32_pemx3[];
+extern const unsigned pic32_pemz[];
 
 /*
  * TAP instructions (5-bit).

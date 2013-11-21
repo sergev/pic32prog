@@ -1,7 +1,14 @@
 Pic32prog is a utility for loading data into a flash memory of Microchip PIC32
-microcontrollers.  Supported adapters:
+microcontrollers.  Supported adapters and bootloaders:
  * Microchip PICkit2
+ * Microchip PICkit3 with scripting firmware
  * Olimex ARM-USB-Tiny (not finished yet)
+ * Olimex ARM-USB-Tiny, ARM-USB-Tiny-H and ARM-USB-OCH-H JTAG adapters
+ * Olimex MIPS-USB-OCH-H JTAG adapter
+ * Bus Blaster v2 JTAG adapter from Dangerous Prototypes
+ * Flyswatter JTAG adapter from TinCanTools
+ * AN1388 HID bootloader
+ * Legacy FS_USB HID bootloader
 
 
 === Usage ===

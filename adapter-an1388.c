@@ -1,7 +1,7 @@
 /*
  * Interface to PIC32 Microchip AN1388 USB bootloader (new).
  *
- * Copyright (C) 2011 Serge Vakulenko
+ * Copyright (C) 2011-2013 Serge Vakulenko
  *
  * This file is part of PIC32PROG project, which is distributed
  * under the terms of the GNU General Public License (GPL).

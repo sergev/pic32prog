@@ -1,6 +1,6 @@
 CC              = gcc
 
-SVNVERS         = $(shell svnversion)
+SVNVERS         = $(shell head -n4 .svn/entries | tail -n1)
 UNAME           = $(shell uname)
 CFLAGS          = -Wall -g -O -I/opt/local/include -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -g
@@ -61,5 +61,5 @@ adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi.h pic32.h
 adapter-mpsse.o: adapter-mpsse.c adapter.h
 adapter-pickit2.o: adapter-pickit2.c adapter.h pickit2.h pic32.h
 executive.o: executive.c pic32.h
-pic32prog.o: pic32prog.c target.h localize.h
+pic32prog.o: pic32prog.c target.h localize.h .svn/entries
 target.o: target.c target.h adapter.h localize.h pic32.h

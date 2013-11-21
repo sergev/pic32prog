@@ -1,7 +1,7 @@
 /*
  * Localization using gettext.
  *
- * Copyright (C) 2010 Serge Vakulenko
+ * Copyright (C) 2010-2013 Serge Vakulenko
  *
  * This file is part of PIC32PROG project, which is distributed
  * under the terms of the GNU General Public License (GPL).
