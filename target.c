@@ -20,167 +20,168 @@
 #include "localize.h"
 #include "pic32.h"
 
+typedef struct {
+    unsigned        boot_kbytes;
+    unsigned        bytes_per_row;
+    const unsigned  *pe_code;
+    unsigned        pe_nwords;
+    unsigned        pe_version;
+} family_t;
+
 struct _target_t {
-    adapter_t   *adapter;
-    const char  *cpu_name;
-    unsigned    cpuid;
-    unsigned    flash_addr;
-    unsigned    flash_bytes;
-    unsigned    boot_bytes;
-    unsigned    pe;
+    adapter_t       *adapter;
+    const char      *cpu_name;
+    const family_t  *family;
+    unsigned        cpuid;
+    unsigned        flash_addr;
+    unsigned        flash_bytes;
 };
 
+                                  /*-Boot-Row---Code--------Nwords-Version-*/
+static const family_t family_mx1 = { 3,   128,  pic32_pemx1, 422,  0x0301 };
+static const family_t family_mx3 = { 12,  512,  pic32_pemx3, 1044, 0x0201 };
+static const family_t family_mz  = { 160, 2048, pic32_pemz,  1052, 0x0502 };
+
 static const struct {
-    unsigned devid;
-    const char *name;
-    unsigned flash_kbytes;
-    unsigned boot_kbytes;
-    unsigned pe;
+    unsigned        devid;
+    const char      *name;
+    unsigned        flash_kbytes;
+    const family_t  *family;
 } pic32mx_dev[] = {
-    /* MX1/2 family-------------Flash-Boot-PE */
-    {0x4A07053, "MX110F016B",     16,  3,  1},
-    {0x4A09053, "MX110F016C",     16,  3,  1},
-    {0x4A0B053, "MX110F016D",     16,  3,  1},
-    {0x4A06053, "MX120F032B",     32,  3,  1},
-    {0x4A08053, "MX120F032C",     32,  3,  1},
-    {0x4A0A053, "MX120F032D",     32,  3,  1},
-    {0x4D07053, "MX130F064B",     64,  3,  1},
-    {0x4D09053, "MX130F064C",     64,  3,  1},
-    {0x4D0B053, "MX130F064D",     64,  3,  1},
-    {0x4D06053, "MX150F128B",    128,  3,  1},
-    {0x4D08053, "MX150F128C",    128,  3,  1},
-    {0x4D0A053, "MX150F128D",    128,  3,  1},
-    {0x4A01053, "MX210F016B",     16,  3,  1},
-    {0x4A03053, "MX210F016C",     16,  3,  1},
-    {0x4A05053, "MX210F016D",     16,  3,  1},
-    {0x4A00053, "MX220F032B",     32,  3,  1},
-    {0x4A02053, "MX220F032C",     32,  3,  1},
-    {0x4A04053, "MX220F032D",     32,  3,  1},
-    {0x4D01053, "MX230F064B",     64,  3,  1},
-    {0x4D03053, "MX230F064C",     64,  3,  1},
-    {0x4D05053, "MX230F064D",     64,  3,  1},
-    {0x4D00053, "MX250F128B",    128,  3,  1},
-    {0x4D02053, "MX250F128C",    128,  3,  1},
-    {0x4D04053, "MX250F128D",    128,  3,  1},
+    /* MX1/2 family-------------Flash---Family */
+    {0x4A07053, "MX110F016B",     16,   &family_mx1},
+    {0x4A09053, "MX110F016C",     16,   &family_mx1},
+    {0x4A0B053, "MX110F016D",     16,   &family_mx1},
+    {0x4A06053, "MX120F032B",     32,   &family_mx1},
+    {0x4A08053, "MX120F032C",     32,   &family_mx1},
+    {0x4A0A053, "MX120F032D",     32,   &family_mx1},
+    {0x4D07053, "MX130F064B",     64,   &family_mx1},
+    {0x4D09053, "MX130F064C",     64,   &family_mx1},
+    {0x4D0B053, "MX130F064D",     64,   &family_mx1},
+    {0x4D06053, "MX150F128B",    128,   &family_mx1},
+    {0x4D08053, "MX150F128C",    128,   &family_mx1},
+    {0x4D0A053, "MX150F128D",    128,   &family_mx1},
+    {0x4A01053, "MX210F016B",     16,   &family_mx1},
+    {0x4A03053, "MX210F016C",     16,   &family_mx1},
+    {0x4A05053, "MX210F016D",     16,   &family_mx1},
+    {0x4A00053, "MX220F032B",     32,   &family_mx1},
+    {0x4A02053, "MX220F032C",     32,   &family_mx1},
+    {0x4A04053, "MX220F032D",     32,   &family_mx1},
+    {0x4D01053, "MX230F064B",     64,   &family_mx1},
+    {0x4D03053, "MX230F064C",     64,   &family_mx1},
+    {0x4D05053, "MX230F064D",     64,   &family_mx1},
+    {0x4D00053, "MX250F128B",    128,   &family_mx1},
+    {0x4D02053, "MX250F128C",    128,   &family_mx1},
+    {0x4D04053, "MX250F128D",    128,   &family_mx1},
 
-    /* MX3/4/5/6/7 family-------Flash-Boot-PE */
-    {0x0902053, "MX320F032H",     32, 12,  0},
-    {0x0906053, "MX320F064H",     64, 12,  0},
-    {0x090A053, "MX320F128H",    128, 12,  0},
-    {0x092A053, "MX320F128L",    128, 12,  0},
-    {0x5600053, "MX330F064H",     64, 12,  0},
-    {0x5601053, "MX330F064L",     64, 12,  0},
-    {0x090D053, "MX340F128H",    128, 12,  0},
-    {0x092D053, "MX340F128L",    128, 12,  0},
-    {0x0912053, "MX340F256H",    256, 12,  0},
-    {0x0916053, "MX340F512H",    512, 12,  0},
-    {0x570C053, "MX350F128H",    128, 12,  0},
-    {0x570D053, "MX350F128L",    128, 12,  0},
-    {0x5704053, "MX350F256H",    256, 12,  0},
-    {0x5705053, "MX350F256L",    256, 12,  0},
-    {0x0934053, "MX360F256L",    256, 12,  0},
-    {0x0938053, "MX360F512L",    512, 12,  0},
-    {0x5808053, "MX370F512H",    512, 12,  0},
-    {0x5809053, "MX370F512L",    512, 12,  0},
-    {0x0942053, "MX420F032H",     32, 12,  0},
-    {0x5602053, "MX430F064H",     64, 12,  0},
-    {0x5603053, "MX430F064L",     64, 12,  0},
-    {0x094D053, "MX440F128H",    128, 12,  0},
-    {0x096D053, "MX440F128L",    128, 12,  0},
-    {0x0952053, "MX440F256H",    256, 12,  0},
-    {0x0956053, "MX440F512H",    512, 12,  0},
-    {0x570E053, "MX450F128H",    128, 12,  0},
-    {0x570F053, "MX450F128L",    128, 12,  0},
-    {0x5706053, "MX450F256H",    256, 12,  0},
-    {0x5707053, "MX450F256L",    256, 12,  0},
-    {0x0974053, "MX460F256L",    256, 12,  0},
-    {0x0978053, "MX460F512L",    512, 12,  0},
-    {0x580A053, "MX470F512H",    512, 12,  0},
-    {0x580B053, "MX470F512L",    512, 12,  0},
-    {0x4400053, "MX534F064H",     64, 12,  0},
-    {0x440C053, "MX534F064L",     64, 12,  0},
-    {0x4401053, "MX564F064H",     64, 12,  0},
-    {0x440D053, "MX564F064L",     64, 12,  0},
-    {0x4403053, "MX564F128H",    128, 12,  0},
-    {0x440F053, "MX564F128L",    128, 12,  0},
-    {0x4317053, "MX575F256H",    256, 12,  0},
-    {0x4333053, "MX575F256L",    256, 12,  0},
-    {0x4309053, "MX575F512H",    512, 12,  0},
-    {0x430F053, "MX575F512L",    512, 12,  0},
-    {0x4405053, "MX664F064H",     64, 12,  0},
-    {0x4411053, "MX664F064L",     64, 12,  0},
-    {0x4407053, "MX664F128H",    128, 12,  0},
-    {0x4413053, "MX664F128L",    128, 12,  0},
-    {0x430B053, "MX675F256H",    256, 12,  0},
-    {0x4305053, "MX675F256L",    256, 12,  0},
-    {0x430C053, "MX675F512H",    512, 12,  0},
-    {0x4311053, "MX675F512L",    512, 12,  0},
-    {0x4325053, "MX695F512H",    512, 12,  0},
-    {0x4341053, "MX695F512L",    512, 12,  0},
-    {0x440B053, "MX764F128H",    128, 12,  0},
-    {0x4417053, "MX764F128L",    128, 12,  0},
-    {0x4303053, "MX775F256H",    256, 12,  0},
-    {0x4312053, "MX775F256L",    256, 12,  0},
-    {0x430D053, "MX775F512H",    512, 12,  0},
-    {0x4306053, "MX775F512L",    512, 12,  0},
-    {0x430E053, "MX795F512H",    512, 12,  0},
-    {0x4307053, "MX795F512L",    512, 12,  0},
+    /* MX3/4/5/6/7 family-------Flash---Family */
+    {0x0902053, "MX320F032H",     32,   &family_mx3},
+    {0x0906053, "MX320F064H",     64,   &family_mx3},
+    {0x090A053, "MX320F128H",    128,   &family_mx3},
+    {0x092A053, "MX320F128L",    128,   &family_mx3},
+    {0x5600053, "MX330F064H",     64,   &family_mx3},
+    {0x5601053, "MX330F064L",     64,   &family_mx3},
+    {0x090D053, "MX340F128H",    128,   &family_mx3},
+    {0x092D053, "MX340F128L",    128,   &family_mx3},
+    {0x0912053, "MX340F256H",    256,   &family_mx3},
+    {0x0916053, "MX340F512H",    512,   &family_mx3},
+    {0x570C053, "MX350F128H",    128,   &family_mx3},
+    {0x570D053, "MX350F128L",    128,   &family_mx3},
+    {0x5704053, "MX350F256H",    256,   &family_mx3},
+    {0x5705053, "MX350F256L",    256,   &family_mx3},
+    {0x0934053, "MX360F256L",    256,   &family_mx3},
+    {0x0938053, "MX360F512L",    512,   &family_mx3},
+    {0x5808053, "MX370F512H",    512,   &family_mx3},
+    {0x5809053, "MX370F512L",    512,   &family_mx3},
+    {0x0942053, "MX420F032H",     32,   &family_mx3},
+    {0x5602053, "MX430F064H",     64,   &family_mx3},
+    {0x5603053, "MX430F064L",     64,   &family_mx3},
+    {0x094D053, "MX440F128H",    128,   &family_mx3},
+    {0x096D053, "MX440F128L",    128,   &family_mx3},
+    {0x0952053, "MX440F256H",    256,   &family_mx3},
+    {0x0956053, "MX440F512H",    512,   &family_mx3},
+    {0x570E053, "MX450F128H",    128,   &family_mx3},
+    {0x570F053, "MX450F128L",    128,   &family_mx3},
+    {0x5706053, "MX450F256H",    256,   &family_mx3},
+    {0x5707053, "MX450F256L",    256,   &family_mx3},
+    {0x0974053, "MX460F256L",    256,   &family_mx3},
+    {0x0978053, "MX460F512L",    512,   &family_mx3},
+    {0x580A053, "MX470F512H",    512,   &family_mx3},
+    {0x580B053, "MX470F512L",    512,   &family_mx3},
+    {0x4400053, "MX534F064H",     64,   &family_mx3},
+    {0x440C053, "MX534F064L",     64,   &family_mx3},
+    {0x4401053, "MX564F064H",     64,   &family_mx3},
+    {0x440D053, "MX564F064L",     64,   &family_mx3},
+    {0x4403053, "MX564F128H",    128,   &family_mx3},
+    {0x440F053, "MX564F128L",    128,   &family_mx3},
+    {0x4317053, "MX575F256H",    256,   &family_mx3},
+    {0x4333053, "MX575F256L",    256,   &family_mx3},
+    {0x4309053, "MX575F512H",    512,   &family_mx3},
+    {0x430F053, "MX575F512L",    512,   &family_mx3},
+    {0x4405053, "MX664F064H",     64,   &family_mx3},
+    {0x4411053, "MX664F064L",     64,   &family_mx3},
+    {0x4407053, "MX664F128H",    128,   &family_mx3},
+    {0x4413053, "MX664F128L",    128,   &family_mx3},
+    {0x430B053, "MX675F256H",    256,   &family_mx3},
+    {0x4305053, "MX675F256L",    256,   &family_mx3},
+    {0x430C053, "MX675F512H",    512,   &family_mx3},
+    {0x4311053, "MX675F512L",    512,   &family_mx3},
+    {0x4325053, "MX695F512H",    512,   &family_mx3},
+    {0x4341053, "MX695F512L",    512,   &family_mx3},
+    {0x440B053, "MX764F128H",    128,   &family_mx3},
+    {0x4417053, "MX764F128L",    128,   &family_mx3},
+    {0x4303053, "MX775F256H",    256,   &family_mx3},
+    {0x4312053, "MX775F256L",    256,   &family_mx3},
+    {0x430D053, "MX775F512H",    512,   &family_mx3},
+    {0x4306053, "MX775F512L",    512,   &family_mx3},
+    {0x430E053, "MX795F512H",    512,   &family_mx3},
+    {0x4307053, "MX795F512L",    512,   &family_mx3},
 
-    /* MZ family----------------Flash-Boot-PE */
-    {0x5100053, "MZ0256ECE064",  256, 160, 2},
-    {0x510A053, "MZ0256ECE100",  256, 160, 2},
-    {0x5114053, "MZ0256ECE124",  256, 160, 2},
-    {0x511E053, "MZ0256ECE144",  256, 160, 2},
-    {0x5105053, "MZ0256ECF064",  256, 160, 2},
-    {0x510F053, "MZ0256ECF100",  256, 160, 2},
-    {0x5119053, "MZ0256ECF124",  256, 160, 2},
-    {0x5123053, "MZ0256ECF144",  256, 160, 2},
-    {0x5101053, "MZ0512ECE064",  512, 160, 2},
-    {0x510B053, "MZ0512ECE100",  512, 160, 2},
-    {0x5115053, "MZ0512ECE124",  512, 160, 2},
-    {0x511F053, "MZ0512ECE144",  512, 160, 2},
-    {0x5106053, "MZ0512ECF064",  512, 160, 2},
-    {0x5110053, "MZ0512ECF100",  512, 160, 2},
-    {0x511A053, "MZ0512ECF124",  512, 160, 2},
-    {0x5124053, "MZ0512ECF144",  512, 160, 2},
-    {0x5102053, "MZ1024ECE064", 1024, 160, 2},
-    {0x510C053, "MZ1024ECE100", 1024, 160, 2},
-    {0x5116053, "MZ1024ECE124", 1024, 160, 2},
-    {0x5120053, "MZ1024ECE144", 1024, 160, 2},
-    {0x5107053, "MZ1024ECF064", 1024, 160, 2},
-    {0x5111053, "MZ1024ECF100", 1024, 160, 2},
-    {0x511B053, "MZ1024ECF124", 1024, 160, 2},
-    {0x5125053, "MZ1024ECF144", 1024, 160, 2},
-    {0x5103053, "MZ1024ECG064", 1024, 160, 2},
-    {0x510D053, "MZ1024ECG100", 1024, 160, 2},
-    {0x5117053, "MZ1024ECG124", 1024, 160, 2},
-    {0x5121053, "MZ1024ECG144", 1024, 160, 2},
-    {0x5108053, "MZ1024ECH064", 1024, 160, 2},
-    {0x5112053, "MZ1024ECH100", 1024, 160, 2},
-    {0x511C053, "MZ1024ECH124", 1024, 160, 2},
-    {0x5126053, "MZ1024ECH144", 1024, 160, 2},
-    {0x5104053, "MZ2048ECG064", 2048, 160, 2},
-    {0x510E053, "MZ2048ECG100", 2048, 160, 2},
-    {0x5118053, "MZ2048ECG124", 2048, 160, 2},
-    {0x5122053, "MZ2048ECG144", 2048, 160, 2},
-    {0x5109053, "MZ2048ECH064", 2048, 160, 2},
-    {0x5113053, "MZ2048ECH100", 2048, 160, 2},
-    {0x511D053, "MZ2048ECH124", 2048, 160, 2},
-    {0x5127053, "MZ2048ECH144", 2048, 160, 2},
+    /* MZ family----------------Flash---Family */
+    {0x5100053, "MZ0256ECE064",  256,   &family_mz},
+    {0x510A053, "MZ0256ECE100",  256,   &family_mz},
+    {0x5114053, "MZ0256ECE124",  256,   &family_mz},
+    {0x511E053, "MZ0256ECE144",  256,   &family_mz},
+    {0x5105053, "MZ0256ECF064",  256,   &family_mz},
+    {0x510F053, "MZ0256ECF100",  256,   &family_mz},
+    {0x5119053, "MZ0256ECF124",  256,   &family_mz},
+    {0x5123053, "MZ0256ECF144",  256,   &family_mz},
+    {0x5101053, "MZ0512ECE064",  512,   &family_mz},
+    {0x510B053, "MZ0512ECE100",  512,   &family_mz},
+    {0x5115053, "MZ0512ECE124",  512,   &family_mz},
+    {0x511F053, "MZ0512ECE144",  512,   &family_mz},
+    {0x5106053, "MZ0512ECF064",  512,   &family_mz},
+    {0x5110053, "MZ0512ECF100",  512,   &family_mz},
+    {0x511A053, "MZ0512ECF124",  512,   &family_mz},
+    {0x5124053, "MZ0512ECF144",  512,   &family_mz},
+    {0x5102053, "MZ1024ECE064", 1024,   &family_mz},
+    {0x510C053, "MZ1024ECE100", 1024,   &family_mz},
+    {0x5116053, "MZ1024ECE124", 1024,   &family_mz},
+    {0x5120053, "MZ1024ECE144", 1024,   &family_mz},
+    {0x5107053, "MZ1024ECF064", 1024,   &family_mz},
+    {0x5111053, "MZ1024ECF100", 1024,   &family_mz},
+    {0x511B053, "MZ1024ECF124", 1024,   &family_mz},
+    {0x5125053, "MZ1024ECF144", 1024,   &family_mz},
+    {0x5103053, "MZ1024ECG064", 1024,   &family_mz},
+    {0x510D053, "MZ1024ECG100", 1024,   &family_mz},
+    {0x5117053, "MZ1024ECG124", 1024,   &family_mz},
+    {0x5121053, "MZ1024ECG144", 1024,   &family_mz},
+    {0x5108053, "MZ1024ECH064", 1024,   &family_mz},
+    {0x5112053, "MZ1024ECH100", 1024,   &family_mz},
+    {0x511C053, "MZ1024ECH124", 1024,   &family_mz},
+    {0x5126053, "MZ1024ECH144", 1024,   &family_mz},
+    {0x5104053, "MZ2048ECG064", 2048,   &family_mz},
+    {0x510E053, "MZ2048ECG100", 2048,   &family_mz},
+    {0x5118053, "MZ2048ECG124", 2048,   &family_mz},
+    {0x5122053, "MZ2048ECG144", 2048,   &family_mz},
+    {0x5109053, "MZ2048ECH064", 2048,   &family_mz},
+    {0x5113053, "MZ2048ECH100", 2048,   &family_mz},
+    {0x511D053, "MZ2048ECH124", 2048,   &family_mz},
+    {0x5127053, "MZ2048ECH144", 2048,   &family_mz},
 
-    {0xEAFB00B, "Bootloader",   0,    0,   0},  /* USB bootloader */
+    /* USB bootloader */
+    {0xEAFB00B, "Bootloader",   0,      0},
     {0}
-};
-
-static const struct {
-    const unsigned *code;
-    unsigned nwords;
-    unsigned version;
-} pic32_pe[] = {
-   /*-Code----------Nwords--Version-*/
-    { pic32_pemx3,  1044,   0x0201 },   /* mx3/4/5/6/7 */
-    { pic32_pemx1,  422,    0x0301 },   /* mx1/mx2 */
-    { pic32_pemz,   1052,   0x0502 },   /* mz */
 };
 
 #if defined (__CYGWIN32__) || defined (MINGW32)
@@ -251,11 +252,10 @@ target_t *target_open ()
             exit (1);
         }
     }
+    t->family = pic32mx_dev[i].family;
     t->cpu_name = pic32mx_dev[i].name;
     t->flash_addr = 0x1d000000;
     t->flash_bytes = pic32mx_dev[i].flash_kbytes * 1024;
-    t->boot_bytes = pic32mx_dev[i].boot_kbytes * 1024;
-    t->pe = pic32mx_dev[i].pe;
     if (! t->flash_bytes) {
         t->flash_addr = t->adapter->user_start;
         t->flash_bytes = t->adapter->user_nbytes;
@@ -288,7 +288,7 @@ unsigned target_flash_bytes (target_t *t)
 
 unsigned target_boot_bytes (target_t *t)
 {
-    return t->boot_bytes;
+    return t->family->boot_kbytes * 1024;
 }
 
 /*
@@ -297,16 +297,17 @@ unsigned target_boot_bytes (target_t *t)
 void target_use_executable (target_t *t)
 {
     if (t->adapter->load_executable != 0)
-        t->adapter->load_executable (t->adapter, pic32_pe[t->pe].code,
-            pic32_pe[t->pe].nwords, pic32_pe[t->pe].version);
+        t->adapter->load_executable (t->adapter, t->family->pe_code,
+            t->family->pe_nwords, t->family->pe_version);
 }
 
 void target_print_devcfg (target_t *t)
 {
-    unsigned devcfg3 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 16);
-    unsigned devcfg2 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 12);
-    unsigned devcfg1 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 8);
-    unsigned devcfg0 = t->adapter->read_word (t->adapter, 0x1fc00000 + t->boot_bytes - 4);
+    unsigned boot_bytes = target_boot_bytes (t);
+    unsigned devcfg3 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 16);
+    unsigned devcfg2 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 12);
+    unsigned devcfg1 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 8);
+    unsigned devcfg0 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 4);
     if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
         devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
         return;
