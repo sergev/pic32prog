@@ -781,14 +781,14 @@ static void mpsse_program_word (adapter_t *adapter,
 /*
  * Flash write row of memory.
  */
-static void mpsse_program_row32 (adapter_t *adapter, unsigned addr,
-    unsigned *data)
+static void mpsse_program_row (adapter_t *adapter, unsigned addr,
+    unsigned *data, unsigned bytes_per_row)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
     int i;
 
     if (debug_level > 0)
-        fprintf (stderr, "%s: row program 128 bytes at %08x\n", a->name, addr);
+        fprintf (stderr, "%s: row program %u bytes at %08x\n", a->name, bytes_per_row, addr);
     if (! a->use_executable) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
@@ -797,48 +797,12 @@ static void mpsse_program_row32 (adapter_t *adapter, unsigned addr,
 
     /* Use PE to write flash memory. */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | 32);
+    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | (bytes_per_row / 4));
     mpsse_flush_output (a);
     xfer_fastdata (a, addr);                    /* Send address. */
 
-    /* Download 128 bytes of data. */
-    for (i = 0; i < 32; i++) {
-        if ((i & 7) == 0)
-            mpsse_flush_output (a);
-        xfer_fastdata (a, *data++);             /* Send word. */
-    }
-    mpsse_flush_output (a);
-
-    unsigned response = get_pe_response (a);
-    if (response != (PE_ROW_PROGRAM << 16)) {
-        fprintf (stderr, "%s: failed to program row at %08x, reply = %08x\n",
-            a->name, addr, response);
-        exit (-1);
-    }
-}
-
-static void mpsse_program_row128 (adapter_t *adapter, unsigned addr,
-    unsigned *data)
-{
-    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
-    int i;
-
-    if (debug_level > 0)
-        fprintf (stderr, "%s: row program 512 bytes at %08x\n", a->name, addr);
-    if (! a->use_executable) {
-        /* Without PE. */
-        fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
-        exit (-1);
-    }
-
-    /* Use PE to write flash memory. */
-    mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | 128);
-    mpsse_flush_output (a);
-    xfer_fastdata (a, addr);                    /* Send address. */
-
-    /* Download 512 bytes of data. */
-    for (i = 0; i < 128; i++) {
+    /* Download data. */
+    for (i = 0; i < bytes_per_row/4; i++) {
         if ((i & 7) == 0)
             mpsse_flush_output (a);
         xfer_fastdata (a, *data++);             /* Send word. */
@@ -1115,7 +1079,6 @@ failed: usb_release_interface (a->usbdev, 0);
     a->adapter.verify_data = mpsse_verify_data;
     a->adapter.erase_chip = mpsse_erase_chip;
     a->adapter.program_word = mpsse_program_word;
-    a->adapter.program_row32 = mpsse_program_row32;
-    a->adapter.program_row128 = mpsse_program_row128;
+    a->adapter.program_row = mpsse_program_row;
     return &a->adapter;
 }

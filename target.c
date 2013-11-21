@@ -771,25 +771,13 @@ void target_program_block (target_t *t, unsigned addr,
     //fprintf (stderr, "target_program_block (addr = %x, nwords = %d)\n", addr, nwords);
 
     if (! t->adapter->program_block) {
-        if (target_boot_bytes (t) <= 3*1024) {
-            while (nwords > 0) {
-                unsigned n = nwords;
-                if (n > 32)
-                    n = 32;
-		if (! target_test_empty_block (data, 32))
-                    t->adapter->program_row32 (t->adapter, addr, data);
-                addr += n<<2;
-                data += n;
-                nwords -= n;
-            }
-            return;
-        }
+        unsigned words_per_row = t->family->bytes_per_row / 4;
         while (nwords > 0) {
             unsigned n = nwords;
-            if (n > 128)
-                n = 128;
-	    if (! target_test_empty_block (data, 128))
-                t->adapter->program_row128 (t->adapter, addr, data);
+            if (n > words_per_row)
+                n = words_per_row;
+	    if (! target_test_empty_block (data, words_per_row))
+                t->adapter->program_row (t->adapter, addr, data, words_per_row);
             addr += n<<2;
             data += n;
             nwords -= n;

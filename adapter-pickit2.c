@@ -621,67 +621,14 @@ static void pickit_program_word (adapter_t *adapter,
 /*
  * Flash write row of memory.
  */
-static void pickit_program_row32 (adapter_t *adapter, unsigned addr,
-    unsigned *data)
-{
-    pickit_adapter_t *a = (pickit_adapter_t*) adapter;
-
-    if (debug_level > 0)
-        fprintf (stderr, "%s: row program 128 bytes at %08x\n", a->name, addr);
-    if (! a->use_executable) {
-        /* Without PE. */
-        fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
-        exit (-1);
-    }
-    /* Use PE to write flash memory. */
-
-    pickit_send (a, 15, CMD_CLEAR_UPLOAD_BUFFER,
-        CMD_EXECUTE_SCRIPT, 12,
-            SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
-            SCRIPT_JT2_XFRFASTDAT_LIT,
-		32, 0, 0, 0,                     // PROGRAM ROW
-	    SCRIPT_JT2_XFRFASTDAT_LIT,
-		(unsigned char) addr,
-		(unsigned char) (addr >> 8),
-		(unsigned char) (addr >> 16),
-		(unsigned char) (addr >> 24));
-
-    /* Download 128 bytes of data. */
-    download_data (a, data, 15, 1);
-    download_data (a, data+15, 15, 0);
-
-    pickit_send (a, 18,
-	CMD_DOWNLOAD_DATA, 2*4,
-            WORD_AS_BYTES (data[30]),
-            WORD_AS_BYTES (data[31]),
-	CMD_EXECUTE_SCRIPT, 6,              // execute
-            SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
-            SCRIPT_JT2_XFRFASTDAT_BUF,
-            SCRIPT_LOOP, 1, 31);
-
-    pickit_send (a, 5, CMD_CLEAR_UPLOAD_BUFFER,
-        CMD_EXECUTE_SCRIPT, 1,
-            SCRIPT_JT2_GET_PE_RESP,
-        CMD_UPLOAD_DATA);
-
-    pickit_recv (a);
-    //fprintf (stderr, "%s: program PE response %u bytes: %02x...\n",
-    //  a->name, a->reply[0], a->reply[1]);
-    if (a->reply[0] != 4 || a->reply[1] != 0) { // response code 0 = success
-        fprintf (stderr, "%s: failed to program row flash memory at %08x, reply = %02x-%02x-%02x-%02x-%02x\n",
-            a->name, addr, a->reply[0], a->reply[1], a->reply[2], a->reply[3], a->reply[4]);
-        exit (-1);
-    }
-}
-
-static void pickit_program_row128 (adapter_t *adapter, unsigned addr,
-    unsigned *data)
+static void pickit_program_row (adapter_t *adapter, unsigned addr,
+    unsigned *data, unsigned bytes_per_row)
 {
     pickit_adapter_t *a = (pickit_adapter_t*) adapter;
     unsigned i;
 
     if (debug_level > 0)
-        fprintf (stderr, "%s: row program 512 bytes at %08x\n", a->name, addr);
+        fprintf (stderr, "%s: row program %u bytes at %08x\n", a->name, bytes_per_row, addr);
     if (! a->use_executable) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
@@ -693,34 +640,49 @@ static void pickit_program_row128 (adapter_t *adapter, unsigned addr,
         CMD_EXECUTE_SCRIPT, 12,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
             SCRIPT_JT2_XFRFASTDAT_LIT,
-		128, 0, 0, 0,                     // PROGRAM ROW
+		bytes_per_row/4, 0, 0, 0,                     // PROGRAM ROW
 	    SCRIPT_JT2_XFRFASTDAT_LIT,
 		(unsigned char) addr,
 		(unsigned char) (addr >> 8),
 		(unsigned char) (addr >> 16),
 		(unsigned char) (addr >> 24));
 
-    /* Download 512 bytes of data. */
-
-    for (i = 0; i < 2; i++) {
-        /* Download 256 bytes of data. */
+    /* Download data. */
+    if (bytes_per_row == 128) {
+        /* MX1/2 family. */
         download_data (a, data, 15, 1);
         download_data (a, data+15, 15, 0);
-        download_data (a, data+30, 15, 0);
-        download_data (a, data+45, 15, 0);
 
-        pickit_send (a, 26,
-            CMD_DOWNLOAD_DATA, 4*4,
-                WORD_AS_BYTES (data[60]),
-                WORD_AS_BYTES (data[61]),
-                WORD_AS_BYTES (data[62]),
-                WORD_AS_BYTES (data[63]),
+        pickit_send (a, 18,
+            CMD_DOWNLOAD_DATA, 2*4,
+                WORD_AS_BYTES (data[30]),
+                WORD_AS_BYTES (data[31]),
             CMD_EXECUTE_SCRIPT, 6,              // execute
                 SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
                 SCRIPT_JT2_XFRFASTDAT_BUF,
-                SCRIPT_LOOP, 1, 63);
+                SCRIPT_LOOP, 1, 31);
+    } else {
+        /* MX3/4/5/6/7 or MZ family. */
+        for (i = 0; i < bytes_per_row/256; i++) {
+            /* Download 256 bytes of data. */
+            download_data (a, data, 15, 1);
+            download_data (a, data+15, 15, 0);
+            download_data (a, data+30, 15, 0);
+            download_data (a, data+45, 15, 0);
 
-        data += 64;
+            pickit_send (a, 26,
+                CMD_DOWNLOAD_DATA, 4*4,
+                    WORD_AS_BYTES (data[60]),
+                    WORD_AS_BYTES (data[61]),
+                    WORD_AS_BYTES (data[62]),
+                    WORD_AS_BYTES (data[63]),
+                CMD_EXECUTE_SCRIPT, 6,              // execute
+                    SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
+                    SCRIPT_JT2_XFRFASTDAT_BUF,
+                    SCRIPT_LOOP, 1, 63);
+
+            data += 64;
+        }
     }
 
     pickit_send (a, 5, CMD_CLEAR_UPLOAD_BUFFER,
@@ -934,7 +896,6 @@ adapter_t *adapter_open_pickit (void)
     a->adapter.read_data = pickit_read_data;
     a->adapter.erase_chip = pickit_erase_chip;
     a->adapter.program_word = pickit_program_word;
-    a->adapter.program_row128 = pickit_program_row128;
-    a->adapter.program_row32 = pickit_program_row32;
+    a->adapter.program_row = pickit_program_row;
     return &a->adapter;
 }
