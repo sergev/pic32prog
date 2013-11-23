@@ -22,6 +22,7 @@
 
 typedef struct {
     unsigned        boot_kbytes;
+    unsigned        devcfg_offset;
     unsigned        bytes_per_row;
     const unsigned  *pe_code;
     unsigned        pe_nwords;
@@ -37,10 +38,10 @@ struct _target_t {
     unsigned        flash_bytes;
 };
 
-                                  /*-Boot-Row---Code--------Nwords-Version-*/
-static const family_t family_mx1 = { 3,   128,  pic32_pemx1, 422,  0x0301 };
-static const family_t family_mx3 = { 12,  512,  pic32_pemx3, 1044, 0x0201 };
-static const family_t family_mz  = { 160, 2048, pic32_pemz,  1052, 0x0502 };
+                                 /*-Boot-Devcfg--Row---Code--------Nwords-Version-*/
+static const family_t family_mx1 = { 3,  0x0bf0, 128,  pic32_pemx1, 422,  0x0301 };
+static const family_t family_mx3 = { 12, 0x2ff0, 512,  pic32_pemx3, 1044, 0x0201 };
+static const family_t family_mz  = { 80, 0xffc0, 2048, pic32_pemz,  1052, 0x0502 };
 
 static const struct {
     unsigned        devid;
@@ -291,23 +292,28 @@ unsigned target_boot_bytes (target_t *t)
     return t->family->boot_kbytes * 1024;
 }
 
+unsigned target_devcfg_offset (target_t *t)
+{
+    return t->family->devcfg_offset;
+}
+
 /*
  * Use PE for reading/writing/erasing memory.
  */
-void target_use_executable (target_t *t)
+void target_use_executive (target_t *t)
 {
-    if (t->adapter->load_executable != 0)
-        t->adapter->load_executable (t->adapter, t->family->pe_code,
+    if (t->adapter->load_executive != 0)
+        t->adapter->load_executive (t->adapter, t->family->pe_code,
             t->family->pe_nwords, t->family->pe_version);
 }
 
 void target_print_devcfg (target_t *t)
 {
-    unsigned boot_bytes = target_boot_bytes (t);
-    unsigned devcfg3 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 16);
-    unsigned devcfg2 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 12);
-    unsigned devcfg1 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 8);
-    unsigned devcfg0 = t->adapter->read_word (t->adapter, 0x1fc00000 + boot_bytes - 4);
+    unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset (t);
+    unsigned devcfg3 = t->adapter->read_word (t->adapter, devcfg_addr);
+    unsigned devcfg2 = t->adapter->read_word (t->adapter, devcfg_addr + 4);
+    unsigned devcfg1 = t->adapter->read_word (t->adapter, devcfg_addr + 8);
+    unsigned devcfg0 = t->adapter->read_word (t->adapter, devcfg_addr + 12);
     if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
         devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
         return;
@@ -721,6 +727,7 @@ void target_verify_block (target_t *t, unsigned addr,
 {
     unsigned i, word, expected, block[256];
 
+//fprintf (stderr, "%s: addr=%08x, nwords=%u, data=%08x...\n", __func__, addr, nwords, data[0]);
     if (t->adapter->verify_data != 0) {
         t->adapter->verify_data (t->adapter, virt_to_phys (addr), nwords, data);
         return;
@@ -795,11 +802,32 @@ void target_program_block (target_t *t, unsigned addr,
 }
 
 /*
- * Write one word.
+ * Program the configuration registers.
  */
-void target_program_word (target_t *t, unsigned addr, unsigned word)
+void target_program_devcfg (target_t *t, unsigned devcfg0,
+        unsigned devcfg1, unsigned devcfg2, unsigned devcfg3)
 {
-    addr = virt_to_phys (addr);
-    //fprintf (stderr, "target_program_word (%08x) = %08x\n", addr, word);
-    t->adapter->program_word (t->adapter, addr, word);
+    unsigned addr = 0x1fc00000 + t->family->devcfg_offset;
+
+//fprintf (stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, devcfg0, devcfg1, devcfg2, devcfg3);
+    if (t->family->pe_version >= 0x0500) {
+        /* Since pic32mz, the programming executive */
+        t->adapter->program_quad_word (t->adapter, addr, devcfg3,
+            devcfg2, devcfg1, devcfg0);
+
+//unsigned cfg3 = t->adapter->read_word (t->adapter, addr);
+//unsigned cfg2 = t->adapter->read_word (t->adapter, addr + 4);
+//unsigned cfg1 = t->adapter->read_word (t->adapter, addr + 8);
+//unsigned cfg0 = t->adapter->read_word (t->adapter, addr + 12);
+        return;
+    }
+
+    t->adapter->program_word (t->adapter, addr, devcfg3);
+    t->adapter->program_word (t->adapter, addr + 4, devcfg2);
+    t->adapter->program_word (t->adapter, addr + 8, devcfg1);
+    t->adapter->program_word (t->adapter, addr + 12, devcfg0);
+//unsigned cfg3 = t->adapter->read_word (t->adapter, addr);
+//unsigned cfg2 = t->adapter->read_word (t->adapter, addr + 4);
+//unsigned cfg1 = t->adapter->read_word (t->adapter, addr + 8);
+//unsigned cfg0 = t->adapter->read_word (t->adapter, addr + 12);
 }

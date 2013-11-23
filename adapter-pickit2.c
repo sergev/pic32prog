@@ -33,7 +33,7 @@ typedef struct {
     hid_device *hiddev;
 
     unsigned char reply [64];
-    unsigned use_executable;
+    unsigned use_executive;
     unsigned serial_execution_mode;
 
 } pickit_adapter_t;
@@ -145,15 +145,15 @@ static void serial_execution (pickit_adapter_t *a)
 }
 
 /*
- * Download programming executable (PE).
+ * Download programming executive (PE).
  */
-static void pickit_load_executable (adapter_t *adapter,
+static void pickit_load_executive (adapter_t *adapter,
     const unsigned *pe, unsigned nwords, unsigned pe_version)
 {
     pickit_adapter_t *a = (pickit_adapter_t*) adapter;
 
-    //fprintf (stderr, "%s: load_executable\n", a->name);
-    a->use_executable = 1;
+    //fprintf (stderr, "%s: load_executive\n", a->name);
+    a->use_executive = 1;
     serial_execution (a);
 
 #define WORD_AS_BYTES(w)  (unsigned char) (w), \
@@ -480,9 +480,10 @@ static unsigned pickit_read_word (adapter_t *adapter, unsigned addr)
            (a->reply[3] << 16) | (a->reply[4] << 24);
     unsigned value2 = a->reply[5] | (a->reply[6] << 8) |
            (a->reply[7] << 16) | (a->reply[8] << 24);
-//fprintf (stderr, "    %08x -> %08x %08x\n", addr, value, value2);
     value >>= 1;
     value |= value2 & 0x80000000;
+    if (debug_level > 0)
+        fprintf (stderr, "%s: %08x -> %08x\n", __func__, addr, value);
     return value;
 }
 
@@ -496,8 +497,8 @@ static void pickit_read_data (adapter_t *adapter,
     unsigned char buf [64];
     unsigned words_read;
 
-    //fprintf (stderr, "%s: read %d bytes from %08x\n", a->name, nwords*4, addr);
-    if (! a->use_executable) {
+//fprintf (stderr, "%s: read %d bytes from %08x\n", a->name, nwords*4, addr);
+    if (! a->use_executive) {
         /* Without PE. */
         for (; nwords > 0; nwords--) {
             *data++ = pickit_read_word (adapter, addr);
@@ -537,6 +538,7 @@ static void pickit_read_data (adapter_t *adapter,
                 CMD_UPLOAD_DATA_NOLEN);
             pickit_recv (a);
             memcpy (data, a->reply, 64);
+//fprintf (stderr, "   ...%08x...\n", data[0]);
             data += 64/4;
             words_read += 64/4;
 
@@ -585,7 +587,7 @@ static void pickit_program_word (adapter_t *adapter,
 
     if (debug_level > 0)
         fprintf (stderr, "%s: program word at %08x: %08x\n", a->name, addr, word);
-    if (! a->use_executable) {
+    if (! a->use_executive) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
@@ -619,6 +621,66 @@ static void pickit_program_word (adapter_t *adapter,
 }
 
 /*
+ * Write 4 words to flash memory.
+ */
+static void pickit_program_quad_word (adapter_t *adapter, unsigned addr,
+    unsigned word0, unsigned word1, unsigned word2, unsigned word3)
+{
+    pickit_adapter_t *a = (pickit_adapter_t*) adapter;
+
+    if (debug_level > 0)
+        fprintf (stderr, "%s: program quad word at %08x: %08x-%08x-%08x-%08x\n",
+            a->name, addr, word0, word1, word2, word3);
+    if (! a->use_executive) {
+        /* Without PE. */
+        fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
+        exit (-1);
+    }
+
+    /* Use PE to write flash memory. */
+    pickit_send (a, 37, CMD_CLEAR_UPLOAD_BUFFER,
+        CMD_EXECUTE_SCRIPT, 33,
+            SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                0, 0, 13, 0,                    // QUAD_WORD_PROGRAM
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                (unsigned char) addr,
+                (unsigned char) (addr >> 8),
+                (unsigned char) (addr >> 16),
+                (unsigned char) (addr >> 24),
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                (unsigned char) word0,
+                (unsigned char) (word0 >> 8),
+                (unsigned char) (word0 >> 16),
+                (unsigned char) (word0 >> 24),
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                (unsigned char) word1,
+                (unsigned char) (word1 >> 8),
+                (unsigned char) (word1 >> 16),
+                (unsigned char) (word1 >> 24),
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                (unsigned char) word2,
+                (unsigned char) (word2 >> 8),
+                (unsigned char) (word2 >> 16),
+                (unsigned char) (word2 >> 24),
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                (unsigned char) word3,
+                (unsigned char) (word3 >> 8),
+                (unsigned char) (word3 >> 16),
+                (unsigned char) (word3 >> 24),
+            SCRIPT_JT2_GET_PE_RESP,
+        CMD_UPLOAD_DATA);
+    pickit_recv (a);
+    //fprintf (stderr, "%s: word program PE response %u bytes: %02x...\n",
+    //  a->name, a->reply[0], a->reply[1]);
+    if (a->reply[0] != 4 || a->reply[1] != 0) { // response code 0 = success
+        fprintf (stderr, "%s: failed to program quad word at %08x, reply = %02x-%02x-%02x-%02x-%02x\n",
+            a->name, addr, a->reply[0], a->reply[1], a->reply[2], a->reply[3], a->reply[4]);
+        exit (-1);
+    }
+}
+
+/*
  * Flash write row of memory.
  */
 static void pickit_program_row (adapter_t *adapter, unsigned addr,
@@ -629,7 +691,7 @@ static void pickit_program_row (adapter_t *adapter, unsigned addr,
 
     if (debug_level > 0)
         fprintf (stderr, "%s: row program %u bytes at %08x\n", a->name, bytes_per_row, addr);
-    if (! a->use_executable) {
+    if (! a->use_executive) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
@@ -891,11 +953,12 @@ adapter_t *adapter_open_pickit (void)
     /* User functions. */
     a->adapter.close = pickit_close;
     a->adapter.get_idcode = pickit_get_idcode;
-    a->adapter.load_executable = pickit_load_executable;
+    a->adapter.load_executive = pickit_load_executive;
     a->adapter.read_word = pickit_read_word;
     a->adapter.read_data = pickit_read_data;
     a->adapter.erase_chip = pickit_erase_chip;
     a->adapter.program_word = pickit_program_word;
     a->adapter.program_row = pickit_program_row;
+    a->adapter.program_quad_word = pickit_program_quad_word;
     return &a->adapter;
 }

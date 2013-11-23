@@ -53,7 +53,7 @@ typedef struct {
     unsigned dir_control;
 
     unsigned mhz;
-    unsigned use_executable;
+    unsigned use_executive;
     unsigned serial_execution_mode;
 } mpsse_adapter_t;
 
@@ -609,7 +609,7 @@ static void mpsse_read_data (adapter_t *adapter,
     unsigned words_read, i;
 
     //fprintf (stderr, "%s: read %d bytes from %08x\n", a->name, nwords*4, addr);
-    if (! a->use_executable) {
+    if (! a->use_executive) {
         /* Without PE. */
         for (; nwords > 0; nwords--) {
             *data++ = mpsse_read_word (adapter, addr);
@@ -639,14 +639,14 @@ static void mpsse_read_data (adapter_t *adapter,
 }
 
 /*
- * Download programming executable (PE).
+ * Download programming executive (PE).
  */
-static void mpsse_load_executable (adapter_t *adapter,
+static void mpsse_load_executive (adapter_t *adapter,
     const unsigned *pe, unsigned nwords, unsigned pe_version)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
-    a->use_executable = 1;
+    a->use_executive = 1;
     serial_execution (a);
 
     if (debug_level > 0)
@@ -756,7 +756,7 @@ static void mpsse_program_word (adapter_t *adapter,
 
     if (debug_level > 0)
         fprintf (stderr, "%s: program word at %08x: %08x\n", a->name, addr, word);
-    if (! a->use_executable) {
+    if (! a->use_executive) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
@@ -789,7 +789,7 @@ static void mpsse_program_row (adapter_t *adapter, unsigned addr,
 
     if (debug_level > 0)
         fprintf (stderr, "%s: row program %u bytes at %08x\n", a->name, bytes_per_row, addr);
-    if (! a->use_executable) {
+    if (! a->use_executive) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
         exit (-1);
@@ -827,7 +827,7 @@ static void mpsse_verify_data (adapter_t *adapter,
     unsigned data_crc, flash_crc;
 
     //fprintf (stderr, "%s: verify %d words at %08x\n", a->name, nwords, addr);
-    if (! a->use_executable) {
+    if (! a->use_executive) {
         /* Without PE. */
         fprintf (stderr, "%s: slow verify not implemented yet.\n", a->name);
         exit (-1);
@@ -1073,7 +1073,7 @@ failed: usb_release_interface (a->usbdev, 0);
     /* User functions. */
     a->adapter.close = mpsse_close;
     a->adapter.get_idcode = mpsse_get_idcode;
-    a->adapter.load_executable = mpsse_load_executable;
+    a->adapter.load_executive = mpsse_load_executive;
     a->adapter.read_word = mpsse_read_word;
     a->adapter.read_data = mpsse_read_data;
     a->adapter.verify_data = mpsse_verify_data;
