@@ -782,13 +782,14 @@ static void mpsse_program_word (adapter_t *adapter,
  * Flash write row of memory.
  */
 static void mpsse_program_row (adapter_t *adapter, unsigned addr,
-    unsigned *data, unsigned bytes_per_row)
+    unsigned *data, unsigned words_per_row)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
     int i;
 
     if (debug_level > 0)
-        fprintf (stderr, "%s: row program %u bytes at %08x\n", a->name, bytes_per_row, addr);
+        fprintf (stderr, "%s: row program %u words at %08x\n",
+            a->name, words_per_row, addr);
     if (! a->use_executive) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
@@ -797,12 +798,12 @@ static void mpsse_program_row (adapter_t *adapter, unsigned addr,
 
     /* Use PE to write flash memory. */
     mpsse_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | (bytes_per_row / 4));
+    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | words_per_row);
     mpsse_flush_output (a);
     xfer_fastdata (a, addr);                    /* Send address. */
 
     /* Download data. */
-    for (i = 0; i < bytes_per_row/4; i++) {
+    for (i = 0; i < words_per_row; i++) {
         if ((i & 7) == 0)
             mpsse_flush_output (a);
         xfer_fastdata (a, *data++);             /* Send word. */
@@ -971,7 +972,7 @@ found:
         }
     }
 
-#if ! defined (__CYGWIN32__) && ! defined (MINGW32)
+#if ! defined (__CYGWIN32__) && ! defined (MINGW32) && ! defined (__APPLE__)
     char driver_name [100];
     if (usb_get_driver_np (a->usbdev, 0, driver_name, sizeof(driver_name)) == 0) {
 	if (usb_detach_kernel_driver_np (a->usbdev, 0) < 0) {

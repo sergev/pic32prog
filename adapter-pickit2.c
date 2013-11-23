@@ -684,13 +684,14 @@ static void pickit_program_quad_word (adapter_t *adapter, unsigned addr,
  * Flash write row of memory.
  */
 static void pickit_program_row (adapter_t *adapter, unsigned addr,
-    unsigned *data, unsigned bytes_per_row)
+    unsigned *data, unsigned words_per_row)
 {
     pickit_adapter_t *a = (pickit_adapter_t*) adapter;
     unsigned i;
 
     if (debug_level > 0)
-        fprintf (stderr, "%s: row program %u bytes at %08x\n", a->name, bytes_per_row, addr);
+        fprintf (stderr, "%s: row program %u words at %08x\n",
+            a->name, words_per_row, addr);
     if (! a->use_executive) {
         /* Without PE. */
         fprintf (stderr, "%s: slow flash write not implemented yet.\n", a->name);
@@ -702,7 +703,7 @@ static void pickit_program_row (adapter_t *adapter, unsigned addr,
         CMD_EXECUTE_SCRIPT, 12,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
             SCRIPT_JT2_XFRFASTDAT_LIT,
-		bytes_per_row/4, 0, 0, 0,                     // PROGRAM ROW
+		words_per_row, 0, 0, 0,         // PROGRAM ROW
 	    SCRIPT_JT2_XFRFASTDAT_LIT,
 		(unsigned char) addr,
 		(unsigned char) (addr >> 8),
@@ -710,7 +711,7 @@ static void pickit_program_row (adapter_t *adapter, unsigned addr,
 		(unsigned char) (addr >> 24));
 
     /* Download data. */
-    if (bytes_per_row == 128) {
+    if (words_per_row == 32) {
         /* MX1/2 family. */
         download_data (a, data, 15, 1);
         download_data (a, data+15, 15, 0);
@@ -725,7 +726,7 @@ static void pickit_program_row (adapter_t *adapter, unsigned addr,
                 SCRIPT_LOOP, 1, 31);
     } else {
         /* MX3/4/5/6/7 or MZ family. */
-        for (i = 0; i < bytes_per_row/256; i++) {
+        for (i = 0; i < words_per_row/64; i++) {
             /* Download 256 bytes of data. */
             download_data (a, data, 15, 1);
             download_data (a, data+15, 15, 0);
@@ -881,6 +882,8 @@ adapter_t *adapter_open_pickit (void)
 
     case STATUS_VDD_GND_ON | STATUS_VPP_GND_ON:
         /* Enable power to the board. */
+        if (debug_level > 0)
+            fprintf (stderr, "%s: enable power\n", a->name);
         pickit_send (a, 4, CMD_EXECUTE_SCRIPT, 2,
             SCRIPT_VDD_GND_OFF,
             SCRIPT_VDD_ON);

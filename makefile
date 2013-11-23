@@ -1,8 +1,8 @@
 CC              = gcc
 
-SVNVERS         = $(shell head -n4 .svn/entries | tail -n1)
+SVNVERS         = $(shell svnversion)
 UNAME           = $(shell uname)
-CFLAGS          = -Wall -g -O -I/opt/local/include -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
+CFLAGS          = -Wall -g -O -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -g
 
 # Linux
@@ -20,10 +20,16 @@ endif
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o
 
-# Olimex ARM-USB-Tiny JTAG adapter: not finished yet.
-CFLAGS         += -DUSE_MPSSE
-PROG_OBJS      += adapter-mpsse.o
-LIBS           += -L/opt/local/lib -lusb
+# Olimex ARM-USB-Tiny JTAG adapter: requires libusb-0.1
+CFLAGS          += -DUSE_MPSSE
+PROG_OBJS       += adapter-mpsse.o
+ifeq ($(UNAME),Linux)
+    LIBS        += -lusb
+endif
+ifeq ($(UNAME),Darwin)
+    CFLAGS      += -I/opt/local/include/libusb-legacy
+    LIBS        += -L/opt/local/lib/libusb-legacy -lusb-legacy
+endif
 
 all:            pic32prog
 
@@ -61,5 +67,5 @@ adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi.h pic32.h
 adapter-mpsse.o: adapter-mpsse.c adapter.h
 adapter-pickit2.o: adapter-pickit2.c adapter.h pickit2.h pic32.h
 executive.o: executive.c pic32.h
-pic32prog.o: pic32prog.c target.h localize.h .svn/entries
+pic32prog.o: pic32prog.c target.h localize.h
 target.o: target.c target.h adapter.h localize.h pic32.h

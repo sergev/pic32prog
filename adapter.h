@@ -24,7 +24,7 @@ struct _adapter_t {
     void (*program_block) (adapter_t *a, unsigned addr, unsigned *data);
     void (*program_quad_word) (adapter_t *a, unsigned addr, unsigned word0,
         unsigned word1, unsigned word2, unsigned word3);
-    void (*program_row) (adapter_t *a, unsigned addr, unsigned *data, unsigned bytes_per_row);
+    void (*program_row) (adapter_t *a, unsigned addr, unsigned *data, unsigned words_per_row);
     void (*program_word) (adapter_t *a, unsigned addr, unsigned word);
     unsigned (*read_word) (adapter_t *a, unsigned addr);
     void (*erase_chip) (adapter_t *a);
