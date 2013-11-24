@@ -57,7 +57,7 @@ typedef struct {
 
 static void pickit_send_buf (pickit_adapter_t *a, unsigned char *buf, unsigned nbytes)
 {
-    if (debug_level > 0) {
+    if (debug_level > 1) {
         int k;
         fprintf (stderr, "---Send");
         for (k=0; k<nbytes; ++k) {
@@ -90,7 +90,7 @@ static void pickit_recv (pickit_adapter_t *a)
         fprintf (stderr, "%s: error receiving packet\n", a->name);
         exit (-1);
     }
-    if (debug_level > 0) {
+    if (debug_level > 1) {
         int k;
         fprintf (stderr, "--->>>>");
         for (k=0; k<64; ++k) {
@@ -245,7 +245,7 @@ static void pickit_load_executive (adapter_t *adapter,
 
     // Download the PE itself (step 7-B)
     if (debug_level > 0)
-        fprintf (stderr, "%s: download PE\n", a->name);
+        fprintf (stderr, "%s: download PE code\n", a->name);
     int nloops = (nwords + 9) / 10;
     for (i=0; i<nloops; i++, pe+=10) {          // download 10 words at a time
         pickit_send (a, 55, CMD_CLEAR_DOWNLOAD_BUFFER,

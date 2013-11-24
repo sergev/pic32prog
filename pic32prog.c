@@ -24,7 +24,7 @@
 #include "localize.h"
 
 #define VERSION         "1."SVNVERSION
-#define BLOCKSZ         1024
+#define MINBLOCKSZ      128
 #define FLASHV_BASE     0x9d000000
 #define BOOTV_BASE      0x9fc00000
 #define FLASHP_BASE     0x1d000000
@@ -39,8 +39,9 @@
 /* Data to write */
 unsigned char boot_data [BOOT_BYTES];
 unsigned char flash_data [FLASH_BYTES];
-unsigned char boot_dirty [BOOT_BYTES / BLOCKSZ];
-unsigned char flash_dirty [FLASH_BYTES / BLOCKSZ];
+unsigned char boot_dirty [BOOT_BYTES / MINBLOCKSZ];
+unsigned char flash_dirty [FLASH_BYTES / MINBLOCKSZ];
+unsigned blocksz;               /* Size of flash memory block */
 unsigned boot_used;
 unsigned flash_used;
 unsigned boot_bytes;
@@ -91,28 +92,24 @@ void store_data (unsigned address, unsigned byte)
         /* Boot code, virtual. */
         offset = address - BOOTV_BASE;
         boot_data [offset] = byte;
-        boot_dirty [offset / BLOCKSZ] = 1;
         boot_used = 1;
 
     } else if (address >= BOOTP_BASE && address < BOOTP_BASE + BOOT_BYTES) {
         /* Boot code, physical. */
         offset = address - BOOTP_BASE;
         boot_data [offset] = byte;
-        boot_dirty [offset / BLOCKSZ] = 1;
         boot_used = 1;
 
     } else if (address >= FLASHV_BASE && address < FLASHV_BASE + FLASH_BYTES) {
         /* Main flash memory, virtual. */
         offset = address - FLASHV_BASE;
         flash_data [offset] = byte;
-        flash_dirty [offset / BLOCKSZ] = 1;
         flash_used = 1;
 
     } else if (address >= FLASHP_BASE && address < FLASHP_BASE + FLASH_BYTES) {
         /* Main flash memory, physical. */
         offset = address - FLASHP_BASE;
         flash_data [offset] = byte;
-        flash_dirty [offset / BLOCKSZ] = 1;
         flash_used = 1;
     } else {
         /* Ignore incorrect data. */
@@ -308,14 +305,28 @@ void interrupted (int signum)
 
 /*
  * Check that the boot block, containing devcfg registers,
- * has some other data.
+ * has some useful data.
  */
-static int is_devcfg_block_dirty()
+static int is_flash_block_dirty (unsigned offset)
 {
-    int offset = devcfg_offset / BLOCKSZ * BLOCKSZ;
     int i;
 
-    for (i=0; i<BLOCKSZ; i++, offset++) {
+    for (i=0; i<blocksz; i++, offset++) {
+        if (flash_data [offset] != 0xff)
+            return 1;
+    }
+    return 0;
+}
+
+/*
+ * Check that the boot block, containing devcfg registers,
+ * has some other data.
+ */
+static int is_boot_block_dirty (unsigned offset)
+{
+    int i;
+
+    for (i=0; i<blocksz; i++, offset++) {
         /* Skip devcfg registers. */
         if (offset >= devcfg_offset && offset < devcfg_offset+16)
             continue;
@@ -362,7 +373,7 @@ void program_block (target_t *mc, unsigned addr)
         data = flash_data;
         offset = addr - FLASHP_BASE;
     }
-    target_program_block (mc, addr, BLOCKSZ/4, (unsigned*) (data + offset));
+    target_program_block (mc, addr, blocksz/4, (unsigned*) (data + offset));
 }
 
 int verify_block (target_t *mc, unsigned addr)
@@ -383,7 +394,7 @@ int verify_block (target_t *mc, unsigned addr)
         data = flash_data;
         offset = addr - FLASHP_BASE;
     }
-    target_verify_block (mc, addr, BLOCKSZ/4, (unsigned*) (data + offset));
+    target_verify_block (mc, addr, blocksz/4, (unsigned*) (data + offset));
     return 1;
 }
 
@@ -402,6 +413,7 @@ void do_program (char *filename)
     }
     flash_bytes = target_flash_bytes (target);
     boot_bytes = target_boot_bytes (target);
+    blocksz = target_block_size (target);
     devcfg_offset = target_devcfg_offset (target);
     printf (_("    Processor: %s\n"), target_cpu_name (target));
     printf (_(" Flash memory: %d kbytes\n"), flash_bytes / 1024);
@@ -414,7 +426,6 @@ void do_program (char *filename)
         devcfg2 = 0xfff879d9;
         devcfg3 = 0x3affffff;
     }
-    boot_dirty [devcfg_offset / BLOCKSZ] = is_devcfg_block_dirty();
 
     if (! verify_only) {
         /* Erase flash. */
@@ -422,11 +433,23 @@ void do_program (char *filename)
     }
     target_use_executive (target);
 
+    /* Compute dirty bits for every block. */
+    if (flash_used) {
+        for (addr=0; addr<flash_bytes; addr+=blocksz) {
+            flash_dirty [addr / blocksz] = is_flash_block_dirty (addr);
+        }
+    }
+    if (boot_used) {
+        for (addr=0; addr<boot_bytes; addr+=blocksz) {
+            boot_dirty [addr / blocksz] = is_boot_block_dirty (addr);
+        }
+    }
+
     /* Compute length of progress indicator for flash memory. */
     for (progress_step=1; ; progress_step<<=1) {
         progress_len = 0;
-        for (addr=0; addr<flash_bytes; addr+=BLOCKSZ) {
-            if (flash_dirty [addr / BLOCKSZ])
+        for (addr=0; addr<flash_bytes; addr+=blocksz) {
+            if (flash_dirty [addr / blocksz])
                 progress_len++;
         }
         if (progress_len / progress_step < 64)
@@ -435,8 +458,8 @@ void do_program (char *filename)
 
     /* Compute length of progress indicator for boot memory. */
     boot_progress_len = 1;
-    for (addr=0; addr<boot_bytes; addr+=BLOCKSZ) {
-        if (boot_dirty [addr / BLOCKSZ])
+    for (addr=0; addr<boot_bytes; addr+=blocksz) {
+        if (boot_dirty [addr / blocksz])
             boot_progress_len++;
     }
 
@@ -448,8 +471,8 @@ void do_program (char *filename)
             print_symbols ('.', progress_len);
             print_symbols ('\b', progress_len);
             fflush (stdout);
-            for (addr=0; addr<flash_bytes; addr+=BLOCKSZ) {
-                if (flash_dirty [addr / BLOCKSZ]) {
+            for (addr=0; addr<flash_bytes; addr+=blocksz) {
+                if (flash_dirty [addr / blocksz]) {
                     program_block (target, addr + FLASHV_BASE);
                     progress (progress_step);
                 }
@@ -461,18 +484,18 @@ void do_program (char *filename)
             print_symbols ('.', boot_progress_len);
             print_symbols ('\b', boot_progress_len);
             fflush (stdout);
-            for (addr=0; addr<boot_bytes; addr+=BLOCKSZ) {
-                if (boot_dirty [addr / BLOCKSZ]) {
+            for (addr=0; addr<boot_bytes; addr+=blocksz) {
+                if (boot_dirty [addr / blocksz]) {
                     program_block (target, addr + BOOTV_BASE);
                     progress (1);
                 }
             }
             printf (_("# done      \n"));
-            if (! boot_dirty [devcfg_offset / BLOCKSZ]) {
+            if (! boot_dirty [devcfg_offset / blocksz]) {
                 /* Write chip configuration. */
                 target_program_devcfg (target,
                     devcfg0, devcfg1, devcfg2, devcfg3);
-                boot_dirty [devcfg_offset / BLOCKSZ] = 1;
+                boot_dirty [devcfg_offset / blocksz] = 1;
             }
         }
     }
@@ -481,8 +504,8 @@ void do_program (char *filename)
         print_symbols ('.', progress_len);
         print_symbols ('\b', progress_len);
         fflush (stdout);
-        for (addr=0; addr<flash_bytes; addr+=BLOCKSZ) {
-            if (flash_dirty [addr / BLOCKSZ]) {
+        for (addr=0; addr<flash_bytes; addr+=blocksz) {
+            if (flash_dirty [addr / blocksz]) {
                 progress (progress_step);
                 if (! verify_block (target, addr + FLASHV_BASE))
                     exit (0);
@@ -495,8 +518,8 @@ void do_program (char *filename)
         print_symbols ('.', boot_progress_len);
         print_symbols ('\b', boot_progress_len);
         fflush (stdout);
-        for (addr=0; addr<boot_bytes; addr+=BLOCKSZ) {
-            if (boot_dirty [addr / BLOCKSZ]) {
+        for (addr=0; addr<boot_bytes; addr+=blocksz) {
+            if (boot_dirty [addr / blocksz]) {
                 progress (1);
                 if (! verify_block (target, addr + BOOTV_BASE))
                     exit (0);
@@ -512,7 +535,7 @@ void do_program (char *filename)
 void do_read (char *filename, unsigned base, unsigned nbytes)
 {
     FILE *fd;
-    unsigned len, addr, data [BLOCKSZ/4], progress_step;
+    unsigned len, addr, data [256], progress_step;
     void *t0;
 
     fd = fopen (filename, "wb");
@@ -521,6 +544,9 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
         exit (1);
     }
     printf (_("       Memory: total %d bytes\n"), nbytes);
+
+    /* Use 1kbyte blocks. */
+    blocksz = 1024;
 
     /* Open and detect the device. */
     atexit (quit);
@@ -531,7 +557,7 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
     }
     target_use_executive (target);
     for (progress_step=1; ; progress_step<<=1) {
-        len = 1 + nbytes / progress_step / BLOCKSZ;
+        len = 1 + nbytes / progress_step / blocksz;
         if (len < 64)
             break;
     }
@@ -542,10 +568,10 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
 
     progress_count = 0;
     t0 = fix_time ();
-    for (addr=base; addr-base<nbytes; addr+=BLOCKSZ) {
+    for (addr=base; addr-base<nbytes; addr+=blocksz) {
         progress (progress_step);
-        target_read_block (target, addr, BLOCKSZ/4, data);
-        if (fwrite (data, 1, BLOCKSZ, fd) != BLOCKSZ) {
+        target_read_block (target, addr, blocksz/4, data);
+        if (fwrite (data, 1, blocksz, fd) != blocksz) {
             fprintf (stderr, "%s: write error!\n", filename);
             exit (1);
         }

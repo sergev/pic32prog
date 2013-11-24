@@ -24,9 +24,11 @@ PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
 CFLAGS          += -DUSE_MPSSE
 PROG_OBJS       += adapter-mpsse.o
 ifeq ($(UNAME),Linux)
+    # Use 'sudo port install libusb-0.1-dev'
     LIBS        += -lusb
 endif
 ifeq ($(UNAME),Darwin)
+    # Use 'sudo port install libusb-legacy'
     CFLAGS      += -I/opt/local/include/libusb-legacy
     LIBS        += -L/opt/local/lib/libusb-legacy -lusb-legacy
 endif

@@ -297,6 +297,11 @@ unsigned target_devcfg_offset (target_t *t)
     return t->family->devcfg_offset;
 }
 
+unsigned target_block_size (target_t *t)
+{
+    return t->family->bytes_per_row;
+}
+
 /*
  * Use PE for reading/writing/erasing memory.
  */
@@ -711,7 +716,7 @@ void target_read_block (target_t *t, unsigned addr,
         unsigned n = nwords;
         if (n > 256)
             n = 256;
-        t->adapter->read_data (t->adapter, addr, 256, data);
+        t->adapter->read_data (t->adapter, addr, n, data);
         addr += n<<2;
         data += n;
         nwords -= n;
@@ -725,7 +730,7 @@ void target_read_block (target_t *t, unsigned addr,
 void target_verify_block (target_t *t, unsigned addr,
     unsigned nwords, unsigned *data)
 {
-    unsigned i, word, expected, block[256];
+    unsigned i, word, expected, block[512];
 
 //fprintf (stderr, "%s: addr=%08x, nwords=%u, data=%08x...\n", __func__, addr, nwords, data[0]);
     if (t->adapter->verify_data != 0) {
