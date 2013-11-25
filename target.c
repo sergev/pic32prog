@@ -20,10 +20,14 @@
 #include "localize.h"
 #include "pic32.h"
 
+typedef void print_func_t (target_t *t, unsigned cfg0,
+    unsigned cfg1, unsigned cfg2, unsigned cfg3);
+
 typedef struct {
     unsigned        boot_kbytes;
     unsigned        devcfg_offset;
     unsigned        bytes_per_row;
+    print_func_t    *print_devcfg;
     const unsigned  *pe_code;
     unsigned        pe_nwords;
     unsigned        pe_version;
@@ -38,10 +42,17 @@ struct _target_t {
     unsigned        flash_bytes;
 };
 
-                                 /*-Boot-Devcfg--Row---Code--------Nwords-Version-*/
-static const family_t family_mx1 = { 3,  0x0bf0, 128,  pic32_pemx1, 422,  0x0301 };
-static const family_t family_mx3 = { 12, 0x2ff0, 512,  pic32_pemx3, 1044, 0x0201 };
-static const family_t family_mz  = { 80, 0xffc0, 2048, pic32_pemz,  1052, 0x0502 };
+static print_func_t print_mx1;
+static print_func_t print_mx3;
+static print_func_t print_mz;
+
+                    /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
+static const
+family_t family_mx1 = { 3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
+static const
+family_t family_mx3 = { 12, 0x2ff0, 512,  print_mx3, pic32_pemx3, 1044, 0x0201 };
+static const
+family_t family_mz  = { 80, 0xffc0, 2048, print_mz,  pic32_pemz,  1052, 0x0502 };
 
 static const struct {
     unsigned        devid;
@@ -320,6 +331,1081 @@ void target_use_executive (target_t *t)
             t->family->pe_nwords, t->family->pe_version);
 }
 
+/*
+ * Print configuration for MX3/4/5/6/7 family.
+ */
+static void print_mx3 (target_t *t, unsigned cfg0,
+    unsigned cfg1, unsigned cfg2, unsigned cfg3)
+{
+    /*--------------------------------------
+     * Configuration register 0
+     */
+    printf ("    DEVCFG0 = %08x\n", cfg0);
+    if ((~cfg0 & MX3_CFG0_DEBUG_MASK) == MX3_CFG0_DEBUG_ENABLED)
+        printf ("                     %u Debugger enabled\n",
+            cfg0 & MX3_CFG0_DEBUG_MASK);
+    else
+        printf ("                     %u Debugger disabled\n",
+            cfg0 & MX3_CFG0_DEBUG_MASK);
+
+    switch (~cfg0 & MX3_CFG0_ICESEL_MASK) {
+    case MX3_CFG0_ICESEL_PAIR1:
+        printf ("                    %02x Use PGC1/PGD1\n", cfg0 & MX3_CFG0_ICESEL_MASK);
+        break;
+    case MX3_CFG0_ICESEL_PAIR2:
+        printf ("                    %02x Use PGC2/PGD2\n", cfg0 & MX3_CFG0_ICESEL_MASK);
+        break;
+    case MX3_CFG0_ICESEL_PAIR3:
+        printf ("                    %02x Use PGC3/PGD3\n", cfg0 & MX3_CFG0_ICESEL_MASK);
+        break;
+    case MX3_CFG0_ICESEL_PAIR4:
+        printf ("                    %02x Use PGC4/PGD4\n", cfg0 & MX3_CFG0_ICESEL_MASK);
+        break;
+    }
+
+    if (~cfg0 & MX3_CFG0_PWP_MASK)
+        printf ("                 %05x Program flash write protect\n",
+            cfg0 & MX3_CFG0_PWP_MASK);
+
+    if (~cfg0 & MX3_CFG0_BWP)
+        printf ("                       Boot flash write protect\n");
+    if (~cfg0 & MX3_CFG0_CP)
+        printf ("                       Code protect\n");
+
+    /*--------------------------------------
+     * Configuration register 1
+     */
+    printf ("    DEVCFG1 = %08x\n", cfg1);
+    switch (cfg1 & MX3_CFG1_FNOSC_MASK) {
+    case MX3_CFG1_FNOSC_FRC:
+        printf ("                     %u Fast RC oscillator\n", MX3_CFG1_FNOSC_FRC);
+        break;
+    case MX3_CFG1_FNOSC_FRCDIVPLL:
+        printf ("                     %u Fast RC oscillator with divide-by-N and PLL\n", MX3_CFG1_FNOSC_FRCDIVPLL);
+        break;
+    case MX3_CFG1_FNOSC_PRI:
+        printf ("                     %u Primary oscillator\n", MX3_CFG1_FNOSC_PRI);
+        break;
+    case MX3_CFG1_FNOSC_PRIPLL:
+        printf ("                     %u Primary oscillator with PLL\n", MX3_CFG1_FNOSC_PRIPLL);
+        break;
+    case MX3_CFG1_FNOSC_SEC:
+        printf ("                     %u Secondary oscillator\n", MX3_CFG1_FNOSC_SEC);
+        break;
+    case MX3_CFG1_FNOSC_LPRC:
+        printf ("                     %u Low-power RC oscillator\n", MX3_CFG1_FNOSC_LPRC);
+        break;
+    case MX3_CFG1_FNOSC_FRCDIV:
+        printf ("                     %u Fast RC oscillator with divide-by-N\n", MX3_CFG1_FNOSC_FRCDIV);
+        break;
+    default:
+        printf ("                     %u UNKNOWN\n", cfg1 & MX3_CFG1_FNOSC_MASK);
+        break;
+    }
+    if (cfg1 & MX3_CFG1_FSOSCEN)
+        printf ("                    %u  Secondary oscillator enabled\n",
+            MX3_CFG1_FSOSCEN >> 4);
+    if (cfg1 & MX3_CFG1_IESO)
+        printf ("                    %u  Internal-external switch over enabled\n",
+            MX3_CFG1_IESO >> 4);
+
+    switch (cfg1 & MX3_CFG1_POSCMOD_MASK) {
+    case MX3_CFG1_POSCMOD_EXT:
+        printf ("                   %u   Primary oscillator: External\n", MX3_CFG1_POSCMOD_EXT >> 8);
+        break;
+    case MX3_CFG1_POSCMOD_XT:
+        printf ("                   %u   Primary oscillator: XT\n", MX3_CFG1_POSCMOD_XT >> 8);
+        break;
+    case MX3_CFG1_POSCMOD_HS:
+        printf ("                   %u   Primary oscillator: HS\n", MX3_CFG1_POSCMOD_HS >> 8);
+        break;
+    case MX3_CFG1_POSCMOD_DISABLE:
+        printf ("                   %u   Primary oscillator: disabled\n", MX3_CFG1_POSCMOD_DISABLE >> 8);
+        break;
+    }
+    if (! (cfg1 & MX3_CFG1_OSCIOFNC))
+        printf ("                   %u   CLKO output active\n",
+            MX3_CFG1_OSCIOFNC >> 8);
+
+    switch (cfg1 & MX3_CFG1_FPBDIV_MASK) {
+    case MX3_CFG1_FPBDIV_1:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 1\n", MX3_CFG1_FPBDIV_1 >> 12);
+        break;
+    case MX3_CFG1_FPBDIV_2:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 2\n", MX3_CFG1_FPBDIV_2 >> 12);
+        break;
+    case MX3_CFG1_FPBDIV_4:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 4\n", MX3_CFG1_FPBDIV_4 >> 12);
+        break;
+    case MX3_CFG1_FPBDIV_8:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 8\n", MX3_CFG1_FPBDIV_8 >> 12);
+        break;
+    }
+    if (cfg1 & MX3_CFG1_FCKM_DISABLE)
+        printf ("                  %u    Fail-safe clock monitor disable\n",
+            MX3_CFG1_FCKM_DISABLE >> 12);
+    if (cfg1 & MX3_CFG1_FCKS_DISABLE)
+        printf ("                  %u    Clock switching disable\n",
+            MX3_CFG1_FCKS_DISABLE >> 12);
+
+    switch (cfg1 & MX3_CFG1_WDTPS_MASK) {
+    case MX3_CFG1_WDTPS_1:
+        printf ("                %2x     Watchdog postscale: 1/1\n", MX3_CFG1_WDTPS_1 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_2:
+        printf ("                %2x     Watchdog postscale: 1/2\n", MX3_CFG1_WDTPS_2 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_4:
+        printf ("                %2x     Watchdog postscale: 1/4\n", MX3_CFG1_WDTPS_4 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_8:
+        printf ("                %2x     Watchdog postscale: 1/8\n", MX3_CFG1_WDTPS_8 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_16:
+        printf ("                %2x     Watchdog postscale: 1/16\n", MX3_CFG1_WDTPS_16 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_32:
+        printf ("                %2x     Watchdog postscale: 1/32\n", MX3_CFG1_WDTPS_32 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_64:
+        printf ("                %2x     Watchdog postscale: 1/64\n", MX3_CFG1_WDTPS_64 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_128:
+        printf ("                %2x     Watchdog postscale: 1/128\n", MX3_CFG1_WDTPS_128 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_256:
+        printf ("                %2x     Watchdog postscale: 1/256\n", MX3_CFG1_WDTPS_256 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_512:
+        printf ("                %2x     Watchdog postscale: 1/512\n", MX3_CFG1_WDTPS_512 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_1024:
+        printf ("                %2x     Watchdog postscale: 1/1024\n", MX3_CFG1_WDTPS_1024 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_2048:
+        printf ("                %2x     Watchdog postscale: 1/2048\n", MX3_CFG1_WDTPS_2048 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_4096:
+        printf ("                %2x     Watchdog postscale: 1/4096\n", MX3_CFG1_WDTPS_4096 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_8192:
+        printf ("                %2x     Watchdog postscale: 1/8192\n", MX3_CFG1_WDTPS_8192 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_16384:
+        printf ("                %2x     Watchdog postscale: 1/16384\n", MX3_CFG1_WDTPS_16384 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_32768:
+        printf ("                %2x     Watchdog postscale: 1/32768\n", MX3_CFG1_WDTPS_32768 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_65536:
+        printf ("                %2x     Watchdog postscale: 1/65536\n", MX3_CFG1_WDTPS_65536 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_131072:
+        printf ("                %2x     Watchdog postscale: 1/131072\n", MX3_CFG1_WDTPS_131072 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_262144:
+        printf ("                %2x     Watchdog postscale: 1/262144\n", MX3_CFG1_WDTPS_262144 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_524288:
+        printf ("                %2x     Watchdog postscale: 1/524288\n", MX3_CFG1_WDTPS_524288 >> 16);
+        break;
+    case MX3_CFG1_WDTPS_1048576:
+        printf ("                %2x     Watchdog postscale: 1/1048576\n", MX3_CFG1_WDTPS_1048576 >> 16);
+        break;
+    }
+    if (cfg1 & MX3_CFG1_FWDTEN)
+        printf ("                %u      Watchdog enable\n",
+            MX3_CFG1_FWDTEN >> 20);
+
+    /*--------------------------------------
+     * Configuration register 2
+     */
+    printf ("    DEVCFG2 = %08x\n", cfg2);
+    switch (cfg2 & MX3_CFG2_FPLLIDIV_MASK) {
+    case MX3_CFG2_FPLLIDIV_1:
+        printf ("                     %u PLL divider: 1/1\n", MX3_CFG2_FPLLIDIV_1);
+        break;
+    case MX3_CFG2_FPLLIDIV_2:
+        printf ("                     %u PLL divider: 1/2\n", MX3_CFG2_FPLLIDIV_2);
+        break;
+    case MX3_CFG2_FPLLIDIV_3:
+        printf ("                     %u PLL divider: 1/3\n", MX3_CFG2_FPLLIDIV_3);
+        break;
+    case MX3_CFG2_FPLLIDIV_4:
+        printf ("                     %u PLL divider: 1/4\n", MX3_CFG2_FPLLIDIV_4);
+        break;
+    case MX3_CFG2_FPLLIDIV_5:
+        printf ("                     %u PLL divider: 1/5\n", MX3_CFG2_FPLLIDIV_5);
+        break;
+    case MX3_CFG2_FPLLIDIV_6:
+        printf ("                     %u PLL divider: 1/6\n", MX3_CFG2_FPLLIDIV_6);
+        break;
+    case MX3_CFG2_FPLLIDIV_10:
+        printf ("                     %u PLL divider: 1/10\n", MX3_CFG2_FPLLIDIV_10);
+        break;
+    case MX3_CFG2_FPLLIDIV_12:
+        printf ("                     %u PLL divider: 1/12\n", MX3_CFG2_FPLLIDIV_12);
+        break;
+    }
+    switch (cfg2 & MX3_CFG2_FPLLMUL_MASK) {
+    case MX3_CFG2_FPLLMUL_15:
+        printf ("                    %u  PLL multiplier: 15x\n", MX3_CFG2_FPLLMUL_15 >> 4);
+        break;
+    case MX3_CFG2_FPLLMUL_16:
+        printf ("                    %u  PLL multiplier: 16x\n", MX3_CFG2_FPLLMUL_16 >> 4);
+        break;
+    case MX3_CFG2_FPLLMUL_17:
+        printf ("                    %u  PLL multiplier: 17x\n", MX3_CFG2_FPLLMUL_17 >> 4);
+        break;
+    case MX3_CFG2_FPLLMUL_18:
+        printf ("                    %u  PLL multiplier: 18x\n", MX3_CFG2_FPLLMUL_18 >> 4);
+        break;
+    case MX3_CFG2_FPLLMUL_19:
+        printf ("                    %u  PLL multiplier: 19x\n", MX3_CFG2_FPLLMUL_19 >> 4);
+        break;
+    case MX3_CFG2_FPLLMUL_20:
+        printf ("                    %u  PLL multiplier: 20x\n", MX3_CFG2_FPLLMUL_20 >> 4);
+        break;
+    case MX3_CFG2_FPLLMUL_21:
+        printf ("                    %u  PLL multiplier: 21x\n", MX3_CFG2_FPLLMUL_21 >> 4);
+        break;
+    case MX3_CFG2_FPLLMUL_24:
+        printf ("                    %u  PLL multiplier: 24x\n", MX3_CFG2_FPLLMUL_24 >> 4);
+        break;
+    }
+    switch (cfg2 & MX3_CFG2_UPLLIDIV_MASK) {
+    case MX3_CFG2_UPLLIDIV_1:
+        printf ("                   %u   USB PLL divider: 1/1\n", MX3_CFG2_UPLLIDIV_1 >> 8);
+        break;
+    case MX3_CFG2_UPLLIDIV_2:
+        printf ("                   %u   USB PLL divider: 1/2\n", MX3_CFG2_UPLLIDIV_2 >> 8);
+        break;
+    case MX3_CFG2_UPLLIDIV_3:
+        printf ("                   %u   USB PLL divider: 1/3\n", MX3_CFG2_UPLLIDIV_3 >> 8);
+        break;
+    case MX3_CFG2_UPLLIDIV_4:
+        printf ("                   %u   USB PLL divider: 1/4\n", MX3_CFG2_UPLLIDIV_4 >> 8);
+        break;
+    case MX3_CFG2_UPLLIDIV_5:
+        printf ("                   %u   USB PLL divider: 1/5\n", MX3_CFG2_UPLLIDIV_5 >> 8);
+        break;
+    case MX3_CFG2_UPLLIDIV_6:
+        printf ("                   %u   USB PLL divider: 1/6\n", MX3_CFG2_UPLLIDIV_6 >> 8);
+        break;
+    case MX3_CFG2_UPLLIDIV_10:
+        printf ("                   %u   USB PLL divider: 1/10\n", MX3_CFG2_UPLLIDIV_10 >> 8);
+        break;
+    case MX3_CFG2_UPLLIDIV_12:
+        printf ("                   %u   USB PLL divider: 1/12\n", MX3_CFG2_UPLLIDIV_12 >> 8);
+        break;
+    }
+    if (cfg2 & MX3_CFG2_UPLL_DISABLE)
+        printf ("                  %u    Disable USB PLL\n",
+            MX3_CFG2_UPLL_DISABLE >> 12);
+    else
+        printf ("                       Enable USB PLL\n");
+
+    switch (cfg2 & MX3_CFG2_FPLLODIV_MASK) {
+    case MX3_CFG2_FPLLODIV_1:
+        printf ("                 %u     PLL postscaler: 1/1\n", MX3_CFG2_FPLLODIV_1 >> 16);
+        break;
+    case MX3_CFG2_FPLLODIV_2:
+        printf ("                 %u     PLL postscaler: 1/2\n", MX3_CFG2_FPLLODIV_2 >> 16);
+        break;
+    case MX3_CFG2_FPLLODIV_4:
+        printf ("                 %u     PLL postscaler: 1/4\n", MX3_CFG2_FPLLODIV_4 >> 16);
+        break;
+    case MX3_CFG2_FPLLODIV_8:
+        printf ("                 %u     PLL postscaler: 1/8\n", MX3_CFG2_FPLLODIV_8 >> 16);
+        break;
+    case MX3_CFG2_FPLLODIV_16:
+        printf ("                 %u     PLL postscaler: 1/16\n", MX3_CFG2_FPLLODIV_16 >> 16);
+        break;
+    case MX3_CFG2_FPLLODIV_32:
+        printf ("                 %u     PLL postscaler: 1/32\n", MX3_CFG2_FPLLODIV_32 >> 16);
+        break;
+    case MX3_CFG2_FPLLODIV_64:
+        printf ("                 %u     PLL postscaler: 1/64\n", MX3_CFG2_FPLLODIV_64 >> 16);
+        break;
+    case MX3_CFG2_FPLLODIV_256:
+        printf ("                 %u     PLL postscaler: 1/128\n", MX3_CFG2_FPLLODIV_256 >> 16);
+        break;
+    }
+
+    /*--------------------------------------
+     * Configuration register 3
+     */
+    printf ("    DEVCFG3 = %08x\n", cfg3);
+    if (~cfg3 & MX3_CFG3_USERID_MASK)
+        printf ("                  %04x User-defined ID\n",
+            cfg3 & MX3_CFG3_USERID_MASK);
+
+    switch (cfg3 & MX3_CFG3_FSRSSEL_MASK) {
+    case MX3_CFG3_FSRSSEL_ALL:
+        printf ("                 %u     All irqs assigned to shadow set\n", MX3_CFG3_FSRSSEL_ALL >> 16);
+        break;
+    case MX3_CFG3_FSRSSEL_1:
+        printf ("                 %u     Assign irq priority 1 to shadow set\n", MX3_CFG3_FSRSSEL_1 >> 16);
+        break;
+    case MX3_CFG3_FSRSSEL_2:
+        printf ("                 %u     Assign irq priority 2 to shadow set\n", MX3_CFG3_FSRSSEL_2 >> 16);
+        break;
+    case MX3_CFG3_FSRSSEL_3:
+        printf ("                 %u     Assign irq priority 3 to shadow set\n", MX3_CFG3_FSRSSEL_3 >> 16);
+        break;
+    case MX3_CFG3_FSRSSEL_4:
+        printf ("                 %u     Assign irq priority 4 to shadow set\n", MX3_CFG3_FSRSSEL_4 >> 16);
+        break;
+    case MX3_CFG3_FSRSSEL_5:
+        printf ("                 %u     Assign irq priority 5 to shadow set\n", MX3_CFG3_FSRSSEL_5 >> 16);
+        break;
+    case MX3_CFG3_FSRSSEL_6:
+        printf ("                 %u     Assign irq priority 6 to shadow set\n", MX3_CFG3_FSRSSEL_6 >> 16);
+        break;
+    case MX3_CFG3_FSRSSEL_7:
+        printf ("                 %u     Assign irq priority 7 to shadow set\n", MX3_CFG3_FSRSSEL_7 >> 16);
+        break;
+    }
+    if (cfg3 & MX3_CFG3_FMIIEN)
+        printf ("               %u       Ethernet MII enabled\n",
+            MX3_CFG3_FMIIEN >> 24);
+    else
+        printf ("                       Ethernet RMII enabled\n");
+
+    if (cfg3 & MX3_CFG3_FETHIO)
+        printf ("               %u       Default Ethernet i/o pins\n",
+            MX3_CFG3_FETHIO >> 24);
+    else
+        printf ("                       Alternate Ethernet i/o pins\n");
+
+    if (cfg3 & MX3_CFG3_FCANIO)
+        printf ("               %u       Default CAN i/o pins\n",
+            MX3_CFG3_FCANIO >> 24);
+    else
+        printf ("                       Alternate CAN i/o pins\n");
+
+    if (cfg3 & MX3_CFG3_FUSBIDIO)
+        printf ("              %u        USBID pin: controlled by USB\n",
+            MX3_CFG3_FUSBIDIO >> 28);
+    else
+        printf ("                       USBID pin: controlled by port\n");
+
+    if (cfg3 & MX3_CFG3_FVBUSONIO)
+        printf ("              %u        VBuson pin: controlled by USB\n",
+            MX3_CFG3_FVBUSONIO >> 28);
+    else
+        printf ("                       VBuson pin: controlled by port\n");
+}
+
+/*
+ * Print configuration for MX1/2 family.
+ */
+static void print_mx1 (target_t *t, unsigned cfg0,
+    unsigned cfg1, unsigned cfg2, unsigned cfg3)
+{
+    /*--------------------------------------
+     * Configuration register 0
+     */
+    printf ("    DEVCFG0 = %08x\n", cfg0);
+    if ((~cfg0 & MX1_CFG0_DEBUG_MASK) == MX1_CFG0_DEBUG_ENABLED)
+        printf ("                     %u Debugger enabled\n",
+            cfg0 & MX1_CFG0_DEBUG_MASK);
+    else
+        printf ("                     %u Debugger disabled\n",
+            cfg0 & MX1_CFG0_DEBUG_MASK);
+
+    if (~cfg0 & MX1_CFG0_JTAG_DISABLE)
+        printf ("                     %u JTAG disabled\n",
+            cfg0 & MX1_CFG0_JTAG_DISABLE);
+
+    switch (~cfg0 & MX1_CFG0_ICESEL_MASK) {
+    case MX1_CFG0_ICESEL_PAIR1:
+        printf ("                    %02x Use PGC1/PGD1\n", cfg0 & MX1_CFG0_ICESEL_MASK);
+        break;
+    case MX1_CFG0_ICESEL_PAIR2:
+        printf ("                    %02x Use PGC2/PGD2\n", cfg0 & MX1_CFG0_ICESEL_MASK);
+        break;
+    case MX1_CFG0_ICESEL_PAIR3:
+        printf ("                    %02x Use PGC3/PGD3\n", cfg0 & MX1_CFG0_ICESEL_MASK);
+        break;
+    case MX1_CFG0_ICESEL_PAIR4:
+        printf ("                    %02x Use PGC4/PGD4\n", cfg0 & MX1_CFG0_ICESEL_MASK);
+        break;
+    }
+
+    if (~cfg0 & MX1_CFG0_PWP_MASK)
+        printf ("                 %05x Program flash write protect\n",
+            cfg0 & MX1_CFG0_PWP_MASK);
+
+    if (~cfg0 & MX1_CFG0_BWP)
+        printf ("                       Boot flash write protect\n");
+    if (~cfg0 & MX1_CFG0_CP)
+        printf ("                       Code protect\n");
+
+    /*--------------------------------------
+     * Configuration register 1
+     */
+    printf ("    DEVCFG1 = %08x\n", cfg1);
+    switch (cfg1 & MX1_CFG1_FNOSC_MASK) {
+    case MX1_CFG1_FNOSC_FRC:
+        printf ("                     %u Fast RC oscillator\n", MX1_CFG1_FNOSC_FRC);
+        break;
+    case MX1_CFG1_FNOSC_FRCDIVPLL:
+        printf ("                     %u Fast RC oscillator with divide-by-N and PLL\n", MX1_CFG1_FNOSC_FRCDIVPLL);
+        break;
+    case MX1_CFG1_FNOSC_PRI:
+        printf ("                     %u Primary oscillator\n", MX1_CFG1_FNOSC_PRI);
+        break;
+    case MX1_CFG1_FNOSC_PRIPLL:
+        printf ("                     %u Primary oscillator with PLL\n", MX1_CFG1_FNOSC_PRIPLL);
+        break;
+    case MX1_CFG1_FNOSC_SEC:
+        printf ("                     %u Secondary oscillator\n", MX1_CFG1_FNOSC_SEC);
+        break;
+    case MX1_CFG1_FNOSC_LPRC:
+        printf ("                     %u Low-power RC oscillator\n", MX1_CFG1_FNOSC_LPRC);
+        break;
+    case MX1_CFG1_FNOSC_FRCDIV16:
+        printf ("                     %u Fast RC oscillator with divide-by-16\n", MX1_CFG1_FNOSC_FRCDIV16);
+        break;
+    case MX1_CFG1_FNOSC_FRCDIV:
+        printf ("                     %u Fast RC oscillator with divide-by-N\n", MX1_CFG1_FNOSC_FRCDIV);
+        break;
+    default:
+        printf ("                     %u UNKNOWN\n", cfg1 & MX1_CFG1_FNOSC_MASK);
+        break;
+    }
+    if (cfg1 & MX1_CFG1_FSOSCEN)
+        printf ("                    %u  Secondary oscillator enabled\n",
+            MX1_CFG1_FSOSCEN >> 4);
+    if (cfg1 & MX1_CFG1_IESO)
+        printf ("                    %u  Internal-external switch over enabled\n",
+            MX1_CFG1_IESO >> 4);
+
+    switch (cfg1 & MX1_CFG1_POSCMOD_MASK) {
+    case MX1_CFG1_POSCMOD_EXT:
+        printf ("                   %u   Primary oscillator: External\n", MX1_CFG1_POSCMOD_EXT >> 8);
+        break;
+    case MX1_CFG1_POSCMOD_XT:
+        printf ("                   %u   Primary oscillator: XT\n", MX1_CFG1_POSCMOD_XT >> 8);
+        break;
+    case MX1_CFG1_POSCMOD_HS:
+        printf ("                   %u   Primary oscillator: HS\n", MX1_CFG1_POSCMOD_HS >> 8);
+        break;
+    case MX1_CFG1_POSCMOD_DISABLE:
+        printf ("                   %u   Primary oscillator: disabled\n", MX1_CFG1_POSCMOD_DISABLE >> 8);
+        break;
+    }
+    if (cfg1 & MX1_CFG1_CLKO_DISABLE)
+        printf ("                   %u   CLKO output disabled\n",
+            MX1_CFG1_CLKO_DISABLE >> 8);
+
+    switch (cfg1 & MX1_CFG1_FPBDIV_MASK) {
+    case MX1_CFG1_FPBDIV_1:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 1\n", MX1_CFG1_FPBDIV_1 >> 12);
+        break;
+    case MX1_CFG1_FPBDIV_2:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 2\n", MX1_CFG1_FPBDIV_2 >> 12);
+        break;
+    case MX1_CFG1_FPBDIV_4:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 4\n", MX1_CFG1_FPBDIV_4 >> 12);
+        break;
+    case MX1_CFG1_FPBDIV_8:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 8\n", MX1_CFG1_FPBDIV_8 >> 12);
+        break;
+    }
+    if (cfg1 & MX1_CFG1_FCKM_ENABLE)
+        printf ("                  %u    Fail-safe clock monitor enabled\n",
+            MX1_CFG1_FCKM_ENABLE >> 12);
+    if (cfg1 & MX1_CFG1_FCKS_ENABLE)
+        printf ("                  %u    Clock switching enabled\n",
+            MX1_CFG1_FCKS_ENABLE >> 12);
+
+    if (cfg1 & MX1_CFG1_FWDTEN) {
+        switch (cfg1 & MX1_CFG1_WDTPS_MASK) {
+        case MX1_CFG1_WDTPS_1:
+            printf ("                %2x     Watchdog postscale: 1/1\n", MX1_CFG1_WDTPS_1 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_2:
+            printf ("                %2x     Watchdog postscale: 1/2\n", MX1_CFG1_WDTPS_2 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_4:
+            printf ("                %2x     Watchdog postscale: 1/4\n", MX1_CFG1_WDTPS_4 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_8:
+            printf ("                %2x     Watchdog postscale: 1/8\n", MX1_CFG1_WDTPS_8 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_16:
+            printf ("                %2x     Watchdog postscale: 1/16\n", MX1_CFG1_WDTPS_16 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_32:
+            printf ("                %2x     Watchdog postscale: 1/32\n", MX1_CFG1_WDTPS_32 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_64:
+            printf ("                %2x     Watchdog postscale: 1/64\n", MX1_CFG1_WDTPS_64 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_128:
+            printf ("                %2x     Watchdog postscale: 1/128\n", MX1_CFG1_WDTPS_128 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_256:
+            printf ("                %2x     Watchdog postscale: 1/256\n", MX1_CFG1_WDTPS_256 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_512:
+            printf ("                %2x     Watchdog postscale: 1/512\n", MX1_CFG1_WDTPS_512 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_1024:
+            printf ("                %2x     Watchdog postscale: 1/1024\n", MX1_CFG1_WDTPS_1024 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_2048:
+            printf ("                %2x     Watchdog postscale: 1/2048\n", MX1_CFG1_WDTPS_2048 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_4096:
+            printf ("                %2x     Watchdog postscale: 1/4096\n", MX1_CFG1_WDTPS_4096 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_8192:
+            printf ("                %2x     Watchdog postscale: 1/8192\n", MX1_CFG1_WDTPS_8192 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_16384:
+            printf ("                %2x     Watchdog postscale: 1/16384\n", MX1_CFG1_WDTPS_16384 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_32768:
+            printf ("                %2x     Watchdog postscale: 1/32768\n", MX1_CFG1_WDTPS_32768 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_65536:
+            printf ("                %2x     Watchdog postscale: 1/65536\n", MX1_CFG1_WDTPS_65536 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_131072:
+            printf ("                %2x     Watchdog postscale: 1/131072\n", MX1_CFG1_WDTPS_131072 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_262144:
+            printf ("                %2x     Watchdog postscale: 1/262144\n", MX1_CFG1_WDTPS_262144 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_524288:
+            printf ("                %2x     Watchdog postscale: 1/524288\n", MX1_CFG1_WDTPS_524288 >> 16);
+            break;
+        case MX1_CFG1_WDTPS_1048576:
+            printf ("                %2x     Watchdog postscale: 1/1048576\n", MX1_CFG1_WDTPS_1048576 >> 16);
+            break;
+        }
+
+        if (cfg1 & MX1_CFG1_WINDIS)
+            printf ("                %u      Watchdog in non-Window mode\n",
+                MX1_CFG1_WINDIS >> 20);
+
+        printf ("                %u      Watchdog enable\n",
+            MX1_CFG1_FWDTEN >> 20);
+    }
+
+    /*--------------------------------------
+     * Configuration register 2
+     */
+    printf ("    DEVCFG2 = %08x\n", cfg2);
+    switch (cfg2 & MX1_CFG2_FPLLIDIV_MASK) {
+    case MX1_CFG2_FPLLIDIV_1:
+        printf ("                     %u PLL divider: 1/1\n", MX1_CFG2_FPLLIDIV_1);
+        break;
+    case MX1_CFG2_FPLLIDIV_2:
+        printf ("                     %u PLL divider: 1/2\n", MX1_CFG2_FPLLIDIV_2);
+        break;
+    case MX1_CFG2_FPLLIDIV_3:
+        printf ("                     %u PLL divider: 1/3\n", MX1_CFG2_FPLLIDIV_3);
+        break;
+    case MX1_CFG2_FPLLIDIV_4:
+        printf ("                     %u PLL divider: 1/4\n", MX1_CFG2_FPLLIDIV_4);
+        break;
+    case MX1_CFG2_FPLLIDIV_5:
+        printf ("                     %u PLL divider: 1/5\n", MX1_CFG2_FPLLIDIV_5);
+        break;
+    case MX1_CFG2_FPLLIDIV_6:
+        printf ("                     %u PLL divider: 1/6\n", MX1_CFG2_FPLLIDIV_6);
+        break;
+    case MX1_CFG2_FPLLIDIV_10:
+        printf ("                     %u PLL divider: 1/10\n", MX1_CFG2_FPLLIDIV_10);
+        break;
+    case MX1_CFG2_FPLLIDIV_12:
+        printf ("                     %u PLL divider: 1/12\n", MX1_CFG2_FPLLIDIV_12);
+        break;
+    }
+    switch (cfg2 & MX1_CFG2_FPLLMUL_MASK) {
+    case MX1_CFG2_FPLLMUL_15:
+        printf ("                    %u  PLL multiplier: 15x\n", MX1_CFG2_FPLLMUL_15 >> 4);
+        break;
+    case MX1_CFG2_FPLLMUL_16:
+        printf ("                    %u  PLL multiplier: 16x\n", MX1_CFG2_FPLLMUL_16 >> 4);
+        break;
+    case MX1_CFG2_FPLLMUL_17:
+        printf ("                    %u  PLL multiplier: 17x\n", MX1_CFG2_FPLLMUL_17 >> 4);
+        break;
+    case MX1_CFG2_FPLLMUL_18:
+        printf ("                    %u  PLL multiplier: 18x\n", MX1_CFG2_FPLLMUL_18 >> 4);
+        break;
+    case MX1_CFG2_FPLLMUL_19:
+        printf ("                    %u  PLL multiplier: 19x\n", MX1_CFG2_FPLLMUL_19 >> 4);
+        break;
+    case MX1_CFG2_FPLLMUL_20:
+        printf ("                    %u  PLL multiplier: 20x\n", MX1_CFG2_FPLLMUL_20 >> 4);
+        break;
+    case MX1_CFG2_FPLLMUL_21:
+        printf ("                    %u  PLL multiplier: 21x\n", MX1_CFG2_FPLLMUL_21 >> 4);
+        break;
+    case MX1_CFG2_FPLLMUL_24:
+        printf ("                    %u  PLL multiplier: 24x\n", MX1_CFG2_FPLLMUL_24 >> 4);
+        break;
+    }
+    switch (cfg2 & MX1_CFG2_UPLLIDIV_MASK) {
+    case MX1_CFG2_UPLLIDIV_1:
+        printf ("                   %u   USB PLL divider: 1/1\n", MX1_CFG2_UPLLIDIV_1 >> 8);
+        break;
+    case MX1_CFG2_UPLLIDIV_2:
+        printf ("                   %u   USB PLL divider: 1/2\n", MX1_CFG2_UPLLIDIV_2 >> 8);
+        break;
+    case MX1_CFG2_UPLLIDIV_3:
+        printf ("                   %u   USB PLL divider: 1/3\n", MX1_CFG2_UPLLIDIV_3 >> 8);
+        break;
+    case MX1_CFG2_UPLLIDIV_4:
+        printf ("                   %u   USB PLL divider: 1/4\n", MX1_CFG2_UPLLIDIV_4 >> 8);
+        break;
+    case MX1_CFG2_UPLLIDIV_5:
+        printf ("                   %u   USB PLL divider: 1/5\n", MX1_CFG2_UPLLIDIV_5 >> 8);
+        break;
+    case MX1_CFG2_UPLLIDIV_6:
+        printf ("                   %u   USB PLL divider: 1/6\n", MX1_CFG2_UPLLIDIV_6 >> 8);
+        break;
+    case MX1_CFG2_UPLLIDIV_10:
+        printf ("                   %u   USB PLL divider: 1/10\n", MX1_CFG2_UPLLIDIV_10 >> 8);
+        break;
+    case MX1_CFG2_UPLLIDIV_12:
+        printf ("                   %u   USB PLL divider: 1/12\n", MX1_CFG2_UPLLIDIV_12 >> 8);
+        break;
+    }
+    if (cfg2 & MX1_CFG2_UPLL_DISABLE)
+        printf ("                  %u    Disable USB PLL\n",
+            MX1_CFG2_UPLL_DISABLE >> 12);
+    else
+        printf ("                       Enable USB PLL\n");
+
+    switch (cfg2 & MX1_CFG2_FPLLODIV_MASK) {
+    case MX1_CFG2_FPLLODIV_1:
+        printf ("                 %u     PLL postscaler: 1/1\n", MX1_CFG2_FPLLODIV_1 >> 16);
+        break;
+    case MX1_CFG2_FPLLODIV_2:
+        printf ("                 %u     PLL postscaler: 1/2\n", MX1_CFG2_FPLLODIV_2 >> 16);
+        break;
+    case MX1_CFG2_FPLLODIV_4:
+        printf ("                 %u     PLL postscaler: 1/4\n", MX1_CFG2_FPLLODIV_4 >> 16);
+        break;
+    case MX1_CFG2_FPLLODIV_8:
+        printf ("                 %u     PLL postscaler: 1/8\n", MX1_CFG2_FPLLODIV_8 >> 16);
+        break;
+    case MX1_CFG2_FPLLODIV_16:
+        printf ("                 %u     PLL postscaler: 1/16\n", MX1_CFG2_FPLLODIV_16 >> 16);
+        break;
+    case MX1_CFG2_FPLLODIV_32:
+        printf ("                 %u     PLL postscaler: 1/32\n", MX1_CFG2_FPLLODIV_32 >> 16);
+        break;
+    case MX1_CFG2_FPLLODIV_64:
+        printf ("                 %u     PLL postscaler: 1/64\n", MX1_CFG2_FPLLODIV_64 >> 16);
+        break;
+    case MX1_CFG2_FPLLODIV_256:
+        printf ("                 %u     PLL postscaler: 1/128\n", MX1_CFG2_FPLLODIV_256 >> 16);
+        break;
+    }
+
+    /*--------------------------------------
+     * Configuration register 3
+     */
+    printf ("    DEVCFG3 = %08x\n", cfg3);
+    if (~cfg3 & MX1_CFG3_USERID_MASK)
+        printf ("                  %04x User-defined ID\n",
+            cfg3 & MX1_CFG3_USERID_MASK);
+
+    if (cfg3 & MX1_CFG3_PMDL1WAY)
+        printf ("              %u        Peripheral Module Disable - only 1 reconfig\n",
+            MX1_CFG3_PMDL1WAY >> 28);
+    else
+        printf ("                       USBID pin: controlled by port\n");
+
+    if (cfg3 & MX1_CFG3_IOL1WAY)
+        printf ("              %u        Peripheral Pin Select - only 1 reconfig\n",
+            MX1_CFG3_IOL1WAY >> 28);
+    else
+        printf ("                       USBID pin: controlled by port\n");
+
+    if (cfg3 & MX1_CFG3_FUSBIDIO)
+        printf ("              %u        USBID pin: controlled by USB\n",
+            MX1_CFG3_FUSBIDIO >> 28);
+    else
+        printf ("                       USBID pin: controlled by port\n");
+
+    if (cfg3 & MX1_CFG3_FVBUSONIO)
+        printf ("              %u        VBuson pin: controlled by USB\n",
+            MX1_CFG3_FVBUSONIO >> 28);
+    else
+        printf ("                       VBuson pin: controlled by port\n");
+}
+
+/*
+ * Print configuration for MZ family.
+ */
+static void print_mz (target_t *t, unsigned cfg0,
+    unsigned cfg1, unsigned cfg2, unsigned cfg3)
+{
+    /*--------------------------------------
+     * Configuration register 0
+     */
+    printf ("    DEVCFG0 = %08x\n", cfg0);
+#if 0
+    // TODO
+    if ((~cfg0 & MZ_CFG0_DEBUG_MASK) == MZ_CFG0_DEBUG_ENABLED)
+        printf ("                     %u Debugger enabled\n",
+            cfg0 & MZ_CFG0_DEBUG_MASK);
+    else
+        printf ("                     %u Debugger disabled\n",
+            cfg0 & MZ_CFG0_DEBUG_MASK);
+
+    if (~cfg0 & MZ_CFG0_JTAG_DISABLE)
+        printf ("                     %u JTAG disabled\n",
+            cfg0 & MZ_CFG0_JTAG_DISABLE);
+
+    switch (~cfg0 & MZ_CFG0_ICESEL_MASK) {
+    case MZ_CFG0_ICESEL_PAIR1:
+        printf ("                    %02x Use PGC1/PGD1\n", cfg0 & MZ_CFG0_ICESEL_MASK);
+        break;
+    case MZ_CFG0_ICESEL_PAIR2:
+        printf ("                    %02x Use PGC2/PGD2\n", cfg0 & MZ_CFG0_ICESEL_MASK);
+        break;
+    case MZ_CFG0_ICESEL_PAIR3:
+        printf ("                    %02x Use PGC3/PGD3\n", cfg0 & MZ_CFG0_ICESEL_MASK);
+        break;
+    case MZ_CFG0_ICESEL_PAIR4:
+        printf ("                    %02x Use PGC4/PGD4\n", cfg0 & MZ_CFG0_ICESEL_MASK);
+        break;
+    }
+
+    if (~cfg0 & MZ_CFG0_PWP_MASK)
+        printf ("                 %05x Program flash write protect\n",
+            cfg0 & MZ_CFG0_PWP_MASK);
+
+    if (~cfg0 & MZ_CFG0_BWP)
+        printf ("                       Boot flash write protect\n");
+    if (~cfg0 & MZ_CFG0_CP)
+        printf ("                       Code protect\n");
+#endif
+
+    /*--------------------------------------
+     * Configuration register 1
+     */
+    printf ("    DEVCFG1 = %08x\n", cfg1);
+#if 0
+    // TODO
+    switch (cfg1 & MZ_CFG1_FNOSC_MASK) {
+    case MZ_CFG1_FNOSC_FRC:
+        printf ("                     %u Fast RC oscillator\n", MZ_CFG1_FNOSC_FRC);
+        break;
+    case MZ_CFG1_FNOSC_FRCDIVPLL:
+        printf ("                     %u Fast RC oscillator with divide-by-N and PLL\n", MZ_CFG1_FNOSC_FRCDIVPLL);
+        break;
+    case MZ_CFG1_FNOSC_PRI:
+        printf ("                     %u Primary oscillator\n", MZ_CFG1_FNOSC_PRI);
+        break;
+    case MZ_CFG1_FNOSC_PRIPLL:
+        printf ("                     %u Primary oscillator with PLL\n", MZ_CFG1_FNOSC_PRIPLL);
+        break;
+    case MZ_CFG1_FNOSC_SEC:
+        printf ("                     %u Secondary oscillator\n", MZ_CFG1_FNOSC_SEC);
+        break;
+    case MZ_CFG1_FNOSC_LPRC:
+        printf ("                     %u Low-power RC oscillator\n", MZ_CFG1_FNOSC_LPRC);
+        break;
+    case MZ_CFG1_FNOSC_FRCDIV16:
+        printf ("                     %u Fast RC oscillator with divide-by-16\n", MZ_CFG1_FNOSC_FRCDIV16);
+        break;
+    case MZ_CFG1_FNOSC_FRCDIV:
+        printf ("                     %u Fast RC oscillator with divide-by-N\n", MZ_CFG1_FNOSC_FRCDIV);
+        break;
+    default:
+        printf ("                     %u UNKNOWN\n", cfg1 & MZ_CFG1_FNOSC_MASK);
+        break;
+    }
+    if (cfg1 & MZ_CFG1_FSOSCEN)
+        printf ("                    %u  Secondary oscillator enabled\n",
+            MZ_CFG1_FSOSCEN >> 4);
+    if (cfg1 & MZ_CFG1_IESO)
+        printf ("                    %u  Internal-external switch over enabled\n",
+            MZ_CFG1_IESO >> 4);
+
+    switch (cfg1 & MZ_CFG1_POSCMOD_MASK) {
+    case MZ_CFG1_POSCMOD_EXT:
+        printf ("                   %u   Primary oscillator: External\n", MZ_CFG1_POSCMOD_EXT >> 8);
+        break;
+    case MZ_CFG1_POSCMOD_XT:
+        printf ("                   %u   Primary oscillator: XT\n", MZ_CFG1_POSCMOD_XT >> 8);
+        break;
+    case MZ_CFG1_POSCMOD_HS:
+        printf ("                   %u   Primary oscillator: HS\n", MZ_CFG1_POSCMOD_HS >> 8);
+        break;
+    case MZ_CFG1_POSCMOD_DISABLE:
+        printf ("                   %u   Primary oscillator: disabled\n", MZ_CFG1_POSCMOD_DISABLE >> 8);
+        break;
+    }
+    if (cfg1 & MZ_CFG1_CLKO_DISABLE)
+        printf ("                   %u   CLKO output disabled\n",
+            MZ_CFG1_CLKO_DISABLE >> 8);
+
+    switch (cfg1 & MZ_CFG1_FPBDIV_MASK) {
+    case MZ_CFG1_FPBDIV_1:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 1\n", MZ_CFG1_FPBDIV_1 >> 12);
+        break;
+    case MZ_CFG1_FPBDIV_2:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 2\n", MZ_CFG1_FPBDIV_2 >> 12);
+        break;
+    case MZ_CFG1_FPBDIV_4:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 4\n", MZ_CFG1_FPBDIV_4 >> 12);
+        break;
+    case MZ_CFG1_FPBDIV_8:
+        printf ("                  %u    Peripheral bus clock: SYSCLK / 8\n", MZ_CFG1_FPBDIV_8 >> 12);
+        break;
+    }
+    if (cfg1 & MZ_CFG1_FCKM_ENABLE)
+        printf ("                  %u    Fail-safe clock monitor enabled\n",
+            MZ_CFG1_FCKM_ENABLE >> 12);
+    if (cfg1 & MZ_CFG1_FCKS_ENABLE)
+        printf ("                  %u    Clock switching enabled\n",
+            MZ_CFG1_FCKS_ENABLE >> 12);
+
+    if (cfg1 & MZ_CFG1_FWDTEN) {
+        switch (cfg1 & MZ_CFG1_WDTPS_MASK) {
+        case MZ_CFG1_WDTPS_1:
+            printf ("                %2x     Watchdog postscale: 1/1\n", MZ_CFG1_WDTPS_1 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_2:
+            printf ("                %2x     Watchdog postscale: 1/2\n", MZ_CFG1_WDTPS_2 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_4:
+            printf ("                %2x     Watchdog postscale: 1/4\n", MZ_CFG1_WDTPS_4 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_8:
+            printf ("                %2x     Watchdog postscale: 1/8\n", MZ_CFG1_WDTPS_8 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_16:
+            printf ("                %2x     Watchdog postscale: 1/16\n", MZ_CFG1_WDTPS_16 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_32:
+            printf ("                %2x     Watchdog postscale: 1/32\n", MZ_CFG1_WDTPS_32 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_64:
+            printf ("                %2x     Watchdog postscale: 1/64\n", MZ_CFG1_WDTPS_64 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_128:
+            printf ("                %2x     Watchdog postscale: 1/128\n", MZ_CFG1_WDTPS_128 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_256:
+            printf ("                %2x     Watchdog postscale: 1/256\n", MZ_CFG1_WDTPS_256 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_512:
+            printf ("                %2x     Watchdog postscale: 1/512\n", MZ_CFG1_WDTPS_512 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_1024:
+            printf ("                %2x     Watchdog postscale: 1/1024\n", MZ_CFG1_WDTPS_1024 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_2048:
+            printf ("                %2x     Watchdog postscale: 1/2048\n", MZ_CFG1_WDTPS_2048 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_4096:
+            printf ("                %2x     Watchdog postscale: 1/4096\n", MZ_CFG1_WDTPS_4096 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_8192:
+            printf ("                %2x     Watchdog postscale: 1/8192\n", MZ_CFG1_WDTPS_8192 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_16384:
+            printf ("                %2x     Watchdog postscale: 1/16384\n", MZ_CFG1_WDTPS_16384 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_32768:
+            printf ("                %2x     Watchdog postscale: 1/32768\n", MZ_CFG1_WDTPS_32768 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_65536:
+            printf ("                %2x     Watchdog postscale: 1/65536\n", MZ_CFG1_WDTPS_65536 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_131072:
+            printf ("                %2x     Watchdog postscale: 1/131072\n", MZ_CFG1_WDTPS_131072 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_262144:
+            printf ("                %2x     Watchdog postscale: 1/262144\n", MZ_CFG1_WDTPS_262144 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_524288:
+            printf ("                %2x     Watchdog postscale: 1/524288\n", MZ_CFG1_WDTPS_524288 >> 16);
+            break;
+        case MZ_CFG1_WDTPS_1048576:
+            printf ("                %2x     Watchdog postscale: 1/1048576\n", MZ_CFG1_WDTPS_1048576 >> 16);
+            break;
+        }
+
+        if (cfg1 & MZ_CFG1_WINDIS)
+            printf ("                %u      Watchdog in non-Window mode\n",
+                MZ_CFG1_WINDIS >> 20);
+
+        printf ("                %u      Watchdog enable\n",
+            MZ_CFG1_FWDTEN >> 20);
+    }
+#endif
+
+    /*--------------------------------------
+     * Configuration register 2
+     */
+    printf ("    DEVCFG2 = %08x\n", cfg2);
+#if 0
+    // TODO
+    switch (cfg2 & MZ_CFG2_FPLLIDIV_MASK) {
+    case MZ_CFG2_FPLLIDIV_1:
+        printf ("                     %u PLL divider: 1/1\n", MZ_CFG2_FPLLIDIV_1);
+        break;
+    case MZ_CFG2_FPLLIDIV_2:
+        printf ("                     %u PLL divider: 1/2\n", MZ_CFG2_FPLLIDIV_2);
+        break;
+    case MZ_CFG2_FPLLIDIV_3:
+        printf ("                     %u PLL divider: 1/3\n", MZ_CFG2_FPLLIDIV_3);
+        break;
+    case MZ_CFG2_FPLLIDIV_4:
+        printf ("                     %u PLL divider: 1/4\n", MZ_CFG2_FPLLIDIV_4);
+        break;
+    case MZ_CFG2_FPLLIDIV_5:
+        printf ("                     %u PLL divider: 1/5\n", MZ_CFG2_FPLLIDIV_5);
+        break;
+    case MZ_CFG2_FPLLIDIV_6:
+        printf ("                     %u PLL divider: 1/6\n", MZ_CFG2_FPLLIDIV_6);
+        break;
+    case MZ_CFG2_FPLLIDIV_10:
+        printf ("                     %u PLL divider: 1/10\n", MZ_CFG2_FPLLIDIV_10);
+        break;
+    case MZ_CFG2_FPLLIDIV_12:
+        printf ("                     %u PLL divider: 1/12\n", MZ_CFG2_FPLLIDIV_12);
+        break;
+    }
+    switch (cfg2 & MZ_CFG2_FPLLMUL_MASK) {
+    case MZ_CFG2_FPLLMUL_15:
+        printf ("                    %u  PLL multiplier: 15x\n", MZ_CFG2_FPLLMUL_15 >> 4);
+        break;
+    case MZ_CFG2_FPLLMUL_16:
+        printf ("                    %u  PLL multiplier: 16x\n", MZ_CFG2_FPLLMUL_16 >> 4);
+        break;
+    case MZ_CFG2_FPLLMUL_17:
+        printf ("                    %u  PLL multiplier: 17x\n", MZ_CFG2_FPLLMUL_17 >> 4);
+        break;
+    case MZ_CFG2_FPLLMUL_18:
+        printf ("                    %u  PLL multiplier: 18x\n", MZ_CFG2_FPLLMUL_18 >> 4);
+        break;
+    case MZ_CFG2_FPLLMUL_19:
+        printf ("                    %u  PLL multiplier: 19x\n", MZ_CFG2_FPLLMUL_19 >> 4);
+        break;
+    case MZ_CFG2_FPLLMUL_20:
+        printf ("                    %u  PLL multiplier: 20x\n", MZ_CFG2_FPLLMUL_20 >> 4);
+        break;
+    case MZ_CFG2_FPLLMUL_21:
+        printf ("                    %u  PLL multiplier: 21x\n", MZ_CFG2_FPLLMUL_21 >> 4);
+        break;
+    case MZ_CFG2_FPLLMUL_24:
+        printf ("                    %u  PLL multiplier: 24x\n", MZ_CFG2_FPLLMUL_24 >> 4);
+        break;
+    }
+    switch (cfg2 & MZ_CFG2_UPLLIDIV_MASK) {
+    case MZ_CFG2_UPLLIDIV_1:
+        printf ("                   %u   USB PLL divider: 1/1\n", MZ_CFG2_UPLLIDIV_1 >> 8);
+        break;
+    case MZ_CFG2_UPLLIDIV_2:
+        printf ("                   %u   USB PLL divider: 1/2\n", MZ_CFG2_UPLLIDIV_2 >> 8);
+        break;
+    case MZ_CFG2_UPLLIDIV_3:
+        printf ("                   %u   USB PLL divider: 1/3\n", MZ_CFG2_UPLLIDIV_3 >> 8);
+        break;
+    case MZ_CFG2_UPLLIDIV_4:
+        printf ("                   %u   USB PLL divider: 1/4\n", MZ_CFG2_UPLLIDIV_4 >> 8);
+        break;
+    case MZ_CFG2_UPLLIDIV_5:
+        printf ("                   %u   USB PLL divider: 1/5\n", MZ_CFG2_UPLLIDIV_5 >> 8);
+        break;
+    case MZ_CFG2_UPLLIDIV_6:
+        printf ("                   %u   USB PLL divider: 1/6\n", MZ_CFG2_UPLLIDIV_6 >> 8);
+        break;
+    case MZ_CFG2_UPLLIDIV_10:
+        printf ("                   %u   USB PLL divider: 1/10\n", MZ_CFG2_UPLLIDIV_10 >> 8);
+        break;
+    case MZ_CFG2_UPLLIDIV_12:
+        printf ("                   %u   USB PLL divider: 1/12\n", MZ_CFG2_UPLLIDIV_12 >> 8);
+        break;
+    }
+    if (cfg2 & MZ_CFG2_UPLL_DISABLE)
+        printf ("                  %u    Disable USB PLL\n",
+            MZ_CFG2_UPLL_DISABLE >> 12);
+    else
+        printf ("                       Enable USB PLL\n");
+
+    switch (cfg2 & MZ_CFG2_FPLLODIV_MASK) {
+    case MZ_CFG2_FPLLODIV_1:
+        printf ("                 %u     PLL postscaler: 1/1\n", MZ_CFG2_FPLLODIV_1 >> 16);
+        break;
+    case MZ_CFG2_FPLLODIV_2:
+        printf ("                 %u     PLL postscaler: 1/2\n", MZ_CFG2_FPLLODIV_2 >> 16);
+        break;
+    case MZ_CFG2_FPLLODIV_4:
+        printf ("                 %u     PLL postscaler: 1/4\n", MZ_CFG2_FPLLODIV_4 >> 16);
+        break;
+    case MZ_CFG2_FPLLODIV_8:
+        printf ("                 %u     PLL postscaler: 1/8\n", MZ_CFG2_FPLLODIV_8 >> 16);
+        break;
+    case MZ_CFG2_FPLLODIV_16:
+        printf ("                 %u     PLL postscaler: 1/16\n", MZ_CFG2_FPLLODIV_16 >> 16);
+        break;
+    case MZ_CFG2_FPLLODIV_32:
+        printf ("                 %u     PLL postscaler: 1/32\n", MZ_CFG2_FPLLODIV_32 >> 16);
+        break;
+    case MZ_CFG2_FPLLODIV_64:
+        printf ("                 %u     PLL postscaler: 1/64\n", MZ_CFG2_FPLLODIV_64 >> 16);
+        break;
+    case MZ_CFG2_FPLLODIV_256:
+        printf ("                 %u     PLL postscaler: 1/128\n", MZ_CFG2_FPLLODIV_256 >> 16);
+        break;
+    }
+#endif
+
+    /*--------------------------------------
+     * Configuration register 3
+     */
+    printf ("    DEVCFG3 = %08x\n", cfg3);
+#if 0
+    // TODO
+    if (~cfg3 & MZ_CFG3_USERID_MASK)
+        printf ("                  %04x User-defined ID\n",
+            cfg3 & MZ_CFG3_USERID_MASK);
+
+    if (cfg3 & MZ_CFG3_PMDL1WAY)
+        printf ("              %u        Peripheral Module Disable - only 1 reconfig\n",
+            MZ_CFG3_PMDL1WAY >> 28);
+    else
+        printf ("                       USBID pin: controlled by port\n");
+
+    if (cfg3 & MZ_CFG3_IOL1WAY)
+        printf ("              %u        Peripheral Pin Select - only 1 reconfig\n",
+            MZ_CFG3_IOL1WAY >> 28);
+    else
+        printf ("                       USBID pin: controlled by port\n");
+
+    if (cfg3 & MZ_CFG3_FUSBIDIO)
+        printf ("              %u        USBID pin: controlled by USB\n",
+            MZ_CFG3_FUSBIDIO >> 28);
+    else
+        printf ("                       USBID pin: controlled by port\n");
+
+    if (cfg3 & MZ_CFG3_FVBUSONIO)
+        printf ("              %u        VBuson pin: controlled by USB\n",
+            MZ_CFG3_FVBUSONIO >> 28);
+    else
+        printf ("                       VBuson pin: controlled by port\n");
+#endif
+}
+
+/*
+ * Print configuration registers of the target CPU.
+ */
 void target_print_devcfg (target_t *t)
 {
     unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset (t);
@@ -335,365 +1421,7 @@ void target_print_devcfg (target_t *t)
         return;
 
     printf (_("Configuration:\n"));
-
-    /*--------------------------------------
-     * Configuration register 0
-     */
-    printf ("    DEVCFG0 = %08x\n", devcfg0);
-    if ((~devcfg0 & DEVCFG0_DEBUG_MASK) == DEVCFG0_DEBUG_ENABLED)
-        printf ("                     %u Debugger enabled\n",
-            devcfg0 & DEVCFG0_DEBUG_MASK);
-    else
-        printf ("                     %u Debugger disabled\n",
-            devcfg0 & DEVCFG0_DEBUG_MASK);
-
-    switch (~devcfg0 & DEVCFG0_ICESEL_MASK) {
-    case DEVCFG0_ICESEL_PAIR1:
-        printf ("                    %02x Use PGC1/PGD1\n", devcfg0 & DEVCFG0_ICESEL_MASK);
-        break;
-    case DEVCFG0_ICESEL_PAIR2:
-        printf ("                    %02x Use PGC2/PGD2\n", devcfg0 & DEVCFG0_ICESEL_MASK);
-        break;
-    case DEVCFG0_ICESEL_PAIR3:
-        printf ("                    %02x Use PGC3/PGD3\n", devcfg0 & DEVCFG0_ICESEL_MASK);
-        break;
-    case DEVCFG0_ICESEL_PAIR4:
-        printf ("                    %02x Use PGC4/PGD4\n", devcfg0 & DEVCFG0_ICESEL_MASK);
-        break;
-    }
-
-    if (~devcfg0 & DEVCFG0_PWP_MASK)
-        printf ("                 %05x Program flash write protect\n",
-            devcfg0 & DEVCFG0_PWP_MASK);
-
-    if (~devcfg0 & DEVCFG0_BWP)
-        printf ("                       Boot flash write protect\n");
-    if (~devcfg0 & DEVCFG0_CP)
-        printf ("                       Code protect\n");
-
-    /*--------------------------------------
-     * Configuration register 1
-     */
-    printf ("    DEVCFG1 = %08x\n", devcfg1);
-    switch (devcfg1 & DEVCFG1_FNOSC_MASK) {
-    case DEVCFG1_FNOSC_FRC:
-        printf ("                     %u Fast RC oscillator\n", DEVCFG1_FNOSC_FRC);
-        break;
-    case DEVCFG1_FNOSC_FRCDIVPLL:
-        printf ("                     %u Fast RC oscillator with divide-by-N and PLL\n", DEVCFG1_FNOSC_FRCDIVPLL);
-        break;
-    case DEVCFG1_FNOSC_PRI:
-        printf ("                     %u Primary oscillator\n", DEVCFG1_FNOSC_PRI);
-        break;
-    case DEVCFG1_FNOSC_PRIPLL:
-        printf ("                     %u Primary oscillator with PLL\n", DEVCFG1_FNOSC_PRIPLL);
-        break;
-    case DEVCFG1_FNOSC_SEC:
-        printf ("                     %u Secondary oscillator\n", DEVCFG1_FNOSC_SEC);
-        break;
-    case DEVCFG1_FNOSC_LPRC:
-        printf ("                     %u Low-power RC oscillator\n", DEVCFG1_FNOSC_LPRC);
-        break;
-    case DEVCFG1_FNOSC_FRCDIV:
-        printf ("                     %u Fast RC oscillator with divide-by-N\n", DEVCFG1_FNOSC_FRCDIV);
-        break;
-    default:
-        printf ("                     %u UNKNOWN\n", devcfg1 & DEVCFG1_FNOSC_MASK);
-        break;
-    }
-    if (devcfg1 & DEVCFG1_FSOSCEN)
-        printf ("                    %u  Secondary oscillator enabled\n",
-            DEVCFG1_FSOSCEN >> 4);
-    if (devcfg1 & DEVCFG1_IESO)
-        printf ("                    %u  Internal-external switch over enabled\n",
-            DEVCFG1_IESO >> 4);
-
-    switch (devcfg1 & DEVCFG1_POSCMOD_MASK) {
-    case DEVCFG1_POSCMOD_EXT:
-        printf ("                   %u   Primary oscillator: External\n", DEVCFG1_POSCMOD_EXT >> 8);
-        break;
-    case DEVCFG1_POSCMOD_XT:
-        printf ("                   %u   Primary oscillator: XT\n", DEVCFG1_POSCMOD_XT >> 8);
-        break;
-    case DEVCFG1_POSCMOD_HS:
-        printf ("                   %u   Primary oscillator: HS\n", DEVCFG1_POSCMOD_HS >> 8);
-        break;
-    case DEVCFG1_POSCMOD_DISABLE:
-        printf ("                   %u   Primary oscillator: disabled\n", DEVCFG1_POSCMOD_DISABLE >> 8);
-        break;
-    }
-    if (! (devcfg1 & DEVCFG1_OSCIOFNC))
-        printf ("                   %u   CLKO output active\n",
-            DEVCFG1_OSCIOFNC >> 8);
-
-    switch (devcfg1 & DEVCFG1_FPBDIV_MASK) {
-    case DEVCFG1_FPBDIV_1:
-        printf ("                  %u    Peripheral bus clock: SYSCLK / 1\n", DEVCFG1_FPBDIV_1 >> 12);
-        break;
-    case DEVCFG1_FPBDIV_2:
-        printf ("                  %u    Peripheral bus clock: SYSCLK / 2\n", DEVCFG1_FPBDIV_2 >> 12);
-        break;
-    case DEVCFG1_FPBDIV_4:
-        printf ("                  %u    Peripheral bus clock: SYSCLK / 4\n", DEVCFG1_FPBDIV_4 >> 12);
-        break;
-    case DEVCFG1_FPBDIV_8:
-        printf ("                  %u    Peripheral bus clock: SYSCLK / 8\n", DEVCFG1_FPBDIV_8 >> 12);
-        break;
-    }
-    if (devcfg1 & DEVCFG1_FCKM_DISABLE)
-        printf ("                  %u    Fail-safe clock monitor disable\n",
-            DEVCFG1_FCKM_DISABLE >> 12);
-    if (devcfg1 & DEVCFG1_FCKS_DISABLE)
-        printf ("                  %u    Clock switching disable\n",
-            DEVCFG1_FCKS_DISABLE >> 12);
-
-    switch (devcfg1 & DEVCFG1_WDTPS_MASK) {
-    case DEVCFG1_WDTPS_1:
-        printf ("                %2x     Watchdog postscale: 1/1\n", DEVCFG1_WDTPS_1 >> 16);
-        break;
-    case DEVCFG1_WDTPS_2:
-        printf ("                %2x     Watchdog postscale: 1/2\n", DEVCFG1_WDTPS_2 >> 16);
-        break;
-    case DEVCFG1_WDTPS_4:
-        printf ("                %2x     Watchdog postscale: 1/4\n", DEVCFG1_WDTPS_4 >> 16);
-        break;
-    case DEVCFG1_WDTPS_8:
-        printf ("                %2x     Watchdog postscale: 1/8\n", DEVCFG1_WDTPS_8 >> 16);
-        break;
-    case DEVCFG1_WDTPS_16:
-        printf ("                %2x     Watchdog postscale: 1/16\n", DEVCFG1_WDTPS_16 >> 16);
-        break;
-    case DEVCFG1_WDTPS_32:
-        printf ("                %2x     Watchdog postscale: 1/32\n", DEVCFG1_WDTPS_32 >> 16);
-        break;
-    case DEVCFG1_WDTPS_64:
-        printf ("                %2x     Watchdog postscale: 1/64\n", DEVCFG1_WDTPS_64 >> 16);
-        break;
-    case DEVCFG1_WDTPS_128:
-        printf ("                %2x     Watchdog postscale: 1/128\n", DEVCFG1_WDTPS_128 >> 16);
-        break;
-    case DEVCFG1_WDTPS_256:
-        printf ("                %2x     Watchdog postscale: 1/256\n", DEVCFG1_WDTPS_256 >> 16);
-        break;
-    case DEVCFG1_WDTPS_512:
-        printf ("                %2x     Watchdog postscale: 1/512\n", DEVCFG1_WDTPS_512 >> 16);
-        break;
-    case DEVCFG1_WDTPS_1024:
-        printf ("                %2x     Watchdog postscale: 1/1024\n", DEVCFG1_WDTPS_1024 >> 16);
-        break;
-    case DEVCFG1_WDTPS_2048:
-        printf ("                %2x     Watchdog postscale: 1/2048\n", DEVCFG1_WDTPS_2048 >> 16);
-        break;
-    case DEVCFG1_WDTPS_4096:
-        printf ("                %2x     Watchdog postscale: 1/4096\n", DEVCFG1_WDTPS_4096 >> 16);
-        break;
-    case DEVCFG1_WDTPS_8192:
-        printf ("                %2x     Watchdog postscale: 1/8192\n", DEVCFG1_WDTPS_8192 >> 16);
-        break;
-    case DEVCFG1_WDTPS_16384:
-        printf ("                %2x     Watchdog postscale: 1/16384\n", DEVCFG1_WDTPS_16384 >> 16);
-        break;
-    case DEVCFG1_WDTPS_32768:
-        printf ("                %2x     Watchdog postscale: 1/32768\n", DEVCFG1_WDTPS_32768 >> 16);
-        break;
-    case DEVCFG1_WDTPS_65536:
-        printf ("                %2x     Watchdog postscale: 1/65536\n", DEVCFG1_WDTPS_65536 >> 16);
-        break;
-    case DEVCFG1_WDTPS_131072:
-        printf ("                %2x     Watchdog postscale: 1/131072\n", DEVCFG1_WDTPS_131072 >> 16);
-        break;
-    case DEVCFG1_WDTPS_262144:
-        printf ("                %2x     Watchdog postscale: 1/262144\n", DEVCFG1_WDTPS_262144 >> 16);
-        break;
-    case DEVCFG1_WDTPS_524288:
-        printf ("                %2x     Watchdog postscale: 1/524288\n", DEVCFG1_WDTPS_524288 >> 16);
-        break;
-    case DEVCFG1_WDTPS_1048576:
-        printf ("                %2x     Watchdog postscale: 1/1048576\n", DEVCFG1_WDTPS_1048576 >> 16);
-        break;
-    }
-    if (devcfg1 & DEVCFG1_FWDTEN)
-        printf ("                %u      Watchdog enable\n",
-            DEVCFG1_FWDTEN >> 20);
-
-    /*--------------------------------------
-     * Configuration register 2
-     */
-    printf ("    DEVCFG2 = %08x\n", devcfg2);
-    switch (devcfg2 & DEVCFG2_FPLLIDIV_MASK) {
-    case DEVCFG2_FPLLIDIV_1:
-        printf ("                     %u PLL divider: 1/1\n", DEVCFG2_FPLLIDIV_1);
-        break;
-    case DEVCFG2_FPLLIDIV_2:
-        printf ("                     %u PLL divider: 1/2\n", DEVCFG2_FPLLIDIV_2);
-        break;
-    case DEVCFG2_FPLLIDIV_3:
-        printf ("                     %u PLL divider: 1/3\n", DEVCFG2_FPLLIDIV_3);
-        break;
-    case DEVCFG2_FPLLIDIV_4:
-        printf ("                     %u PLL divider: 1/4\n", DEVCFG2_FPLLIDIV_4);
-        break;
-    case DEVCFG2_FPLLIDIV_5:
-        printf ("                     %u PLL divider: 1/5\n", DEVCFG2_FPLLIDIV_5);
-        break;
-    case DEVCFG2_FPLLIDIV_6:
-        printf ("                     %u PLL divider: 1/6\n", DEVCFG2_FPLLIDIV_6);
-        break;
-    case DEVCFG2_FPLLIDIV_10:
-        printf ("                     %u PLL divider: 1/10\n", DEVCFG2_FPLLIDIV_10);
-        break;
-    case DEVCFG2_FPLLIDIV_12:
-        printf ("                     %u PLL divider: 1/12\n", DEVCFG2_FPLLIDIV_12);
-        break;
-    }
-    switch (devcfg2 & DEVCFG2_FPLLMUL_MASK) {
-    case DEVCFG2_FPLLMUL_15:
-        printf ("                    %u  PLL multiplier: 15x\n", DEVCFG2_FPLLMUL_15 >> 4);
-        break;
-    case DEVCFG2_FPLLMUL_16:
-        printf ("                    %u  PLL multiplier: 16x\n", DEVCFG2_FPLLMUL_16 >> 4);
-        break;
-    case DEVCFG2_FPLLMUL_17:
-        printf ("                    %u  PLL multiplier: 17x\n", DEVCFG2_FPLLMUL_17 >> 4);
-        break;
-    case DEVCFG2_FPLLMUL_18:
-        printf ("                    %u  PLL multiplier: 18x\n", DEVCFG2_FPLLMUL_18 >> 4);
-        break;
-    case DEVCFG2_FPLLMUL_19:
-        printf ("                    %u  PLL multiplier: 19x\n", DEVCFG2_FPLLMUL_19 >> 4);
-        break;
-    case DEVCFG2_FPLLMUL_20:
-        printf ("                    %u  PLL multiplier: 20x\n", DEVCFG2_FPLLMUL_20 >> 4);
-        break;
-    case DEVCFG2_FPLLMUL_21:
-        printf ("                    %u  PLL multiplier: 21x\n", DEVCFG2_FPLLMUL_21 >> 4);
-        break;
-    case DEVCFG2_FPLLMUL_24:
-        printf ("                    %u  PLL multiplier: 24x\n", DEVCFG2_FPLLMUL_24 >> 4);
-        break;
-    }
-    switch (devcfg2 & DEVCFG2_UPLLIDIV_MASK) {
-    case DEVCFG2_UPLLIDIV_1:
-        printf ("                   %u   USB PLL divider: 1/1\n", DEVCFG2_UPLLIDIV_1 >> 8);
-        break;
-    case DEVCFG2_UPLLIDIV_2:
-        printf ("                   %u   USB PLL divider: 1/2\n", DEVCFG2_UPLLIDIV_2 >> 8);
-        break;
-    case DEVCFG2_UPLLIDIV_3:
-        printf ("                   %u   USB PLL divider: 1/3\n", DEVCFG2_UPLLIDIV_3 >> 8);
-        break;
-    case DEVCFG2_UPLLIDIV_4:
-        printf ("                   %u   USB PLL divider: 1/4\n", DEVCFG2_UPLLIDIV_4 >> 8);
-        break;
-    case DEVCFG2_UPLLIDIV_5:
-        printf ("                   %u   USB PLL divider: 1/5\n", DEVCFG2_UPLLIDIV_5 >> 8);
-        break;
-    case DEVCFG2_UPLLIDIV_6:
-        printf ("                   %u   USB PLL divider: 1/6\n", DEVCFG2_UPLLIDIV_6 >> 8);
-        break;
-    case DEVCFG2_UPLLIDIV_10:
-        printf ("                   %u   USB PLL divider: 1/10\n", DEVCFG2_UPLLIDIV_10 >> 8);
-        break;
-    case DEVCFG2_UPLLIDIV_12:
-        printf ("                   %u   USB PLL divider: 1/12\n", DEVCFG2_UPLLIDIV_12 >> 8);
-        break;
-    }
-    if (devcfg2 & DEVCFG2_UPLLDIS)
-        printf ("                  %u    Disable USB PLL\n",
-            DEVCFG2_UPLLDIS >> 12);
-    else
-        printf ("                       Enable USB PLL\n");
-
-    switch (devcfg2 & DEVCFG2_FPLLODIV_MASK) {
-    case DEVCFG2_FPLLODIV_1:
-        printf ("                 %u     PLL postscaler: 1/1\n", DEVCFG2_FPLLODIV_1 >> 16);
-        break;
-    case DEVCFG2_FPLLODIV_2:
-        printf ("                 %u     PLL postscaler: 1/2\n", DEVCFG2_FPLLODIV_2 >> 16);
-        break;
-    case DEVCFG2_FPLLODIV_4:
-        printf ("                 %u     PLL postscaler: 1/4\n", DEVCFG2_FPLLODIV_4 >> 16);
-        break;
-    case DEVCFG2_FPLLODIV_8:
-        printf ("                 %u     PLL postscaler: 1/8\n", DEVCFG2_FPLLODIV_8 >> 16);
-        break;
-    case DEVCFG2_FPLLODIV_16:
-        printf ("                 %u     PLL postscaler: 1/16\n", DEVCFG2_FPLLODIV_16 >> 16);
-        break;
-    case DEVCFG2_FPLLODIV_32:
-        printf ("                 %u     PLL postscaler: 1/32\n", DEVCFG2_FPLLODIV_32 >> 16);
-        break;
-    case DEVCFG2_FPLLODIV_64:
-        printf ("                 %u     PLL postscaler: 1/64\n", DEVCFG2_FPLLODIV_64 >> 16);
-        break;
-    case DEVCFG2_FPLLODIV_256:
-        printf ("                 %u     PLL postscaler: 1/128\n", DEVCFG2_FPLLODIV_256 >> 16);
-        break;
-    }
-
-    /*--------------------------------------
-     * Configuration register 3
-     */
-    printf ("    DEVCFG3 = %08x\n", devcfg3);
-    if (~devcfg3 & DEVCFG3_USERID_MASK)
-        printf ("                  %04x User-defined ID\n",
-            devcfg3 & DEVCFG3_USERID_MASK);
-
-    switch (devcfg3 & DEVCFG3_FSRSSEL_MASK) {
-    case DEVCFG3_FSRSSEL_ALL:
-        printf ("                 %u     All irqs assigned to shadow set\n", DEVCFG3_FSRSSEL_ALL >> 16);
-        break;
-    case DEVCFG3_FSRSSEL_1:
-        printf ("                 %u     Assign irq priority 1 to shadow set\n", DEVCFG3_FSRSSEL_1 >> 16);
-        break;
-    case DEVCFG3_FSRSSEL_2:
-        printf ("                 %u     Assign irq priority 2 to shadow set\n", DEVCFG3_FSRSSEL_2 >> 16);
-        break;
-    case DEVCFG3_FSRSSEL_3:
-        printf ("                 %u     Assign irq priority 3 to shadow set\n", DEVCFG3_FSRSSEL_3 >> 16);
-        break;
-    case DEVCFG3_FSRSSEL_4:
-        printf ("                 %u     Assign irq priority 4 to shadow set\n", DEVCFG3_FSRSSEL_4 >> 16);
-        break;
-    case DEVCFG3_FSRSSEL_5:
-        printf ("                 %u     Assign irq priority 5 to shadow set\n", DEVCFG3_FSRSSEL_5 >> 16);
-        break;
-    case DEVCFG3_FSRSSEL_6:
-        printf ("                 %u     Assign irq priority 6 to shadow set\n", DEVCFG3_FSRSSEL_6 >> 16);
-        break;
-    case DEVCFG3_FSRSSEL_7:
-        printf ("                 %u     Assign irq priority 7 to shadow set\n", DEVCFG3_FSRSSEL_7 >> 16);
-        break;
-    }
-    if (devcfg3 & DEVCFG3_FMIIEN)
-        printf ("               %u       Ethernet MII enabled\n",
-            DEVCFG3_FMIIEN >> 24);
-    else
-        printf ("                       Ethernet RMII enabled\n");
-
-    if (devcfg3 & DEVCFG3_FETHIO)
-        printf ("               %u       Default Ethernet i/o pins\n",
-            DEVCFG3_FETHIO >> 24);
-    else
-        printf ("                       Alternate Ethernet i/o pins\n");
-
-    if (devcfg3 & DEVCFG3_FCANIO)
-        printf ("               %u       Default CAN i/o pins\n",
-            DEVCFG3_FCANIO >> 24);
-    else
-        printf ("                       Alternate CAN i/o pins\n");
-
-    if (devcfg3 & DEVCFG3_FUSBIDIO)
-        printf ("              %u        USBID pin: controlled by USB\n",
-            DEVCFG3_FUSBIDIO >> 28);
-    else
-        printf ("                       USBID pin: controlled by port\n");
-
-    if (devcfg3 & DEVCFG3_FVBUSONIO)
-        printf ("              %u        VBuson pin: controlled by USB\n",
-            DEVCFG3_FVBUSONIO >> 28);
-    else
-        printf ("                       VBuson pin: controlled by port\n");
+    t->family->print_devcfg (t, devcfg0, devcfg1, devcfg2, devcfg3);
 }
 
 /*
