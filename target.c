@@ -171,6 +171,10 @@ static const struct {
     {0x5112053, "MZ1024ECH100", 1024,   &family_mz},
     {0x511C053, "MZ1024ECH124", 1024,   &family_mz},
     {0x5126053, "MZ1024ECH144", 1024,   &family_mz},
+    {0x5130053, "MZ1024ECM064", 1024,   &family_mz},
+    {0x513A053, "MZ1024ECM100", 1024,   &family_mz},
+    {0x5144053, "MZ1024ECM124", 1024,   &family_mz},
+    {0x514E053, "MZ1024ECM144", 1024,   &family_mz},
     {0x5104053, "MZ2048ECG064", 2048,   &family_mz},
     {0x510E053, "MZ2048ECG100", 2048,   &family_mz},
     {0x5118053, "MZ2048ECG124", 2048,   &family_mz},
@@ -179,6 +183,10 @@ static const struct {
     {0x5113053, "MZ2048ECH100", 2048,   &family_mz},
     {0x511D053, "MZ2048ECH124", 2048,   &family_mz},
     {0x5127053, "MZ2048ECH144", 2048,   &family_mz},
+    {0x5131053, "MZ2048ECM064", 2048,   &family_mz},
+    {0x513B053, "MZ2048ECM100", 2048,   &family_mz},
+    {0x5145053, "MZ2048ECM124", 2048,   &family_mz},
+    {0x514F053, "MZ2048ECM144", 2048,   &family_mz},
 
     /* USB bootloader */
     {0xEAFB00B, "Bootloader",   0,      0},
@@ -319,6 +327,7 @@ void target_print_devcfg (target_t *t)
     unsigned devcfg2 = t->adapter->read_word (t->adapter, devcfg_addr + 4);
     unsigned devcfg1 = t->adapter->read_word (t->adapter, devcfg_addr + 8);
     unsigned devcfg0 = t->adapter->read_word (t->adapter, devcfg_addr + 12);
+
     if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
         devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
         return;
