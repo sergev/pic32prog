@@ -29,7 +29,7 @@
 #define BOOTV_BASE      0x9fc00000
 #define FLASHP_BASE     0x1d000000
 #define BOOTP_BASE      0x1fc00000
-#define FLASH_BYTES     (512 * 1024)
+#define FLASH_BYTES     (2048 * 1024)
 #define BOOT_BYTES      (80 * 1024)
 
 /* Macros for converting between hex and binary. */
@@ -426,6 +426,10 @@ void do_program (char *filename)
         devcfg2 = 0xfff879d9;
         devcfg3 = 0x3affffff;
     }
+    if (devcfg_offset == 0xffc0 && boot_used) {
+        /* For MZ family, clear the bit DEVSIGN0[31]. */
+        boot_data[0xFFEF] &= 0x7f;
+    }
 
     if (! verify_only) {
         /* Erase flash. */
@@ -659,7 +663,7 @@ int main (int argc, char **argv)
     setvbuf (stderr, (char *)NULL, _IOLBF, 0);
     printf (_("Programmer for Microchip PIC32 microcontrollers, Version %s\n"), VERSION);
     progname = argv[0];
-    copyright = _("    Copyright: (C) 2011-2012 Serge Vakulenko");
+    copyright = _("    Copyright: (C) 2011-2013 Serge Vakulenko");
     signal (SIGINT, interrupted);
 #ifdef __linux__
     signal (SIGHUP, interrupted);

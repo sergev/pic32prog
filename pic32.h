@@ -111,6 +111,7 @@ extern const unsigned pic32_pemz[];
 #define MX3_CFG0_DEBUG_MASK     0x00000003 /* Debugger enable bits */
 #define MX3_CFG0_DEBUG_DISABLED 0x00000000 /* Debugger disabled */
 #define MX3_CFG0_DEBUG_ENABLED  0x00000002 /* Debugger enabled */
+#define MX3_CFG0_JTAG_DISABLE   0x00000004 /* Disable JTAG port */
 #define MX3_CFG0_ICESEL_MASK    0x00000018 /* Debugger channel select */
 #define MX3_CFG0_ICESEL_PAIR1   0x00000000 /* Use PGC1/PGD1 */
 #define MX3_CFG0_ICESEL_PAIR2   0x00000008 /* Use PGC2/PGD2 */
@@ -130,6 +131,7 @@ extern const unsigned pic32_pemz[];
 #define MX3_CFG1_FNOSC_PRIPLL   0x00000003 /* Primary with PLL */
 #define MX3_CFG1_FNOSC_SEC      0x00000004 /* Secondary oscillator */
 #define MX3_CFG1_FNOSC_LPRC     0x00000005 /* Low-power RC */
+#define MX3_CFG1_FNOSC_FRCDIV16 0x00000006 /* Fast RC with divide-by-16 */
 #define MX3_CFG1_FNOSC_FRCDIV   0x00000007 /* Fast RC with divide-by-N */
 #define MX3_CFG1_FSOSCEN        0x00000020 /* Secondary oscillator enable */
 #define MX3_CFG1_IESO           0x00000080 /* Internal-external switch over */
@@ -138,7 +140,7 @@ extern const unsigned pic32_pemz[];
 #define MX3_CFG1_POSCMOD_XT     0x00000100 /* XT oscillator */
 #define MX3_CFG1_POSCMOD_HS     0x00000200 /* HS oscillator */
 #define MX3_CFG1_POSCMOD_DISABLE 0x00000300 /* Disabled */
-#define MX3_CFG1_OSCIOFNC       0x00000400 /* CLKO output active */
+#define MX3_CFG1_CLKO_DISABLE   0x00000400 /* Disable CLKO output */
 #define MX3_CFG1_FPBDIV_MASK    0x00003000 /* Peripheral bus clock divisor */
 #define MX3_CFG1_FPBDIV_1       0x00000000 /* SYSCLK / 1 */
 #define MX3_CFG1_FPBDIV_2       0x00001000 /* SYSCLK / 2 */
@@ -235,11 +237,14 @@ extern const unsigned pic32_pemz[];
  *
  * Config0 register, inverted.
  */
+#define MZ_CFG0_DEBUG_MASK      0x00000003 /* Background debugger mode */
+#define MZ_CFG0_DEBUG_DISABLE   0x00000000 /* Disable debugger */
 #define MZ_CFG0_DEBUG_ENABLE    0x00000002 /* Enable background debugger */
 #define MZ_CFG0_JTAG_DISABLE    0x00000004 /* Disable JTAG port */
 #define MZ_CFG0_ICESEL_PGE2     0x00000008 /* Use PGC2/PGD2 (default PGC1/PGD1) */
 #define MZ_CFG0_TRC_DISABLE     0x00000020 /* Disable Trace port */
 #define MZ_CFG0_MICROMIPS       0x00000040 /* Boot in microMIPS mode */
+#define MZ_CFG0_ECC_MASK        0x00000300 /* Enable Flash ECC */
 #define MZ_CFG0_ECC_ENABLE      0x00000300 /* Enable Flash ECC */
 #define MZ_CFG0_DECC_ENABLE     0x00000200 /* Enable Dynamic Flash ECC */
 #define MZ_CFG0_ECC_DIS_LOCK    0x00000100 /* Disable ECC, lock ECCCON */
@@ -247,9 +252,9 @@ extern const unsigned pic32_pemz[];
 #define MZ_CFG0_DBGPER0         0x00001000 /* In Debug mode, deny CPU access to
                                             * Permission Group 0 permission regions */
 #define MZ_CFG0_DBGPER1         0x00002000 /* In Debug mode, deny CPU access to
-                                            * Permission Group 0 permission regions */
+                                            * Permission Group 1 permission regions */
 #define MZ_CFG0_DBGPER2         0x00004000 /* In Debug mode, deny CPU access to
-                                            * Permission Group 0 permission regions */
+                                            * Permission Group 1 permission regions */
 #define MZ_CFG0_EJTAG_REDUCED   0x40000000 /* Reduced EJTAG functionality */
 
 /*

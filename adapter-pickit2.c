@@ -444,17 +444,16 @@ static unsigned pickit_read_word (adapter_t *adapter, unsigned addr)
 
     unsigned addr_lo = addr & 0xFFFF;
     unsigned addr_hi = (addr >> 16) & 0xFFFF;
-    pickit_send (a, 64, CMD_CLEAR_DOWNLOAD_BUFFER,
+    pickit_send (a, 49, CMD_CLEAR_DOWNLOAD_BUFFER,
         CMD_CLEAR_UPLOAD_BUFFER,
-        CMD_DOWNLOAD_DATA, 28,
-            WORD_AS_BYTES (0x3c04bf80),             // lui s3, 0xFF20
+        CMD_DOWNLOAD_DATA, 24,
+            WORD_AS_BYTES (0x3c13ff20),             // lui s3, 0xFF20
             WORD_AS_BYTES (0x3c080000 | addr_hi),   // lui t0, addr_hi
             WORD_AS_BYTES (0x35080000 | addr_lo),   // ori t0, addr_lo
             WORD_AS_BYTES (0x8d090000),             // lw t1, 0(t0)
             WORD_AS_BYTES (0xae690000),             // sw t1, 0(s3)
-            WORD_AS_BYTES (0x00094842),             // srl t1, 1
-            WORD_AS_BYTES (0xae690004),             // sw t1, 4(s3)
-        CMD_EXECUTE_SCRIPT, 29,
+            WORD_AS_BYTES (0),                      // nop
+        CMD_EXECUTE_SCRIPT, 18,
             SCRIPT_JT2_SENDCMD, TAP_SW_ETAP,
             SCRIPT_JT2_SETMODE, 6, 0x1F,
             SCRIPT_JT2_XFERINST_BUF,
@@ -462,26 +461,54 @@ static unsigned pickit_read_word (adapter_t *adapter, unsigned addr)
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,      // read FastData
             SCRIPT_JT2_XFERDATA32_LIT, 0, 0, 0, 0,
+        CMD_UPLOAD_DATA);
+    pickit_recv (a);
+    if (a->reply[0] != 4) {
+        fprintf (stderr, "%s: read word %08x: bad reply length=%u\n",
+            a->name, addr, a->reply[0]);
+        exit (-1);
+    }
+    unsigned word1 = a->reply[1] | (a->reply[2] << 8) |
+           (a->reply[3] << 16) | (a->reply[4] << 24);
+
+    pickit_send (a, 54, CMD_CLEAR_DOWNLOAD_BUFFER,
+        CMD_CLEAR_UPLOAD_BUFFER,
+        CMD_DOWNLOAD_DATA, 28,
+            WORD_AS_BYTES (0x3c13ff20),             // lui s3, 0xFF20
+            WORD_AS_BYTES (0x3c080000 | addr_hi),   // lui t0, addr_hi
+            WORD_AS_BYTES (0x35080000 | addr_lo),   // ori t0, addr_lo
+            WORD_AS_BYTES (0x8d090000),             // lw t1, 0(t0)
+            WORD_AS_BYTES (0x00094842),             // srl t1, 1
+            WORD_AS_BYTES (0xae690004),             // sw t1, 4(s3)
+            WORD_AS_BYTES (0),                      // nop
+        CMD_EXECUTE_SCRIPT, 19,
+            SCRIPT_JT2_SENDCMD, TAP_SW_ETAP,
             SCRIPT_JT2_SETMODE, 6, 0x1F,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_XFERINST_BUF,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,      // read FastData
             SCRIPT_JT2_XFERDATA32_LIT, 0, 0, 0, 0,
         CMD_UPLOAD_DATA);
     pickit_recv (a);
-    if (a->reply[0] != 8) {
+    if (a->reply[0] != 4) {
         fprintf (stderr, "%s: read word %08x: bad reply length=%u\n",
             a->name, addr, a->reply[0]);
         exit (-1);
     }
-    unsigned value = a->reply[1] | (a->reply[2] << 8) |
+    unsigned word2 = a->reply[1] | (a->reply[2] << 8) |
            (a->reply[3] << 16) | (a->reply[4] << 24);
-    unsigned value2 = a->reply[5] | (a->reply[6] << 8) |
-           (a->reply[7] << 16) | (a->reply[8] << 24);
-    value >>= 1;
-    value |= value2 & 0x80000000;
+
+    /* First word of reply contains 31 bits of value in MSB; LSB bit is garbage.
+     * Second word contains the MSB bit of the value. */
+    unsigned value = (word1 >> 1) | (word2 & 0x80000000);
     if (debug_level > 0)
         fprintf (stderr, "%s: %08x -> %08x\n", __func__, addr, value);
     return value;
