@@ -13,7 +13,8 @@ HIDSRC          = hidapi/hid-windows.c
 
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
-                  adapter-pickit2.o adapter-hidboot.o adapter-an1388.o
+                  adapter-pickit2.o adapter-hidboot.o adapter-an1388.o\
+                  family-mx1.o family-mx3.o family-mz.o
 #PROG_OBJS      += adapter-mpsse.o
 #LIBS           += -Llibusb-win32/x86 -lusb0_x86
 
