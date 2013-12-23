@@ -21,10 +21,10 @@ void print_mz (unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
     printf ("    DEVCFG0 = %08x\n", cfg0);
     if ((~cfg0 & MZ_CFG0_DEBUG_MASK) == MZ_CFG0_DEBUG_ENABLE)
         printf ("                     %u Debugger enabled\n",
-            ~cfg0 & MZ_CFG0_DEBUG_MASK);
+            MZ_CFG0_DEBUG_MASK);
     else
         printf ("                     %u Debugger disabled\n",
-            ~cfg0 & MZ_CFG0_DEBUG_MASK);
+            MZ_CFG0_DEBUG_MASK);
 
     if (~cfg0 & MZ_CFG0_JTAG_DISABLE)
         printf ("                     %u JTAG disabled\n",

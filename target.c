@@ -308,16 +308,24 @@ unsigned target_flash_bytes (target_t *t)
 
 unsigned target_boot_bytes (target_t *t)
 {
+    if (! t->family)
+        return 0;
     return t->family->boot_kbytes * 1024;
 }
 
 unsigned target_devcfg_offset (target_t *t)
 {
+    if (! t->family)
+        return 0;
     return t->family->devcfg_offset;
 }
 
 unsigned target_block_size (target_t *t)
 {
+    if (! t->family) {
+        /* Use 1024k block for bootloader. */
+        return 1024;
+    }
     return t->family->bytes_per_row;
 }
 
@@ -326,7 +334,7 @@ unsigned target_block_size (target_t *t)
  */
 void target_use_executive (target_t *t)
 {
-    if (t->adapter->load_executive != 0)
+    if (t->adapter->load_executive != 0 && t->family)
         t->adapter->load_executive (t->adapter, t->family->pe_code,
             t->family->pe_nwords, t->family->pe_version);
 }
@@ -336,6 +344,9 @@ void target_use_executive (target_t *t)
  */
 void target_print_devcfg (target_t *t)
 {
+    if (! t->family)
+        return;
+
     unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset (t);
     unsigned devcfg3 = t->adapter->read_word (t->adapter, devcfg_addr);
     unsigned devcfg2 = t->adapter->read_word (t->adapter, devcfg_addr + 4);
@@ -477,6 +488,9 @@ void target_program_block (target_t *t, unsigned addr,
 void target_program_devcfg (target_t *t, unsigned devcfg0,
         unsigned devcfg1, unsigned devcfg2, unsigned devcfg3)
 {
+    if (! t->family)
+        return;
+
     unsigned addr = 0x1fc00000 + t->family->devcfg_offset;
 
     //fprintf (stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, devcfg0, devcfg1, devcfg2, devcfg3);

@@ -345,10 +345,12 @@ void do_probe ()
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+    boot_bytes = target_boot_bytes (target);
     printf (_("    Processor: %s (id %08X)\n"), target_cpu_name (target),
         target_idcode (target));
     printf (_(" Flash memory: %d kbytes\n"), target_flash_bytes (target) / 1024);
-    printf (_("  Boot memory: %d kbytes\n"), target_boot_bytes (target) / 1024);
+    if (boot_bytes > 0)
+        printf (_("  Boot memory: %d kbytes\n"), boot_bytes / 1024);
     target_print_devcfg (target);
 }
 
@@ -417,7 +419,8 @@ void do_program (char *filename)
     devcfg_offset = target_devcfg_offset (target);
     printf (_("    Processor: %s\n"), target_cpu_name (target));
     printf (_(" Flash memory: %d kbytes\n"), flash_bytes / 1024);
-    printf (_("  Boot memory: %d kbytes\n"), boot_bytes / 1024);
+    if (boot_bytes > 0)
+        printf (_("  Boot memory: %d kbytes\n"), boot_bytes / 1024);
     printf (_("         Data: %d bytes\n"), total_bytes);
     if (devcfg0 & 0x80000000) {
         /* Default configuration. */
