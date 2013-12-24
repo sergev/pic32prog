@@ -309,7 +309,8 @@ extern const unsigned pic32_pemz[];
 #define MZ_CFG1_WDTSPGM         0x00200000 /* Watchdog stops during Flash programming */
 #define MZ_CFG1_WINDIS          0x00400000 /* Watchdog is in non-Window mode */
 #define MZ_CFG1_FWDTEN          0x00800000 /* Watchdog enable */
-#define MZ_CFG1_FWDTWINSZ_75    0x00000000 /* Watchdog window size is 75% */
+#define MZ_CFG1_FWDTWINSZ_MASK  0x03000000 /* Watchdog window size */
+#define MZ_CFG1_FWDTWINSZ_75    0x00000000 /* 75% */
 #define MZ_CFG1_FWDTWINSZ_50    0x01000000 /* 50% */
 #define MZ_CFG1_FWDTWINSZ_375   0x02000000 /* 37.5% */
 #define MZ_CFG1_FWDTWINSZ_25    0x03000000 /* 25% */
