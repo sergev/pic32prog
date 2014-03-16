@@ -1,7 +1,7 @@
 /*
  * Flash memory programmer for Microchip PIC32 microcontrollers.
  *
- * Copyright (C) 2011-2013 Serge Vakulenko
+ * Copyright (C) 2011-2014 Serge Vakulenko
  *
  * This file is part of PIC32PROG project, which is distributed
  * under the terms of the GNU General Public License (GPL).
@@ -459,8 +459,12 @@ void do_program (char *filename)
             if (flash_dirty [addr / blocksz])
                 progress_len++;
         }
-        if (progress_len / progress_step < 64)
+        if (progress_len / progress_step < 64) {
+            progress_len /= progress_step;
+            if (progress_len < 1)
+                progress_len = 1;
             break;
+        }
     }
 
     /* Compute length of progress indicator for boot memory. */
@@ -518,7 +522,7 @@ void do_program (char *filename)
                     exit (0);
             }
         }
-        printf (_("# done\n"));
+        printf (_(" done\n"));
     }
     if (boot_used && !skip_verify) {
         printf (_("  Verify boot: "));
@@ -666,7 +670,7 @@ int main (int argc, char **argv)
     setvbuf (stderr, (char *)NULL, _IOLBF, 0);
     printf (_("Programmer for Microchip PIC32 microcontrollers, Version %s\n"), VERSION);
     progname = argv[0];
-    copyright = _("    Copyright: (C) 2011-2013 Serge Vakulenko");
+    copyright = _("    Copyright: (C) 2011-2014 Serge Vakulenko");
     signal (SIGINT, interrupted);
 #ifdef __linux__
     signal (SIGHUP, interrupted);
