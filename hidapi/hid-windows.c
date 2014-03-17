@@ -10,7 +10,14 @@
 #include <wtypes.h>
 #include <basetyps.h>
 #include <setupapi.h>
+
+#ifdef __CYGWIN__
+#include <w32api/hidsdi.h>
+/* the definition below is missing from Cygwin' hidsdi.h ... */
+HIDAPI VOID NTAPI HidD_GetHidGuid (LPGUID);
+#else
 #include <ddk/hidsdi.h>
+#endif
 
 #include "hidapi.h"
 
