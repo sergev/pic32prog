@@ -39,6 +39,14 @@ typedef struct {
 } pickit_adapter_t;
 
 /*
+ * Programmable power voltages.
+ */
+#define VDD_VOLTAGE             3.3     /* Power supply */
+#define VDD_LIMIT               2.81
+#define VPP_VOLTAGE             3.28    /* Reset voltage */
+#define VPP_LIMIT               2.26
+
+/*
  * Identifiers of USB adapter.
  */
 #define MICROCHIP_VID           0x04d8
@@ -871,14 +879,28 @@ adapter_t *adapter_open_pickit (void)
         SCRIPT_VDD_GND_ON);
 
     /* Setup power voltage 3.3V, fault limit 2.81V. */
-    unsigned vdd = (unsigned) (3.3 * 32 + 10.5) << 6;
-    unsigned vdd_limit = (unsigned) ((2.81 / 5) * 255);
-    pickit_send (a, 4, CMD_SET_VDD, vdd, vdd >> 8, vdd_limit);
+    if (a->is_pk3) {
+        /* PICkit 3 */
+        unsigned vdd = (unsigned) (VDD_VOLTAGE * 8 + 2.5);
+        pickit_send (a, 3, CMD_SET_VDD, vdd, vdd >> 8);
+    } else {
+        /* PICkit 2 */
+        unsigned vdd = (unsigned) (VDD_VOLTAGE * 32 + 10.5) << 6;
+        unsigned vdd_limit = (unsigned) ((VDD_LIMIT / 5) * 255);
+        pickit_send (a, 4, CMD_SET_VDD, vdd, vdd >> 8, vdd_limit);
+    }
 
     /* Setup reset voltage 3.28V, fault limit 2.26V. */
-    unsigned vpp = (unsigned) (3.28 * 18.61);
-    unsigned vpp_limit = (unsigned) (2.26 * 18.61);
-    pickit_send (a, 4, CMD_SET_VPP, 0x40, vpp, vpp_limit);
+    if (a->is_pk3) {
+        /* PICkit 3 */
+        unsigned vpp = (unsigned) (VPP_VOLTAGE * 8 + 2.5);
+        pickit_send (a, 3, CMD_SET_VPP, vpp, vpp >> 8);
+    } else {
+        /* PICkit 2 */
+        unsigned vpp = (unsigned) (VPP_VOLTAGE * 18.61);
+        unsigned vpp_limit = (unsigned) (VPP_LIMIT * 18.61);
+        pickit_send (a, 4, CMD_SET_VPP, 0x40, vpp, vpp_limit);
+    }
 
     /* Setup serial speed as 8MHz/divisor. */
     unsigned divisor = 10;
