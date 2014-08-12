@@ -73,6 +73,8 @@ static const struct {
     {0x4D06053, "MX150F128B",    128,   &family_mx1},
     {0x4D08053, "MX150F128C",    128,   &family_mx1},
     {0x4D0A053, "MX150F128D",    128,   &family_mx1},
+    {0x6610053, "MX170F256B",    256,   &family_mx1},
+    {0x661A053, "MX170F256D",    256,   &family_mx1},
     {0x4A01053, "MX210F016B",     16,   &family_mx1},
     {0x4A03053, "MX210F016C",     16,   &family_mx1},
     {0x4A05053, "MX210F016D",     16,   &family_mx1},
@@ -85,6 +87,8 @@ static const struct {
     {0x4D00053, "MX250F128B",    128,   &family_mx1},
     {0x4D02053, "MX250F128C",    128,   &family_mx1},
     {0x4D04053, "MX250F128D",    128,   &family_mx1},
+    {0x6600053, "MX270F256B",    256,   &family_mx1},
+    {0x660A053, "MX270F256D",    256,   &family_mx1},
 
     /* MX3/4/5/6/7 family-------Flash---Family */
     {0x0902053, "MX320F032H",     32,   &family_mx3},
