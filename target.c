@@ -231,7 +231,7 @@ void mdelay (unsigned msec)
 /*
  * Connect to JTAG adapter.
  */
-target_t *target_open ()
+target_t *target_open (const char *port_name)
 {
     target_t *t;
 
@@ -243,7 +243,15 @@ target_t *target_open ()
     t->cpu_name = "Unknown";
 
     /* Find adapter. */
-    t->adapter = adapter_open_pickit ();
+    if (port_name) {
+#ifdef USE_AN1388_UART
+        t->adapter = adapter_open_an1388_uart (port_name);
+#endif
+        if (! t->adapter)
+            t->adapter = adapter_open_bitbang (port_name);
+    }
+    if (! t->adapter)
+        t->adapter = adapter_open_pickit ();
 #ifdef USE_MPSSE
     if (! t->adapter)
         t->adapter = adapter_open_mpsse ();

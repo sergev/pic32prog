@@ -416,7 +416,7 @@ static void an1388_erase_chip (adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-int open_port(char *port, long baud)
+int open_port (const char *port, long baud)
 {
     int fd;
     struct termios newtio;
@@ -451,12 +451,11 @@ int open_port(char *port, long baud)
     return fd;
 }
 
-adapter_t *adapter_open_an1388_uart (void)
+adapter_t *adapter_open_an1388_uart (const char *port)
 {
     an1388_adapter_t *a;
     int fd;
     long bdrate = B115200;
-    char port[] ="/dev/ttyUSB0";
 
     /* open serial port */
     fd = open_port(port, bdrate);

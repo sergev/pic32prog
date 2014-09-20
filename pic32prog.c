@@ -60,6 +60,7 @@ int skip_verify = 0;
 int debug_level;
 int power_on;
 target_t *target;
+const char *target_port;        /* Optional name of target serial port */
 char *progname;
 const char *copyright;
 
@@ -340,7 +341,7 @@ void do_probe ()
 {
     /* Open and detect the device. */
     atexit (quit);
-    target = target_open ();
+    target = target_open (target_port);
     if (! target) {
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
@@ -408,7 +409,7 @@ void do_program (char *filename)
 
     /* Open and detect the device. */
     atexit (quit);
-    target = target_open ();
+    target = target_open (target_port);
     if (! target) {
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
@@ -561,7 +562,7 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
 
     /* Open and detect the device. */
     atexit (quit);
-    target = target_open ();
+    target = target_open (target_port);
     if (! target) {
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
@@ -677,7 +678,7 @@ int main (int argc, char **argv)
 #endif
     signal (SIGTERM, interrupted);
 
-    while ((ch = getopt_long (argc, argv, "vDhrpCVWS",
+    while ((ch = getopt_long (argc, argv, "vDhrpCVWSd:",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -691,6 +692,9 @@ int main (int argc, char **argv)
             continue;
         case 'p':
             ++power_on;
+            continue;
+        case 'd':
+            target_port = optarg;
             continue;
         case 'h':
             break;
@@ -726,6 +730,7 @@ usage:
         printf ("       file.bin            Code file in binary format\n");
         printf ("       -v                  Verify only\n");
         printf ("       -r                  Read mode\n");
+        printf ("       -d device           Use serial device\n");
         printf ("       -p                  Leave board powered on\n");
         printf ("       -D                  Debug mode\n");
         printf ("       -h, --help          Print this help message\n");

@@ -34,6 +34,8 @@ adapter_t *adapter_open_pickit (void);
 adapter_t *adapter_open_an1388 (void);
 adapter_t *adapter_open_hidboot (void);
 adapter_t *adapter_open_mpsse (void);
+adapter_t *adapter_open_bitbang (const char *port);
+adapter_t *adapter_open_an1388_uart (const char *port);
 
 void mdelay (unsigned msec);
 extern int debug_level;

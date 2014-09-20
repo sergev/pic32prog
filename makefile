@@ -19,7 +19,7 @@ endif
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o \
-                  family-mx1.o family-mx3.o family-mz.o
+                  adapter-bitbang.o family-mx1.o family-mx3.o family-mz.o
 
 # Olimex ARM-USB-Tiny JTAG adapter: requires libusb-0.1
 CFLAGS          += -DUSE_MPSSE
@@ -33,6 +33,10 @@ ifeq ($(UNAME),Darwin)
     CFLAGS      += -I/opt/local/include/libusb-legacy
     LIBS        += -L/opt/local/lib/libusb-legacy -lusb-legacy
 endif
+
+# Add support for UART bootloader (AN1388 serial protocol).
+#CFLAGS          += -DUSE_AN1388_UART
+#PROG_OBJS       += adapter-an1388-uart.o
 
 all:            pic32prog
 
