@@ -443,10 +443,12 @@ void target_verify_block (target_t *t, unsigned addr,
  */
 int target_erase (target_t *t)
 {
-    printf (_("        Erase: "));
-    fflush (stdout);
-    t->adapter->erase_chip (t->adapter);
-    printf (_("done\n"));
+    if (t->adapter->erase_chip) {
+        printf (_("        Erase: "));
+        fflush (stdout);
+        t->adapter->erase_chip (t->adapter);
+        printf (_("done\n"));
+    }
     return 1;
 }
 

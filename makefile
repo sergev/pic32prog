@@ -19,7 +19,8 @@ endif
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o \
-                  adapter-bitbang.o family-mx1.o family-mx3.o family-mz.o
+                  adapter-bitbang.o adapter-stk500v2.o \
+                  family-mx1.o family-mx3.o family-mz.o
 
 # Olimex ARM-USB-Tiny JTAG adapter: requires libusb-0.1
 CFLAGS          += -DUSE_MPSSE
