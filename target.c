@@ -248,18 +248,21 @@ target_t *target_open (const char *port_name)
         t->adapter = adapter_open_an1388_uart (port_name);
 #endif
         if (! t->adapter)
+            t->adapter = adapter_open_stk500v2 (port_name);
+        if (! t->adapter)
             t->adapter = adapter_open_bitbang (port_name);
-    }
-    if (! t->adapter)
+    } else {
+        if (! t->adapter)
         t->adapter = adapter_open_pickit ();
 #ifdef USE_MPSSE
-    if (! t->adapter)
-        t->adapter = adapter_open_mpsse ();
+        if (! t->adapter)
+            t->adapter = adapter_open_mpsse ();
 #endif
-    if (! t->adapter)
-        t->adapter = adapter_open_hidboot ();
-    if (! t->adapter)
-        t->adapter = adapter_open_an1388 ();
+        if (! t->adapter)
+            t->adapter = adapter_open_hidboot ();
+        if (! t->adapter)
+            t->adapter = adapter_open_an1388 ();
+    }
     if (! t->adapter) {
         fprintf (stderr, "\n");
         fprintf (stderr, _("No target found.\n"));
