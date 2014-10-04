@@ -532,7 +532,7 @@ static int open_port (stk_adapter_t *a, const char *devname)
     }
 #else
     /* Open port */
-    a->fd = open (devname, O_RDWR | O_NONBLOCK);
+    a->fd = open (devname, O_RDWR | O_NOCTTY | O_NONBLOCK);
     if (a->fd < 0) {
         perror (devname);
         return -1;
@@ -542,13 +542,23 @@ static int open_port (stk_adapter_t *a, const char *devname)
     memset (&a->saved_mode, 0, sizeof(a->saved_mode));
     tcgetattr (a->fd, &a->saved_mode);
 
-    new_mode = a->saved_mode;
-
-    cfmakeraw (&new_mode);
+    /* 8n1, ignore parity */
+    memset (&new_mode, 0, sizeof(new_mode));
+    new_mode.c_cflag = CS8 | CLOCAL | CREAD;
+    new_mode.c_iflag = IGNBRK;
+    new_mode.c_oflag = 0;
+    new_mode.c_lflag = 0;
+    new_mode.c_cc[VTIME] = 0;
+    new_mode.c_cc[VMIN]  = 1;
     cfsetispeed (&new_mode, 115200);
     cfsetospeed (&new_mode, 115200);
-    new_mode.c_iflag |= IGNBRK;
+    tcflush (a->fd, TCIFLUSH);
     tcsetattr (a->fd, TCSANOW, &new_mode);
+
+    /* Clear O_NONBLOCK flag. */
+    int flags = fcntl (a->fd, F_GETFL, 0);
+    if (flags >= 0)
+        fcntl (a->fd, F_SETFL, flags & ~O_NONBLOCK);
 #endif
     return 0;
 }
@@ -569,6 +579,7 @@ adapter_t *adapter_open_stk500v2 (const char *port)
         free (a);
         return 0;
     }
+    usleep (200000);
 
     /* Detect the device. */
     int retry_count;
