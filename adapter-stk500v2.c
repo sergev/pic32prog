@@ -15,7 +15,9 @@
 #include <errno.h>
 #include <usb.h>
 
-#include <termios.h>
+#if !defined(__WIN32__) && !defined(WIN32)
+#   include <termios.h>
+#endif
 #include <sys/time.h>
 #include <sys/types.h>
 
@@ -51,10 +53,9 @@ typedef struct {
 
     unsigned char   sequence_number;
     unsigned char   page_addr_fetched;
-    unsigned short  page_delay;
-    u_int32_t       page_addr;
-    u_int32_t       last_load_addr;
-    unsigned char   page [256];
+    unsigned        page_addr;
+    unsigned        last_load_addr;
+    unsigned char   page [PAGE_NBYTES];
 
 #if defined(__WIN32__) || defined(WIN32)
     void            *fd;
@@ -83,7 +84,7 @@ static int receive (stk_adapter_t *a, unsigned char *data, int len)
     long got;
     fd_set rfds;
 
-    timeout.tv_sec = 5;
+    timeout.tv_sec = 1;
     timeout.tv_usec = 0;
     to2 = timeout;
 again:
@@ -124,8 +125,8 @@ static int send_receive (stk_adapter_t *a, unsigned char *cmd, int cmdlen,
     unsigned char *response, int reply_len)
 {
     unsigned char *p, sum, hdr [5];
-    int len, i, got, rlen;
-
+    int len, i, got, rlen, retry = 0;
+again:
     /*
      * Prepare header and checksum.
      */
@@ -182,13 +183,17 @@ static int send_receive (stk_adapter_t *a, unsigned char *cmd, int cmdlen,
     }
     if (hdr[0] != MESSAGE_START || hdr[1] != a->sequence_number ||
         hdr[4] != TOKEN) {
-        printf ("got invalid header: %x-%x-%x-%x-%x\n",
-            hdr[0], hdr[1], hdr[2], hdr[3], hdr[4]);
+        /* Skip all incoming data. */
+        unsigned char buf [300];
+
+        if (retry)
+            printf ("got invalid header: %x-%x-%x-%x-%x\n",
+                hdr[0], hdr[1], hdr[2], hdr[3], hdr[4]);
 flush_input:
-        {
-            /* Skip all incoming data. */
-            unsigned char buf [300];
-            receive (a, buf, sizeof (buf));
+        receive (a, buf, sizeof (buf));
+        if (retry) {
+            retry = 1;
+            goto again;
         }
         return 0;
     }
@@ -273,23 +278,25 @@ static void prog_disable (stk_adapter_t *a)
     };
     unsigned char response [2];
 
-    if (! send_receive (a, cmd, 3, response, 2) || response[0] != cmd[0] ||
-        response[1] != STATUS_CMD_OK) {
-        fprintf (stderr, "Cannot leave programming mode.\n");
-    }
+    /* Skip all incoming data. */
+    unsigned char buf [300];
+    receive (a, buf, sizeof (buf));
+
+    /* Leave programming mode; ignore errors. */
+    send_receive (a, cmd, 3, response, 2);
 }
 
-static void load_address (stk_adapter_t *a, u_int32_t addr)
+static void load_address (stk_adapter_t *a, unsigned addr)
 {
     unsigned char cmd [5] = { CMD_LOAD_ADDRESS,
-        0, addr >> 16, addr >> 8, addr, };
+        0, (addr >> 16) & 0x7f, addr >> 8, addr, };
     unsigned char response [2];
 
     if (a->last_load_addr == addr)
         return;
 
     if (debug_level > 1)
-        printf ("Load address: %#x\n", addr);
+        printf ("Load address: %#x\n", addr & 0x7f0000);
 
     if (! send_receive (a, cmd, 5, response, 2) || response[0] != cmd[0] ||
         response[1] != STATUS_CMD_OK) {
@@ -301,16 +308,8 @@ static void load_address (stk_adapter_t *a, u_int32_t addr)
 
 static void flush_write_buffer (stk_adapter_t *a)
 {
-    unsigned char cmd [10+256] = { CMD_PROGRAM_FLASH_ISP,
-        PAGE_NBYTES >> 8,
-        PAGE_NBYTES & 0xff,
-        0xA1,                   /* mode */
-        a->page_delay * 3/2,    /* delay */
-        0x40,                   /* Load Page command */
-        0x4c,                   /* Write Program Memory Page command */
-        0x20,                   /* Read Program Memory command */
-        0xFF,                   /* poll value 1 */
-        0 };                    /* poll value 2 (for EEPROM only) */
+    unsigned char cmd [10+PAGE_NBYTES] = { CMD_PROGRAM_FLASH_ISP,
+        PAGE_NBYTES >> 8, PAGE_NBYTES & 0xff, 0, 0, 0, 0, 0, 0, 0 };
     unsigned char response [2];
 
     if (! a->page_addr_fetched)
@@ -320,17 +319,6 @@ static void flush_write_buffer (stk_adapter_t *a)
 
     if (debug_level > 1)
         printf ("Programming page: %#x\n", a->page_addr);
-#if 0
-    if (page_bytes == 0) {
-        /* Word mode. */
-        page_bytes = 256;
-        cmd [1] = page_bytes >> 8;
-        cmd [2] = page_bytes;
-        cmd [3] = 4;            /* mode */
-        cmd [6] = 0x20;         /* Read Program Memory command */
-        cmd [8] = 0x7F;         /* poll value 1 */
-    }
-#endif
     memcpy (cmd+10, a->page, PAGE_NBYTES);
     if (! send_receive (a, cmd, 10+PAGE_NBYTES, response, 2) ||
         response[0] != cmd[0]) {
@@ -340,7 +328,6 @@ static void flush_write_buffer (stk_adapter_t *a)
     if (response[1] != STATUS_CMD_OK)
         printf ("Programming flash: timeout at %#x\n", a->page_addr);
 
-    usleep (a->page_delay * 1000L);
     a->page_addr_fetched = 0;
     a->last_load_addr += PAGE_NBYTES / 2;
 }
@@ -350,7 +337,7 @@ static void flush_write_buffer (stk_adapter_t *a)
  * Cache page address. When current address is out of the page address,
  * flush page buffer and continue programming.
  */
-static void write_byte (stk_adapter_t *a, u_int32_t addr, unsigned char byte)
+static void write_byte (stk_adapter_t *a, unsigned addr, unsigned char byte)
 {
     if (debug_level > 2)
         printf ("Loading to address: %#x (page_addr_fetched=%s)\n",
@@ -366,25 +353,25 @@ static void write_byte (stk_adapter_t *a, u_int32_t addr, unsigned char byte)
     a->page [addr % PAGE_NBYTES] = byte;
 }
 
-static void read_page (stk_adapter_t *a, u_int32_t addr,
+static void read_page (stk_adapter_t *a, unsigned addr,
     unsigned char *buf)
 {
     unsigned char cmd [4] = { CMD_READ_FLASH_ISP, 1, 0, 0x20 };
-    unsigned char response [3+256];
+    unsigned char response [3+PAGE_NBYTES];
 
     load_address (a, addr >> 1);
     if (debug_level > 1)
         printf ("Read page: %#x\n", addr);
 
-    if (! send_receive (a, cmd, 4, response, 3+256) ||
+    if (! send_receive (a, cmd, 4, response, 3+PAGE_NBYTES) ||
         response[0] != cmd[0] ||
         response[1] != STATUS_CMD_OK ||
-        response[2+256] != STATUS_CMD_OK) {
+        response[2+PAGE_NBYTES] != STATUS_CMD_OK) {
         fprintf (stderr, "Read page failed.\n");
         exit (-1);
     }
-    memcpy (buf, response+2, 256);
-    a->last_load_addr += 256 / 2;
+    memcpy (buf, response+2, PAGE_NBYTES);
+    a->last_load_addr += PAGE_NBYTES / 2;
 }
 
 static void stk_close (adapter_t *adapter, int power_on)
@@ -428,7 +415,8 @@ static unsigned stk_read_word (adapter_t *adapter, unsigned addr)
         fprintf (stderr, "Read word failed.\n");
         exit (-1);
     }
-    return *(u_int32_t*) &response[2];
+    return response[2] | response[3] << 8 |
+        response[4] << 16 | response[5] << 24;
 }
 
 /*
@@ -450,10 +438,10 @@ static void stk_verify_data (adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     stk_adapter_t *a = (stk_adapter_t*) adapter;
-    unsigned block [256], i, expected, word;
+    unsigned block [PAGE_NBYTES], i, expected, word;
 
     /* Read block of data. */
-    for (i=0; i<1024; i+=256)
+    for (i=0; i<1024; i+=PAGE_NBYTES)
         read_page (a, addr+i, i + (unsigned char*) block);
 
     /* Compare. */
@@ -477,7 +465,7 @@ static void stk_program_block (adapter_t *adapter,
     stk_adapter_t *a = (stk_adapter_t*) adapter;
     unsigned i;
 
-    for (i=0; i<256; ++i) {
+    for (i=0; i<PAGE_NBYTES; ++i) {
         write_byte (a, addr + i*4,     data[i]);
         write_byte (a, addr + i*4 + 1, data[i] >> 8);
         write_byte (a, addr + i*4 + 2, data[i] >> 16);
@@ -609,8 +597,6 @@ adapter_t *adapter_open_stk500v2 (const char *port)
     a->last_load_addr = -1;
 
     /* Identify device. */
-    //a->page_delay = 5;
-
     printf ("      Adapter: STK500v2 Bootloader\n");
 
     a->adapter.user_start = 0x1d000000;
