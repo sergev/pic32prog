@@ -262,6 +262,8 @@ target_t *target_open (const char *port_name)
             t->adapter = adapter_open_hidboot ();
         if (! t->adapter)
             t->adapter = adapter_open_an1388 ();
+        if (! t->adapter)
+            t->adapter = adapter_open_uhb ();
     }
     if (! t->adapter) {
         fprintf (stderr, "\n");
