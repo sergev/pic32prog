@@ -37,6 +37,13 @@ typedef struct {
     /* Device handle for libusb. */
     hid_device *hiddev;
 
+    unsigned flash_size;
+    unsigned erase_size;
+    unsigned write_size;
+    unsigned version;
+    unsigned boot_start;
+    char name [32];
+
     unsigned char reply [64];
     int reply_len;
 
@@ -75,7 +82,8 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
     }
     hid_write (a->hiddev, buf, 64);
 
-    if (cmd == CMD_REBOOT) {
+    if (cmd == CMD_REBOOT ||
+        (cmd == CMD_WRITE && nbytes == 0)) {
         /* No reply expected. */
         return;
     }
@@ -92,7 +100,7 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
     }
     if (debug_level > 0) {
         fprintf (stderr, "---Recv");
-        for (k=0; k<a->reply_len; ++k) {
+        for (k=0; k<2; ++k) {
             if (k != 0 && (k & 15) == 0)
                 fprintf (stderr, "\n       ");
             fprintf (stderr, " %02x", a->reply[k]);
@@ -147,36 +155,41 @@ static void uhb_verify_data (adapter_t *adapter,
     /* Not supported by UHB bootloader. */
 }
 
-#if 0
 static void program_flash (uhb_adapter_t *a,
     unsigned addr, unsigned *data, unsigned nwords)
 {
     unsigned char request[64];
-    unsigned nbytes;
+    unsigned nbytes = nwords * 4;
 
     //fprintf (stderr, "uhb: program %d bytes at %08x: %08x-%08x-...-%08x\n",
     //    nbytes, addr, data[0], data[1], data[nwords-1]);
 
-    nbytes = nwords * 4;
-    if (addr < a->adapter.user_start ||
-        addr + nbytes >= a->adapter.user_start + a->adapter.user_nbytes)
-    {
+    if (! (addr >= a->adapter.user_start &&
+           addr + nbytes <= a->adapter.user_start + a->adapter.user_nbytes) &&
+        ! (addr >= 0x1fc00000 &&
+           addr + nbytes <= 0x1fc00000 + 8*1024)) {
         fprintf (stderr, "address %08x out of program area\n", addr);
         return;
     }
 
+    /*
+     * Write-to-flash command format.
+     *
+     *  <STX> <CMD_WRITE> <Address[0..3]> <Count[0..1]> <Data[0..Count-1]>
+     * |- 1 -|---- 1 ----|------ 4 ------|----- 2 -----|------ Count -----|
+     */
     memset (request, 0, sizeof(request));
-    *(unsigned*) &request[0] = addr;
+    request[0] = addr;
+    request[1] = addr >> 8;
+    request[2] = addr >> 16;
+    request[3] = addr >> 24;
     request[4] = nbytes;
-    request[5] = 0;
-    request[6] = 0;
+    request[5] = nbytes >> 8;
+    memcpy (&request[6], data, nbytes);
 
-    /* Data is right aligned. */
-    memcpy (request + 63 - nbytes, data, nbytes);
-
-    uhb_command (a, CMD_PROGRAM_DEVICE, request, 63);
+    uhb_command (a, CMD_WRITE, 0, 0);
+    uhb_command (a, CMD_WRITE, request, nbytes+6);
 }
-#endif
 
 /*
  * Flash write, 1-kbyte blocks.
@@ -184,18 +197,15 @@ static void program_flash (uhb_adapter_t *a,
 static void uhb_program_block (adapter_t *adapter,
     unsigned addr, unsigned *data)
 {
-#if 0
     uhb_adapter_t *a = (uhb_adapter_t*) adapter;
     int nwords;
 
-    for (nwords=256; nwords>0; nwords-=14) {
-        /* 14 words = 56 bytes per packet. */
-        program_flash (a, addr, data, nwords>14 ? 14 : nwords);
-        data += 14;
-        addr += 14*4;
+    for (nwords=256; nwords>0; nwords-=8) {
+        /* Send 8 words per packet. */
+        program_flash (a, addr, data, 8);
+        data += 8;
+        addr += 8*4;
     }
-    uhb_command (a, CMD_PROGRAM_COMPLETE, 0, 0);
-#endif
 }
 
 /*
@@ -203,15 +213,30 @@ static void uhb_program_block (adapter_t *adapter,
  */
 static void uhb_erase_chip (adapter_t *adapter)
 {
-#if 0
     uhb_adapter_t *a = (uhb_adapter_t*) adapter;
+    unsigned char request[64];
+    int nblocks = a->adapter.user_nbytes / a->erase_size;
+    unsigned addr = a->adapter.user_start;
 
     //fprintf (stderr, "uhb: erase chip\n");
-    uhb_command (a, CMD_ERASE_DEVICE, 0, 0);
+    for (; nblocks-- > 0; addr += a->erase_size) {
+        /*
+         * Erase command format.
+         *
+         *  <STX> <CMD_ERASE> <Address[0..3]> <Count[0..1]>
+         * |- 1 -|---- 1 ----|------ 4 ------|----- 2 -----|
+         */
+        memset (request, 0, sizeof(request));
+        request[0] = addr;
+        request[1] = addr >> 8;
+        request[2] = addr >> 16;
+        request[3] = addr >> 24;
+        request[4] = 1;
+        request[5] = 0;
 
-    /* To wait when erase finished, query a reply. */
-    uhb_command (a, CMD_QUERY_DEVICE, 0, 0);
-#endif
+        /* Erase one block. */
+        uhb_command (a, CMD_ERASE, request, 6);
+    }
 }
 
 /*
@@ -223,8 +248,6 @@ adapter_t *adapter_open_uhb (void)
 {
     uhb_adapter_t *a;
     hid_device *hiddev;
-    unsigned version, erase_block_size, write_block_size;
-    char *name;
 
     hiddev = hid_open (MIKROE_VID, MIKROEBOOT_PID, 0);
     if (! hiddev) {
@@ -247,25 +270,32 @@ adapter_t *adapter_open_uhb (void)
         a->reply[12] != 3 ||                /* Tag: erase block size */
         a->reply[16] != 4 ||                /* Tag: write block size */
         a->reply[20] != 5 ||                /* Tag: version of bootloader */
-        a->reply[24] != 6 ||                /* Tag: user code start address */
+        a->reply[24] != 6 ||                /* Tag: bootloader start address */
         a->reply[32] != 7)                  /* Tag: board name */
         return 0;
 
-    a->adapter.user_nbytes = *(uint32_t*) &a->reply[8];
-    erase_block_size       = *(uint16_t*) &a->reply[14];
-    write_block_size       = *(uint16_t*) &a->reply[18];
-    version                = *(uint16_t*) &a->reply[22];
-    a->adapter.user_start  = *(uint32_t*) &a->reply[28];
-    name                   = (char*) &a->reply[33];
+    a->flash_size  = *(uint32_t*) &a->reply[8];
+    a->erase_size  = *(uint16_t*) &a->reply[14];
+    a->write_size  = *(uint16_t*) &a->reply[18];
+    a->version     = *(uint16_t*) &a->reply[22];
+    a->boot_start  = *(uint32_t*) &a->reply[28];
+    memcpy (a->name, &a->reply[33], 31);
 
-    printf ("      Adapter: UHB Bootloader '%s' Version %x.%02x\n",
-        name, version >> 8, version & 0xff);
-    printf ("Start address: %08x\n", a->adapter.user_start);
+    a->adapter.user_start  = 0x1d000000;
+    a->adapter.user_nbytes = a->boot_start & 0x00ffffff;
+    a->adapter.boot_nbytes = 12*1024 - a->erase_size;
+    printf ("      Adapter: UHB Bootloader '%s', Version %x.%02x\n",
+        a->name, a->version >> 8, a->version & 0xff);
+    printf (" Program area: %08x-%08x, %08x-%08x\n", a->adapter.user_start,
+        a->adapter.user_start + a->adapter.user_nbytes - 1,
+        0x1fc00000, 0x1fc00000+ a->adapter.boot_nbytes - 1);
+
     if (debug_level > 0) {
-        printf ("  Write block: %u bytes\n", write_block_size);
-        printf ("  Erase block: %u bytes\n", erase_block_size);
+        printf ("   Flash size: %u bytes\n", a->flash_size);
+        printf ("  Write block: %u bytes\n", a->write_size);
+        printf ("  Erase block: %u bytes\n", a->erase_size);
+        //printf ("   Boot start: %08x\n", a->boot_start);
     }
-    a->adapter.user_start &= 0x1fffffff;
 
     /* Enter Bootloader mode. */
     uhb_command (a, CMD_BOOT, 0, 0);

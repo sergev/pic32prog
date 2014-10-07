@@ -40,6 +40,7 @@ struct _target_t {
     unsigned        cpuid;
     unsigned        flash_addr;
     unsigned        flash_bytes;
+    unsigned        boot_bytes;
 };
 
 extern print_func_t print_mx1;
@@ -296,6 +297,7 @@ target_t *target_open (const char *port_name)
     if (! t->flash_bytes) {
         t->flash_addr = t->adapter->user_start;
         t->flash_bytes = t->adapter->user_nbytes;
+        t->boot_bytes = t->adapter->boot_nbytes;
     }
     return t;
 }
@@ -326,7 +328,7 @@ unsigned target_flash_bytes (target_t *t)
 unsigned target_boot_bytes (target_t *t)
 {
     if (! t->family)
-        return 0;
+        return t->boot_bytes;
     return t->family->boot_kbytes * 1024;
 }
 

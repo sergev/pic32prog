@@ -14,6 +14,7 @@ typedef struct _adapter_t adapter_t;
 struct _adapter_t {
     unsigned user_start;                /* Start address of user area */
     unsigned user_nbytes;               /* Size of user flash area */
+    unsigned boot_nbytes;               /* Size of user boot area */
 
     void (*close) (adapter_t *a, int power_on);
     unsigned (*get_idcode) (adapter_t *a);
