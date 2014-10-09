@@ -798,14 +798,15 @@ static int set_report(hid_device *dev, IOHIDReportType type, const unsigned char
 	/* Return if the device has been disconnected. */
    	if (dev->disconnected)
    		return -1;
-
+#if 0
 	if (data[0] == 0x0) {
 		/* Not using numbered Reports.
 		   Don't send the report number. */
 		data_to_send = data+1;
 		length_to_send = length-1;
-	}
-	else {
+	} else
+#endif
+        {
 		/* Using numbered Reports.
 		   Send the Report Number */
 		data_to_send = data;
