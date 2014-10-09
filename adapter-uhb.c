@@ -96,7 +96,7 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
 
     if (debug_level > 0) {
         fprintf (stderr, "---Send");
-        for (k=0; k<nbytes+2; ++k) {
+        for (k=0; k<nbytes; ++k) {
             if (k != 0 && (k & 15) == 0)
                 fprintf (stderr, "\n       ");
             fprintf (stderr, " %02x", buf[k]);
@@ -113,6 +113,15 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
     if (cmd == CMD_WRITE) {
         /* Send data. */
         for (; data_bytes>0; data_bytes-=64) {
+            if (debug_level > 0) {
+                fprintf (stderr, "---    ");
+                for (k=0; k<64; ++k) {
+                    if (k != 0 && (k & 15) == 0)
+                        fprintf (stderr, "\n       ");
+                    fprintf (stderr, " %02x", data[k]);
+                }
+                fprintf (stderr, "\n");
+            }
             hid_write (a->hiddev, data, 64);
             data += 64;
         }
@@ -224,7 +233,6 @@ static void uhb_program_block (adapter_t *adapter,
     }
 
     uhb_command (a, CMD_WRITE, addr, 1024, (unsigned char*)data, 1024);
-    uhb_command (a, CMD_SYNC, 0, 0, 0, 0);
 }
 
 /*
