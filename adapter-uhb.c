@@ -72,18 +72,10 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
     buf[1] = cmd;
     if (cmd == CMD_WRITE || cmd == CMD_ERASE) {
         /*
-         * Write-to-flash command format:
+         * Write and Erase command format:
          *
-         *  <STX> <CMD_WRITE> <Address[0..3]> <Count[0..1]>
-         * |- 1 -|---- 1 ----|------ 4 ------|----- 2 -----|
-         *
-         * Next follow Count/64 packets of data.
-         */
-        /*
-         * Erase command format.
-         *
-         *  <STX> <CMD_ERASE> <Address[0..3]> <Count[0..1]>
-         * |- 1 -|---- 1 ----|------ 4 ------|----- 2 -----|
+         *  <STX> <CMD> <Address[0..3]> <Count[0..1]>
+         * |- 1 -|- 1 -|------ 4 ------|----- 2 -----|
          */
         buf[2] = addr;
         buf[3] = addr >> 8;
@@ -310,7 +302,7 @@ adapter_t *adapter_open_uhb (void)
         printf ("   Flash size: %u bytes\n", a->flash_size);
         printf ("  Write block: %u bytes\n", a->write_size);
         printf ("  Erase block: %u bytes\n", a->erase_size);
-        //printf ("   Boot start: %08x\n", a->boot_start);
+        printf ("   Boot start: %08x\n", a->boot_start);
     }
 
     /* Enter Bootloader mode. */
