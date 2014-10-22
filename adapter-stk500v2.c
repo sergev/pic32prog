@@ -550,8 +550,8 @@ static int open_port (stk_adapter_t *a, const char *devname)
     new_mode.c_lflag = 0;
     new_mode.c_cc[VTIME] = 0;
     new_mode.c_cc[VMIN]  = 1;
-    cfsetispeed (&new_mode, 115200);
-    cfsetospeed (&new_mode, 115200);
+    cfsetispeed (&new_mode, B115200);
+    cfsetospeed (&new_mode, B115200);
     tcflush (a->fd, TCIFLUSH);
     tcsetattr (a->fd, TCSANOW, &new_mode);
 
