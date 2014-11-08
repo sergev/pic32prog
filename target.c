@@ -245,15 +245,14 @@ target_t *target_open (const char *port_name)
 
     /* Find adapter. */
     if (port_name) {
+        t->adapter = adapter_open_stk500v2 (port_name);
 #ifdef USE_AN1388_UART
-        t->adapter = adapter_open_an1388_uart (port_name);
-#endif
         if (! t->adapter)
-            t->adapter = adapter_open_stk500v2 (port_name);
+            t->adapter = adapter_open_an1388_uart (port_name);
+#endif
         if (! t->adapter)
             t->adapter = adapter_open_bitbang (port_name);
     } else {
-        if (! t->adapter)
         t->adapter = adapter_open_pickit ();
 #ifdef USE_MPSSE
         if (! t->adapter)
