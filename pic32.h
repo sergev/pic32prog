@@ -340,10 +340,13 @@ extern const unsigned pic32_pemz[];
 #define MZ_CFG1_FPLLMULT(n)     (((n)-1)<<8) /* PLL Feedback Divider */
 #define MZ_CFG2_FPLLODIV_MASK   0x00070000 /* Default PLL output divisor */
 #define MZ_CFG2_FPLLODIV_2      0x00000000 /* 2x */
+#define MZ_CFG2_FPLLODIV_2a     0x00010000 /* 2x */
 #define MZ_CFG2_FPLLODIV_4      0x00020000 /* 4x */
 #define MZ_CFG2_FPLLODIV_8      0x00030000 /* 8x */
 #define MZ_CFG2_FPLLODIV_16     0x00040000 /* 16x */
 #define MZ_CFG2_FPLLODIV_32     0x00050000 /* 32x */
+#define MZ_CFG2_FPLLODIV_32a    0x00060000 /* 32x */
+#define MZ_CFG2_FPLLODIV_32b    0x00070000 /* 32x */
 #define MZ_CFG2_UPLLFSEL_24     0x40000000 /* USB PLL input clock is 24 MHz (default 12 MHz) */
 #define MZ_CFG2_UPLLEN          0x80000000 /* Enable USB PLL */
 

@@ -29,6 +29,9 @@ void print_mz (unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
     if (~cfg0 & MZ_CFG0_JTAG_DISABLE)
         printf ("                     %u JTAG disabled\n",
             MZ_CFG0_JTAG_DISABLE);
+    else
+        printf ("                     %u JTAG enabled\n",
+            MZ_CFG0_JTAG_DISABLE);
 
     if (~cfg0 & MZ_CFG0_ICESEL_PGE2)
         printf ("                     %u Use PGC2/PGD2\n",
@@ -308,19 +311,22 @@ void print_mz (unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
 
     switch (cfg2 & MZ_CFG2_FPLLODIV_MASK) {
     case MZ_CFG2_FPLLODIV_2:
-        printf ("                 %u     PLL postscaler: 1/2\n", MZ_CFG2_FPLLODIV_2 >> 16);
+    case MZ_CFG2_FPLLODIV_2a:
+        printf ("                 %u     PLL postscaler: 1/2\n", (cfg2 & MZ_CFG2_FPLLODIV_MASK) >> 16);
         break;
     case MZ_CFG2_FPLLODIV_4:
-        printf ("                 %u     PLL postscaler: 1/4\n", MZ_CFG2_FPLLODIV_4 >> 16);
+        printf ("                 %u     PLL postscaler: 1/4\n", (cfg2 & MZ_CFG2_FPLLODIV_MASK) >> 16);
         break;
     case MZ_CFG2_FPLLODIV_8:
-        printf ("                 %u     PLL postscaler: 1/8\n", MZ_CFG2_FPLLODIV_8 >> 16);
+        printf ("                 %u     PLL postscaler: 1/8\n", (cfg2 & MZ_CFG2_FPLLODIV_MASK) >> 16);
         break;
     case MZ_CFG2_FPLLODIV_16:
-        printf ("                 %u     PLL postscaler: 1/16\n", MZ_CFG2_FPLLODIV_16 >> 16);
+        printf ("                 %u     PLL postscaler: 1/16\n", (cfg2 & MZ_CFG2_FPLLODIV_MASK) >> 16);
         break;
     case MZ_CFG2_FPLLODIV_32:
-        printf ("                 %u     PLL postscaler: 1/32\n", MZ_CFG2_FPLLODIV_32 >> 16);
+    case MZ_CFG2_FPLLODIV_32a:
+    case MZ_CFG2_FPLLODIV_32b:
+        printf ("                 %u     PLL postscaler: 1/32\n", (cfg2 & MZ_CFG2_FPLLODIV_MASK) >> 16);
         break;
     }
     if (cfg2 & MZ_CFG2_UPLLEN) {
