@@ -13,6 +13,7 @@ endif
 
 # Mac OS X
 ifeq ($(UNAME),Darwin)
+    CC          += -arch i386 -arch x86_64
     LIBS        += -framework IOKit -framework CoreFoundation
     HIDSRC      = hidapi/hid-mac.c
 endif
@@ -32,7 +33,7 @@ endif
 ifeq ($(UNAME),Darwin)
     # Use 'sudo port install libusb-legacy'
     CFLAGS      += -I/opt/local/include/libusb-legacy
-    LIBS        += -L/opt/local/lib/libusb-legacy -lusb-legacy
+    LIBS        += /opt/local/lib/libusb-legacy/libusb-legacy.a
 endif
 
 # Add support for UART bootloader (AN1388 serial protocol).
