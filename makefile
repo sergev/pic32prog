@@ -7,7 +7,7 @@ LDFLAGS         = -g
 
 # Linux
 ifeq ($(UNAME),Linux)
-    LIBS        += -lusb-1.0 -lpthread
+    LIBS        += -Wl,-Bstatic -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
     HIDSRC      = hidapi/hid-libusb.c
 endif
 
@@ -28,7 +28,7 @@ CFLAGS          += -DUSE_MPSSE
 PROG_OBJS       += adapter-mpsse.o
 ifeq ($(UNAME),Linux)
     # Use 'sudo port install libusb-0.1-dev'
-    LIBS        += -lusb
+    LIBS        += -Wl,-Bstatic -lusb -Wl,-Bdynamic
 endif
 ifeq ($(UNAME),Darwin)
     # Use 'sudo port install libusb-legacy'
