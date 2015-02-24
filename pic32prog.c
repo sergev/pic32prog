@@ -423,16 +423,17 @@ void do_program (char *filename)
     if (boot_bytes > 0)
         printf (_("  Boot memory: %d kbytes\n"), boot_bytes / 1024);
     printf (_("         Data: %d bytes\n"), total_bytes);
-    if (devcfg0 & 0x80000000) {
-        /* Default configuration. */
-        devcfg0 = 0x7ffffffd;
-        devcfg1 = 0xff6afd5b;
-        devcfg2 = 0xfff879d9;
-        devcfg3 = 0x3affffff;
-    }
-    if (devcfg_offset == 0xffc0 && boot_used) {
-        /* For MZ family, clear the bit DEVSIGN0[31]. */
-        boot_data[0xFFEF] &= 0x7f;
+
+    /* Verify DEVCFGx values. */
+    if (boot_used) {
+        if (devcfg0 == 0xffffffff) {
+            fprintf (stderr, _("DEVCFG values are missing -- check your HEX file!\n"));
+            exit (1);
+        }
+        if (devcfg_offset == 0xffc0) {
+            /* For MZ family, clear the bit DEVSIGN0[31]. */
+            boot_data[0xFFEF] &= 0x7f;
+        }
     }
 
     if (! verify_only) {
