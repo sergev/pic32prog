@@ -23,7 +23,7 @@
 #include "target.h"
 #include "localize.h"
 
-#define VERSION         "1."SVNVERSION
+#define VERSION         "2.0."SVNVERSION
 #define MINBLOCKSZ      128
 #define FLASHV_BASE     0x9d000000
 #define BOOTV_BASE      0x9fc00000
@@ -672,7 +672,7 @@ int main (int argc, char **argv)
     setvbuf (stderr, (char *)NULL, _IOLBF, 0);
     printf (_("Programmer for Microchip PIC32 microcontrollers, Version %s\n"), VERSION);
     progname = argv[0];
-    copyright = _("    Copyright: (C) 2011-2014 Serge Vakulenko");
+    copyright = _("    Copyright: (C) 2011-2015 Serge Vakulenko");
     signal (SIGINT, interrupted);
 #ifdef __linux__
     signal (SIGHUP, interrupted);

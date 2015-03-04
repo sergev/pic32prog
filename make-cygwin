@@ -1,6 +1,6 @@
 
 CC		= gcc
-SVNVERS         = $(shell svnversion)
+SVNVERS         = $(shell git rev-parse --short HEAD)
 CFLAGS          = -Wall -g -O -Ilibusb-win32 -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -s
 

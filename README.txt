@@ -77,9 +77,9 @@ for example:
 === Sources ===
 
 Sources are distributed under the terms of GPL.
-You can download sources via SVN:
+You can download sources using Git:
 
-    svn checkout http://pic32prog.googlecode.com/svn/trunk/ pic32prog
+    git clone https://github.com/sergev/pic32prog.git
 ___
 Regards,
 Serge Vakulenko
