@@ -16,6 +16,7 @@
 #include "adapter.h"
 
 #if defined(__WIN32__) || defined(WIN32)
+    #include <windows.h>
     static void *fd = INVALID_HANDLE_VALUE;
     static DCB saved_mode;
 #else
