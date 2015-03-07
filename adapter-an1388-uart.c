@@ -1,7 +1,7 @@
 /*
  * Interface to PIC32 Microchip AN1388 UART bootloader (new).
  *
- * Copyright (C) 2011 Serge Vakulenko
+ * Copyright (C) 2011-2015 Serge Vakulenko
  *
  * This file is part of PIC32PROG project, which is distributed
  * under the terms of the GNU General Public License (GPL).
@@ -9,18 +9,11 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <unistd.h>
-#include <fcntl.h>
 #include <string.h>
-#include <errno.h>
-#include <usb.h>
-
-#include <termios.h>
-#include <sys/time.h>
-#include <sys/types.h>
 
 #include "adapter.h"
 #include "pic32.h"
+#include "serial.h"
 
 #define FRAME_SOH           0x01
 #define FRAME_EOT           0x04
@@ -32,16 +25,12 @@
 #define CMD_READ_CRC        0x04
 #define CMD_JUMP_APP        0x05
 
-struct termios oldtio;
-
 typedef struct {
     /* Common part */
     adapter_t adapter;
 
     unsigned char reply [64];
     int reply_len;
-
-    int port_fd;
 
 } an1388_adapter_t;
 
@@ -70,58 +59,6 @@ static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbyte
         data++;
     }
     return crc & 0xffff;
-}
-
-static void an1388_send (int port_fd, unsigned char *buf, unsigned nbytes)
-{
-    if (debug_level > 0) {
-        int k;
-        fprintf (stderr, "---Send");
-        for (k=0; k<nbytes; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", buf[k]);
-        }
-        fprintf (stderr, "\n");
-    }
-    write (port_fd, buf, nbytes);
-}
-
-static int an1388_recv (int port_fd, unsigned char *buf)
-{
-    int i, res;
-    struct timeval tv;
-    fd_set fdset;
-
-    FD_ZERO (&fdset);
-    FD_SET (port_fd, &fdset);
-
-    /* set port timeout to 1 sec */
-    tv.tv_usec = 0;
-    tv.tv_sec  = 1;
-
-    res = select(port_fd+1, &fdset, NULL, NULL, &tv);
-    if (res <= 0) {
-        /* select timed out or there is error */
-        return -1;
-    } else if (! FD_ISSET (port_fd, &fdset)) {
-        /* port_fd is not in the set! */
-        return -1;
-    } else {
-        res = read (port_fd, buf, 64);
-
-        if (debug_level > 0) {
-            fprintf (stderr, "---Recv");
-            for (i=0; i<res; ++i) {
-                if (i != 0 && (i & 15) == 0)
-                    fprintf (stderr, "\n       ");
-                fprintf (stderr, " %02x", buf[i]);
-            }
-            fprintf (stderr, "\n");
-        }
-
-        return res;
-    }
 }
 
 static inline unsigned add_byte (unsigned char c,
@@ -170,7 +107,18 @@ static void an1388_command (an1388_adapter_t *a, unsigned char cmd,
     n = add_byte (crc >> 8, buf, n);
 
     buf[n++] = FRAME_EOT;
-    an1388_send (a->port_fd, buf, n);
+
+    if (debug_level > 0) {
+        int k;
+        fprintf (stderr, "---Send");
+        for (k=0; k<n; ++k) {
+            if (k != 0 && (k & 15) == 0)
+                fprintf (stderr, "\n       ");
+            fprintf (stderr, " %02x", buf[k]);
+        }
+        fprintf (stderr, "\n");
+    }
+    serial_write (buf, n);
 
     if (cmd == CMD_JUMP_APP) {
         /* No reply expected. */
@@ -181,7 +129,7 @@ static void an1388_command (an1388_adapter_t *a, unsigned char cmd,
     c = 0;
     esc = 0;
     while(1) {
-        res = an1388_recv (a->port_fd, buf);
+        res = serial_read (buf, 64);
         /* timeout */
         if (res < 0) {
             a->reply_len = 0;
@@ -245,9 +193,7 @@ static void an1388_close (adapter_t *adapter, int power_on)
     an1388_command (a, CMD_JUMP_APP, 0, 0);
 
     /* restore and close serial port */
-    tcsetattr (a->port_fd, TCSANOW, &oldtio);
-    close (a->port_fd);
-
+    serial_close();
     free (a);
 }
 
@@ -411,55 +357,12 @@ static void an1388_erase_chip (adapter_t *adapter)
     }
 }
 
-/*
- * Initialize adapter uart.
- * Return a pointer to a data structure, allocated dynamically.
- * When adapter not found, return 0.
- */
-int open_port (const char *port, long baud)
-{
-    int fd;
-    struct termios newtio;
-
-    /* open in blocking mode */
-    fd = open (port, O_RDWR | O_NOCTTY);
-    if (fd < 0) {
-        /* cannot open port */
-        return -1;
-    }
-    /* save current port settings */
-    tcgetattr (fd, &oldtio);
-
-    /* clear config */
-    memset (&newtio, 0, sizeof(newtio));
-
-    /* 8n1, ignore parity */
-    newtio.c_cflag = baud | CS8 | CLOCAL | CREAD;
-    newtio.c_iflag = IGNPAR;
-    newtio.c_oflag = 0;
-    newtio.c_lflag = 0;
-    newtio.c_cc[VTIME] = 10;    /* 100 ms timeout */
-    newtio.c_cc[VMIN]  = 0;
-
-    /* clear port and update settings */
-    tcflush (fd, TCIFLUSH);
-    if (tcsetattr (fd, TCSANOW, &newtio) < 0) {
-        /* unable to set port settingss */
-        return -1;
-    }
-
-    return fd;
-}
-
 adapter_t *adapter_open_an1388_uart (const char *port)
 {
     an1388_adapter_t *a;
-    int fd;
-    long bdrate = B115200;
 
     /* open serial port */
-    fd = open_port(port, bdrate);
-    if (fd < 0) {
+    if (serial_open (port) < 0) {
         /* failed to open serial port */
         return 0;
     }
@@ -469,7 +372,6 @@ adapter_t *adapter_open_an1388_uart (const char *port)
         fprintf (stderr, "Out of memory\n");
         return 0;
     }
-    a->port_fd = fd;
 
     /* Read version of adapter. */
     an1388_command (a, CMD_READ_VERSION, 0, 0);

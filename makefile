@@ -18,7 +18,7 @@ ifeq ($(UNAME),Darwin)
     HIDSRC      = hidapi/hid-mac.c
 endif
 
-PROG_OBJS       = pic32prog.o target.o executive.o hid.o \
+PROG_OBJS       = pic32prog.o target.o executive.o hid.o serial.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o \
                   adapter-bitbang.o adapter-stk500v2.o adapter-uhb.o \
                   family-mx1.o family-mx3.o family-mz.o
