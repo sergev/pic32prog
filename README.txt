@@ -80,6 +80,12 @@ Sources are distributed under the terms of GPL.
 You can download sources using Git:
 
     git clone https://github.com/sergev/pic32prog.git
+
+To build it on Ubuntu, a few additional packages need
+to be installed:
+
+    sudo apt-get install libusb-dev libusb-1.0-0-dev libudev-dev
+
 ___
 Regards,
 Serge Vakulenko
