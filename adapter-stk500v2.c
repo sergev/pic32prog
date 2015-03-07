@@ -270,6 +270,22 @@ static void prog_enable (stk_adapter_t *a)
     }
 }
 
+static void chip_erase (stk_adapter_t *a)
+{
+    unsigned char cmd [7] = { CMD_CHIP_ERASE_ISP,
+        150,                    /* erase delay */
+        0,                      /* poll method */
+        0xAC, 0x80, 0x00, 0x00  /* command */
+    };
+    unsigned char response [2];
+
+    if (! send_receive (a, cmd, 7, response, 2) || response[0] != cmd[0] ||
+        response[1] != STATUS_CMD_OK) {
+        fprintf (stderr, "Cannot erase chip.\n");
+        exit (-1);
+    }
+}
+
 static void prog_disable (stk_adapter_t *a)
 {
     unsigned char cmd [3] = { CMD_LEAVE_PROGMODE_ISP,
@@ -429,6 +445,17 @@ static void stk_program_word (adapter_t *adapter,
      * Not supported by booloader. */
     if (debug_level > 0)
         fprintf (stderr, "stk: program word at %08x: %08x\n", addr, word);
+}
+
+/*
+ * Erase all flash memory.
+ */
+static void stk_erase_chip (adapter_t *adapter)
+{
+    stk_adapter_t *a = (stk_adapter_t*) adapter;
+
+    chip_erase (a);
+    prog_enable (a);
 }
 
 /*
@@ -612,6 +639,7 @@ adapter_t *adapter_open_stk500v2 (const char *port)
 
     a->adapter.user_start = 0x1d000000;
     a->adapter.user_nbytes = 512 * 1024;
+    a->adapter.boot_nbytes = 12288;
     printf (" Program area: %08x-%08x\n", a->adapter.user_start,
         a->adapter.user_start + a->adapter.user_nbytes - 1);
 
@@ -622,5 +650,6 @@ adapter_t *adapter_open_stk500v2 (const char *port)
     a->adapter.verify_data = stk_verify_data;
     a->adapter.program_block = stk_program_block;
     a->adapter.program_word = stk_program_word;
+    a->adapter.erase_chip = stk_erase_chip;
     return &a->adapter;
 }
