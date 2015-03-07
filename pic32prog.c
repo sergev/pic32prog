@@ -21,6 +21,7 @@
 #include <locale.h>
 
 #include "target.h"
+#include "serial.h"
 #include "localize.h"
 
 #define VERSION         "2.0."SVNVERSION
@@ -61,6 +62,7 @@ int debug_level;
 int power_on;
 target_t *target;
 const char *target_port;        /* Optional name of target serial port */
+int target_speed = 115200;      /* Baud rate for serial port */
 char *progname;
 const char *copyright;
 
@@ -341,7 +343,7 @@ void do_probe ()
 {
     /* Open and detect the device. */
     atexit (quit);
-    target = target_open (target_port);
+    target = target_open (target_port, target_speed);
     if (! target) {
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
@@ -409,7 +411,7 @@ void do_program (char *filename)
 
     /* Open and detect the device. */
     atexit (quit);
-    target = target_open (target_port);
+    target = target_open (target_port, target_speed);
     if (! target) {
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
@@ -563,7 +565,7 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
 
     /* Open and detect the device. */
     atexit (quit);
-    target = target_open (target_port);
+    target = target_open (target_port, target_speed);
     if (! target) {
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
@@ -679,7 +681,7 @@ int main (int argc, char **argv)
 #endif
     signal (SIGTERM, interrupted);
 
-    while ((ch = getopt_long (argc, argv, "vDhrpCVWSd:",
+    while ((ch = getopt_long (argc, argv, "vDhrpCVWSd:b:",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -696,6 +698,11 @@ int main (int argc, char **argv)
             continue;
         case 'd':
             target_port = optarg;
+            continue;
+        case 'b':
+            target_speed = strtoul (optarg, 0, 0);
+            if (! serial_speed_valid (target_speed))
+                return 0;
             continue;
         case 'h':
             break;
@@ -732,6 +739,7 @@ usage:
         printf ("       -v                  Verify only\n");
         printf ("       -r                  Read mode\n");
         printf ("       -d device           Use serial device\n");
+        printf ("       -b baudrate         Serial speed, default 115200\n");
         printf ("       -p                  Leave board powered on\n");
         printf ("       -D                  Debug mode\n");
         printf ("       -h, --help          Print this help message\n");

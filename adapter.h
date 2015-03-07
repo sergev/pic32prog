@@ -35,9 +35,9 @@ adapter_t *adapter_open_pickit (void);
 adapter_t *adapter_open_an1388 (void);
 adapter_t *adapter_open_hidboot (void);
 adapter_t *adapter_open_mpsse (void);
-adapter_t *adapter_open_bitbang (const char *port);
-adapter_t *adapter_open_an1388_uart (const char *port);
-adapter_t *adapter_open_stk500v2 (const char *port);
+adapter_t *adapter_open_bitbang (const char *port, int baud_rate);
+adapter_t *adapter_open_an1388_uart (const char *port, int baud_rate);
+adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate);
 adapter_t *adapter_open_uhb (void);
 
 void mdelay (unsigned msec);

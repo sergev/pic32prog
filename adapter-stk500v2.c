@@ -417,7 +417,7 @@ static void stk_program_block (adapter_t *adapter,
     flush_write_buffer (a);
 }
 
-adapter_t *adapter_open_stk500v2 (const char *port)
+adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
 {
     stk_adapter_t *a;
 
@@ -428,7 +428,7 @@ adapter_t *adapter_open_stk500v2 (const char *port)
     }
 
     /* Open serial port */
-    if (serial_open (port) < 0) {
+    if (serial_open (port, baud_rate) < 0) {
         /* failed to open serial port */
         free (a);
         return 0;

@@ -9,7 +9,7 @@
  */
 typedef struct _target_t target_t;
 
-target_t *target_open (const char *port);
+target_t *target_open (const char *port, int baud_rate);
 void target_close (target_t *t, int power_on);
 void target_use_executive (target_t *t);
 

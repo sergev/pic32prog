@@ -232,7 +232,7 @@ void mdelay (unsigned msec)
 /*
  * Connect to JTAG adapter.
  */
-target_t *target_open (const char *port_name)
+target_t *target_open (const char *port_name, int baud_rate)
 {
     target_t *t;
 
@@ -245,13 +245,13 @@ target_t *target_open (const char *port_name)
 
     /* Find adapter. */
     if (port_name) {
-        t->adapter = adapter_open_stk500v2 (port_name);
+        t->adapter = adapter_open_stk500v2 (port_name, baud_rate);
 #ifdef USE_AN1388_UART
         if (! t->adapter)
-            t->adapter = adapter_open_an1388_uart (port_name);
+            t->adapter = adapter_open_an1388_uart (port_name, baud_rate);
 #endif
         if (! t->adapter)
-            t->adapter = adapter_open_bitbang (port_name);
+            t->adapter = adapter_open_bitbang (port_name, baud_rate);
     } else {
         t->adapter = adapter_open_pickit ();
 #ifdef USE_MPSSE

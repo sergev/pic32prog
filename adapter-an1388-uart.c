@@ -357,12 +357,12 @@ static void an1388_erase_chip (adapter_t *adapter)
     }
 }
 
-adapter_t *adapter_open_an1388_uart (const char *port)
+adapter_t *adapter_open_an1388_uart (const char *port, int baud_rate)
 {
     an1388_adapter_t *a;
 
     /* open serial port */
-    if (serial_open (port) < 0) {
+    if (serial_open (port, baud_rate) < 0) {
         /* failed to open serial port */
         return 0;
     }

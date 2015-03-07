@@ -12,7 +12,7 @@
  * Open the serial port.
  * Return -1 on error.
  */
-int serial_open (const char *devname);
+int serial_open (const char *devname, int baud_rate);
 
 /*
  * Close the serial port.
@@ -30,3 +30,10 @@ int serial_write (unsigned char *data, int len);
  * Return number of bytes, or -1 on error.
  */
 int serial_read (unsigned char *data, int len);
+
+/*
+ * Check whether the given speed in bits per second
+ * is supported by the system.
+ * Return 0 when not supported.
+ */
+int serial_speed_valid (int bps);
