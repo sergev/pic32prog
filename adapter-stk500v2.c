@@ -33,11 +33,16 @@
 #define CMD_PROGRAM_FLASH_ISP   0x13
 #define CMD_READ_FLASH_ISP      0x14
 #define CMD_SPI_MULTI           0x1D
+#define CMD_SET_PARAMETER       0x40
+#define CMD_GET_PARAMETER       0x41
+#define CMD_SET_BAUD            0x48
 
 /* STK status constants */
 #define STATUS_CMD_OK           0x00    /* Success */
 
 #define PAGE_NBYTES             256     /* Use 256-byte packets. */
+
+unsigned int adapter_baud;
 
 typedef struct {
     /* Common part */
@@ -169,6 +174,30 @@ flush_input:
         goto flush_input;
     }
     return 1;
+}
+
+extern unsigned int alternate_speed;
+
+static void switch_baud(stk_adapter_t *a) {
+    if (alternate_speed != adapter_baud) {
+
+        unsigned char cmd [5] = { CMD_SET_BAUD,
+            (alternate_speed) & 0xFF,
+            (alternate_speed >> 8) & 0xFF,
+            (alternate_speed >> 16) & 0xFF,
+            (alternate_speed >> 24) & 0xFF,
+        };
+        unsigned char response [2];
+
+        if (! send_receive (a, cmd, 5, response, 2) || response[0] != cmd[0] ||
+            response[1] != STATUS_CMD_OK) {
+printf("Response: 0x%02x 0x%02x\n", response[0], response[1]);
+            fprintf (stderr, "Cannot change baud rate.\n");
+        } else {
+            serial_baud(alternate_speed);
+            printf("    Baud rate: %d bps\n", alternate_speed);
+        }
+    }
 }
 
 static void prog_enable (stk_adapter_t *a)
@@ -421,6 +450,8 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
 {
     stk_adapter_t *a;
 
+    adapter_baud = baud_rate;
+
     a = calloc (1, sizeof (*a));
     if (! a) {
         fprintf (stderr, "Out of memory\n");
@@ -457,6 +488,8 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
             return 0;
         }
     }
+
+    switch_baud(a);
 
     prog_enable (a);
     a->last_load_addr = -1;

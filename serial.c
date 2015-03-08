@@ -126,6 +126,7 @@ static int baud_encode (int bps)
     case 4000000: return B4000000;
 #endif
     }
+printf("Unknown baud\n");
     return -1;
 #endif
 }
@@ -319,3 +320,86 @@ int serial_open (const char *devname, int baud_rate)
 #endif
     return 0;
 }
+
+/*
+ * Change baud rate
+ * Return -1 on error.
+ */
+int serial_baud (int baud_rate)
+{
+#if defined(__WIN32__) || defined(WIN32)
+    DCB new_mode;
+    COMMTIMEOUTS ctmo;
+#else
+    struct termios new_mode;
+#endif
+
+#if defined(__WIN32__) || defined(WIN32)
+    /* Set serial attributes */
+    memset (&saved_mode, 0, sizeof(saved_mode));
+    if (! GetCommState (fd, &saved_mode)) {
+        fprintf (stderr, "Cannot get state\n");
+        return -1;
+    }
+
+    new_mode = saved_mode;
+
+    new_mode.BaudRate = baud_rate;
+    new_mode.ByteSize = 8;
+    new_mode.StopBits = ONESTOPBIT;
+    new_mode.Parity = 0;
+    new_mode.fParity = FALSE;
+    new_mode.fOutX = FALSE;
+    new_mode.fInX = FALSE;
+    new_mode.fOutxCtsFlow = FALSE;
+    new_mode.fOutxDsrFlow = FALSE;
+    new_mode.fRtsControl = RTS_CONTROL_ENABLE;
+    new_mode.fNull = FALSE;
+    new_mode.fAbortOnError = FALSE;
+    new_mode.fBinary = TRUE;
+    if (! SetCommState (fd, &new_mode)) {
+        fprintf (stderr, "Cannot set state\n");
+        return -1;
+    }
+
+    memset (&ctmo, 0, sizeof(ctmo));
+    ctmo.ReadIntervalTimeout = 0;
+    ctmo.ReadTotalTimeoutMultiplier = 0;
+    ctmo.ReadTotalTimeoutConstant = 5000;
+    if (! SetCommTimeouts (fd, &ctmo)) {
+        fprintf (stderr, "Cannot set timeouts\n");
+        return -1;
+    }
+#else
+    /* Encode baud rate. */
+    int baud_code = baud_encode (baud_rate);
+    if (baud_code < 0) {
+        fprintf (stderr, "Bad baud rate %d\n", baud_rate);
+        return -1;
+    }
+
+    /* Set serial attributes */
+    memset (&saved_mode, 0, sizeof(saved_mode));
+    tcgetattr (fd, &saved_mode);
+
+    /* 8n1, ignore parity */
+    memset (&new_mode, 0, sizeof(new_mode));
+    new_mode.c_cflag = CS8 | CLOCAL | CREAD;
+    new_mode.c_iflag = IGNBRK;
+    new_mode.c_oflag = 0;
+    new_mode.c_lflag = 0;
+    new_mode.c_cc[VTIME] = 0;
+    new_mode.c_cc[VMIN]  = 1;
+    cfsetispeed (&new_mode, baud_code);
+    cfsetospeed (&new_mode, baud_code);
+    tcflush (fd, TCIFLUSH);
+    tcsetattr (fd, TCSANOW, &new_mode);
+
+    /* Clear O_NONBLOCK flag. */
+    int flags = fcntl (fd, F_GETFL, 0);
+    if (flags >= 0)
+        fcntl (fd, F_SETFL, flags & ~O_NONBLOCK);
+#endif
+    return 0;
+}
+
