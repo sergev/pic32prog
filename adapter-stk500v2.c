@@ -187,15 +187,21 @@ static void switch_baud(stk_adapter_t *a) {
             (alternate_speed >> 16) & 0xFF,
             (alternate_speed >> 24) & 0xFF,
         };
-        unsigned char response [2];
+        unsigned char response [6];
 
-        if (! send_receive (a, cmd, 5, response, 2) || response[0] != cmd[0] ||
+        if (! send_receive (a, cmd, 5, response, 6) || response[0] != cmd[0] ||
             response[1] != STATUS_CMD_OK) {
-printf("Response: 0x%02x 0x%02x\n", response[0], response[1]);
             fprintf (stderr, "Cannot change baud rate.\n");
         } else {
-            serial_baud(alternate_speed);
-            printf("    Baud rate: %d bps\n", alternate_speed);
+            if ((response[2] == (alternate_speed & 0xFF)) &&
+                (response[3] == ((alternate_speed >> 8) & 0xFF)) &&
+                (response[4] == ((alternate_speed >> 16) & 0xFF)) &&
+                (response[5] == ((alternate_speed >> 24) & 0xFF))) {
+                    serial_baud(alternate_speed);
+                    printf("    Baud rate: %d bps\n", alternate_speed);
+            } else {
+                    printf("    Baud rate: %d bps\n", adapter_baud);
+            }
         }
     }
 }
