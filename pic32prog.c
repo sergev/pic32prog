@@ -24,7 +24,9 @@
 #include "serial.h"
 #include "localize.h"
 
+#ifndef VERSION
 #define VERSION         "2.0."SVNVERSION
+#endif
 #define MINBLOCKSZ      128
 #define FLASHV_BASE     0x9d000000
 #define BOOTV_BASE      0x9fc00000
@@ -63,6 +65,7 @@ int power_on;
 target_t *target;
 const char *target_port;        /* Optional name of target serial port */
 int target_speed = 115200;      /* Baud rate for serial port */
+int alternate_speed = 115200;   /* Alternate speed for serial port */
 char *progname;
 const char *copyright;
 
@@ -681,7 +684,7 @@ int main (int argc, char **argv)
 #endif
     signal (SIGTERM, interrupted);
 
-    while ((ch = getopt_long (argc, argv, "vDhrpCVWSd:b:",
+    while ((ch = getopt_long (argc, argv, "vDhrpCVWSd:b:B:",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -703,6 +706,18 @@ int main (int argc, char **argv)
             target_speed = strtoul (optarg, 0, 0);
             if (! serial_speed_valid (target_speed))
                 return 0;
+            // If the alternate hasn't changed from default then keep
+            // it the same as the master speed
+            if (alternate_speed == 115200) {
+                alternate_speed = target_speed;
+            }
+            continue;
+        case 'B':
+            alternate_speed = strtoul (optarg, 0, 0);
+            if (! serial_speed_valid (alternate_speed)) {
+                printf("Debug: %d\n", alternate_speed);
+                return 0;
+            }
             continue;
         case 'h':
             break;
@@ -740,6 +755,7 @@ usage:
         printf ("       -r                  Read mode\n");
         printf ("       -d device           Use serial device\n");
         printf ("       -b baudrate         Serial speed, default 115200\n");
+        printf ("       -B alt_baud         Request an alternative baud rate\n");
         printf ("       -p                  Leave board powered on\n");
         printf ("       -D                  Debug mode\n");
         printf ("       -h, --help          Print this help message\n");

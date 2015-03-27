@@ -15,6 +15,12 @@
 int serial_open (const char *devname, int baud_rate);
 
 /*
+ * Change the serial baud rate
+ * Return -1 on error.
+ */
+int serial_baud (int baud_rate);
+
+/*
  * Close the serial port.
  */
 void serial_close (void);
