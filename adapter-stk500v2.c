@@ -504,8 +504,8 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
     printf ("      Adapter: STK500v2 Bootloader\n");
 
     a->adapter.user_start = 0x1d000000;
-    a->adapter.user_nbytes = 512 * 1024;
-    a->adapter.boot_nbytes = 12288;
+    a->adapter.user_nbytes = 2048 * 1024;
+    a->adapter.boot_nbytes = 80 * 1024;
     printf (" Program area: %08x-%08x\n", a->adapter.user_start,
         a->adapter.user_start + a->adapter.user_nbytes - 1);
 
