@@ -546,7 +546,7 @@ void do_program (char *filename)
         printf (_(" done       \n"));
     }
     if (boot_used || flash_used)
-        printf (_("Rate: %ld bytes per second\n"),
+        printf (_(" Program rate: %ld bytes per second\n"),
             total_bytes * 1000L / mseconds_elapsed (t0));
 }
 
