@@ -996,10 +996,12 @@ adapter_t *adapter_open_pickit (void)
         pickit_finish (a, 0);
         return 0;
     }
+
+    a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
+
     if (! (a->reply[1] & MCHP_STATUS_CPS)) {
-        fprintf (stderr, "Device is code protected and must be erased first.\n");
-        pickit_finish (a, 0);
-        return 0;
+        fprintf (stderr, "%s: Device is code protected.\n", a->name);
+        a->adapter.flags = (AD_ERASE);
     }
 
     /* User functions. */

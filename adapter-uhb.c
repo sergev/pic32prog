@@ -313,6 +313,8 @@ adapter_t *adapter_open_uhb (void)
         return 0;
     }
 
+    a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
+
     /* User functions. */
     a->adapter.close = uhb_close;
     a->adapter.get_idcode = uhb_get_idcode;

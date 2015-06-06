@@ -393,6 +393,8 @@ adapter_t *adapter_open_an1388 (void)
     printf (" Program area: %08x-%08x\n", a->adapter.user_start,
         a->adapter.user_start + a->adapter.user_nbytes - 1);
 
+    a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
+
     /* User functions. */
     a->adapter.close = an1388_close;
     a->adapter.get_idcode = an1388_get_idcode;

@@ -23,6 +23,7 @@
 #include "target.h"
 #include "serial.h"
 #include "localize.h"
+#include "adapter.h"
 
 #ifndef VERSION
 #define VERSION         "2.0."SVNVERSION
@@ -352,6 +353,12 @@ void do_probe ()
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+
+    if ((target->adapter->flags & AD_PROBE) == 0) {
+        fprintf (stderr, _("Error: Target probe not supported.\n"));
+        exit (1);
+    }
+
     boot_bytes = target_boot_bytes (target);
     printf (_("    Processor: %s (id %08X)\n"), target_cpu_name (target),
         target_idcode (target));
@@ -415,6 +422,12 @@ void do_erase()
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+
+    if ((target->adapter->flags & AD_ERASE) == 0) {
+        fprintf (stderr, _("Error: Target erase not supported.\n"));
+        exit(1);
+    }
+
     target_erase (target);
 }
 
@@ -431,6 +444,12 @@ void do_program (char *filename)
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+
+    if ((target->adapter->flags & AD_WRITE) == 0) {
+        fprintf (stderr, _("Error: Target write not supported.\n"));
+        exit (1);
+    }
+
     flash_bytes = target_flash_bytes (target);
     boot_bytes = target_boot_bytes (target);
     blocksz = target_block_size (target);
@@ -585,6 +604,12 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+
+    if ((target->adapter->flags & AD_READ) == 0) {
+        fprintf (stderr, _("Error: Target read not supported.\n"));
+        exit (1);
+    }
+
     target_use_executive (target);
     for (progress_step=1; ; progress_step<<=1) {
         len = 1 + nbytes / progress_step / blocksz;

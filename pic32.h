@@ -8,6 +8,8 @@
  * See the accompanying file "COPYING" for more details.
  */
 
+#ifndef _PIC32_H
+#define _PIC32_H
 /*
  * Programing executive.
  * Described in PIC32MX Flash Programming Specification.
@@ -482,3 +484,5 @@ extern const unsigned pic32_pemz[];
 #define MX1_CFG3_IOL1WAY        0x20000000 /* Peripheral Pin Select - only 1 reconfig */
 #define MX1_CFG3_FUSBIDIO       0x40000000 /* USBID pin: controlled by USB */
 #define MX1_CFG3_FVBUSONIO      0x80000000 /* VBuson pin: controlled by USB */
+
+#endif

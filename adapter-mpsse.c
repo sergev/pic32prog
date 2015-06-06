@@ -1071,6 +1071,8 @@ failed: usb_release_interface (a->usbdev, 0);
     }
     printf ("      Adapter: %s\n", a->name);
 
+    a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
+
     /* User functions. */
     a->adapter.close = mpsse_close;
     a->adapter.get_idcode = mpsse_get_idcode;
