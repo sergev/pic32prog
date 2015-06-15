@@ -7,7 +7,16 @@
  * under the terms of the GNU General Public License (GPL).
  * See the accompanying file "COPYING" for more details.
  */
+
+#ifndef _ADAPTER_H
+#define _ADAPTER_H
+
 #include <stdarg.h>
+
+#define AD_READ  0x0001
+#define AD_WRITE 0x0002
+#define AD_ERASE 0x0004
+#define AD_PROBE 0x0008
 
 typedef struct _adapter_t adapter_t;
 
@@ -15,6 +24,8 @@ struct _adapter_t {
     unsigned user_start;                /* Start address of user area */
     unsigned user_nbytes;               /* Size of user flash area */
     unsigned boot_nbytes;               /* Size of user boot area */
+
+    unsigned flags;
 
     void (*close) (adapter_t *a, int power_on);
     unsigned (*get_idcode) (adapter_t *a);
@@ -42,3 +53,5 @@ adapter_t *adapter_open_uhb (void);
 
 void mdelay (unsigned msec);
 extern int debug_level;
+
+#endif

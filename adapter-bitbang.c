@@ -597,6 +597,8 @@ failed:
     }
     printf ("      Adapter: %s\n", a->name);
 
+    a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
+
     /* User functions. */
     a->adapter.close = bitbang_close;
     a->adapter.get_idcode = bitbang_get_idcode;

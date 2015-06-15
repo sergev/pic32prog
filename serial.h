@@ -8,6 +8,9 @@
  * See the accompanying file "COPYING" for more details.
  */
 
+#ifndef _SERIAL_H
+#define _SERIAL_H
+
 /*
  * Open the serial port.
  * Return -1 on error.
@@ -43,3 +46,5 @@ int serial_read (unsigned char *data, int len);
  * Return 0 when not supported.
  */
 int serial_speed_valid (int bps);
+
+#endif

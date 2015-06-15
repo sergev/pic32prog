@@ -20,29 +20,6 @@
 #include "localize.h"
 #include "pic32.h"
 
-typedef void print_func_t (unsigned cfg0, unsigned cfg1,
-                           unsigned cfg2, unsigned cfg3);
-
-typedef struct {
-    unsigned        boot_kbytes;
-    unsigned        devcfg_offset;
-    unsigned        bytes_per_row;
-    print_func_t    *print_devcfg;
-    const unsigned  *pe_code;
-    unsigned        pe_nwords;
-    unsigned        pe_version;
-} family_t;
-
-struct _target_t {
-    adapter_t       *adapter;
-    const char      *cpu_name;
-    const family_t  *family;
-    unsigned        cpuid;
-    unsigned        flash_addr;
-    unsigned        flash_bytes;
-    unsigned        boot_bytes;
-};
-
 extern print_func_t print_mx1;
 extern print_func_t print_mx3;
 extern print_func_t print_mz;

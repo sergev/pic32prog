@@ -7,6 +7,9 @@
  * under the terms of the GNU General Public License (GPL).
  * See the accompanying file "COPYING" for more details.
  */
+#ifndef _LOCALIZE_H
+#define _LOCALIZE_H
+
 #if 1
     /* No localization. */
     #define _(str)                      (str)
@@ -19,4 +22,6 @@
     #define _(str)                      gettext (str)
     #define gettext_noop(str)           str
     #define N_(str)                     gettext_noop (str)
+#endif
+
 #endif

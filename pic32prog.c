@@ -23,6 +23,7 @@
 #include "target.h"
 #include "serial.h"
 #include "localize.h"
+#include "adapter.h"
 
 #ifndef VERSION
 #define VERSION         "2.0."SVNVERSION
@@ -59,6 +60,7 @@ int total_bytes;
 
 unsigned progress_count;
 int verify_only;
+int erase_only = 0;
 int skip_verify = 0;
 int debug_level;
 int power_on;
@@ -351,6 +353,12 @@ void do_probe ()
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+
+    if ((target->adapter->flags & AD_PROBE) == 0) {
+        fprintf (stderr, _("Error: Target probe not supported.\n"));
+        exit (1);
+    }
+
     boot_bytes = target_boot_bytes (target);
     printf (_("    Processor: %s (id %08X)\n"), target_cpu_name (target),
         target_idcode (target));
@@ -406,6 +414,23 @@ int verify_block (target_t *mc, unsigned addr)
     return 1;
 }
 
+void do_erase()
+{
+    atexit (quit);
+    target = target_open (target_port, target_speed);
+    if (! target) {
+        fprintf (stderr, _("Error detecting device -- check cable!\n"));
+        exit (1);
+    }
+
+    if ((target->adapter->flags & AD_ERASE) == 0) {
+        fprintf (stderr, _("Error: Target erase not supported.\n"));
+        exit(1);
+    }
+
+    target_erase (target);
+}
+
 void do_program (char *filename)
 {
     unsigned addr;
@@ -419,6 +444,12 @@ void do_program (char *filename)
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+
+    if ((target->adapter->flags & AD_WRITE) == 0) {
+        fprintf (stderr, _("Error: Target write not supported.\n"));
+        exit (1);
+    }
+
     flash_bytes = target_flash_bytes (target);
     boot_bytes = target_boot_bytes (target);
     blocksz = target_block_size (target);
@@ -573,6 +604,12 @@ void do_read (char *filename, unsigned base, unsigned nbytes)
         fprintf (stderr, _("Error detecting device -- check cable!\n"));
         exit (1);
     }
+
+    if ((target->adapter->flags & AD_READ) == 0) {
+        fprintf (stderr, _("Error: Target read not supported.\n"));
+        exit (1);
+    }
+
     target_use_executive (target);
     for (progress_step=1; ; progress_step<<=1) {
         len = 1 + nbytes / progress_step / blocksz;
@@ -684,7 +721,7 @@ int main (int argc, char **argv)
 #endif
     signal (SIGTERM, interrupted);
 
-    while ((ch = getopt_long (argc, argv, "vDhrpCVWSd:b:B:",
+    while ((ch = getopt_long (argc, argv, "vDhrpeCVWSd:b:B:",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -698,6 +735,9 @@ int main (int argc, char **argv)
             continue;
         case 'p':
             ++power_on;
+            continue;
+        case 'e':
+            ++erase_only;
             continue;
         case 'd':
             target_port = optarg;
@@ -756,6 +796,7 @@ usage:
         printf ("       -d device           Use serial device\n");
         printf ("       -b baudrate         Serial speed, default 115200\n");
         printf ("       -B alt_baud         Request an alternative baud rate\n");
+        printf ("       -e                  Erase chip\n");
         printf ("       -p                  Leave board powered on\n");
         printf ("       -D                  Debug mode\n");
         printf ("       -h, --help          Print this help message\n");
@@ -775,7 +816,11 @@ usage:
 
     switch (argc) {
     case 0:
-        do_probe ();
+        if (erase_only > 0) {
+            do_erase();
+        } else {
+            do_probe ();
+        }
         break;
     case 1:
         if (! read_srec (argv[0]) &&
