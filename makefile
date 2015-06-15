@@ -1,6 +1,6 @@
 CC              = gcc
 
-SVNVERS         = $(shell git rev-parse --short HEAD)
+SVNVERS         = $(shell git rev-list HEAD --count)
 UNAME           = $(shell uname)
 CFLAGS          = -Wall -g -O -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -g
