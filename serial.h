@@ -12,10 +12,11 @@
 #define _SERIAL_H
 
 /*
- * Open the serial port.
+ * Open the serial port with the specified baud rate and
+ * receive timeout (in milliseconds).
  * Return -1 on error.
  */
-int serial_open (const char *devname, int baud_rate);
+int serial_open (const char *devname, int baud_rate, int timeout);
 
 /*
  * Change the serial baud rate

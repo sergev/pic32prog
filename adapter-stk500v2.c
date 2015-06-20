@@ -465,7 +465,7 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
     }
 
     /* Open serial port */
-    if (serial_open (port, baud_rate) < 0) {
+    if (serial_open (port, baud_rate, 1000) < 0) {
         /* failed to open serial port */
         free (a);
         return 0;

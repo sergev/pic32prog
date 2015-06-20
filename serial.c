@@ -25,6 +25,8 @@
     static struct termios saved_mode;
 #endif
 
+static int timeout_msec;
+
 /*
  * Encode the speed in bits per second into bit value
  * accepted by cfsetspeed() function.
@@ -176,8 +178,8 @@ int serial_read (unsigned char *data, int len)
     long got;
     fd_set rfds;
 
-    timeout.tv_sec = 1;
-    timeout.tv_usec = 0;
+    timeout.tv_sec = timeout_msec / 1000;
+    timeout.tv_usec = timeout_msec % 1000 * 1000;
     to2 = timeout;
 again:
     FD_ZERO (&rfds);
@@ -228,7 +230,7 @@ void serial_close()
  * Open the serial port.
  * Return -1 on error.
  */
-int serial_open (const char *devname, int baud_rate)
+int serial_open (const char *devname, int baud_rate, int timeout)
 {
 #if defined(__WIN32__) || defined(WIN32)
     DCB new_mode;
@@ -236,6 +238,8 @@ int serial_open (const char *devname, int baud_rate)
 #else
     struct termios new_mode;
 #endif
+
+    timeout_msec = timeout;
 
 #if defined(__WIN32__) || defined(WIN32)
     /* Open port */
@@ -276,7 +280,7 @@ int serial_open (const char *devname, int baud_rate)
     memset (&ctmo, 0, sizeof(ctmo));
     ctmo.ReadIntervalTimeout = 0;
     ctmo.ReadTotalTimeoutMultiplier = 0;
-    ctmo.ReadTotalTimeoutConstant = 5000;
+    ctmo.ReadTotalTimeoutConstant = timeout_msec;
     if (! SetCommTimeouts (fd, &ctmo)) {
         fprintf (stderr, "%s: Cannot set timeouts\n", devname);
         return -1;
@@ -365,7 +369,7 @@ int serial_baud (int baud_rate)
     memset (&ctmo, 0, sizeof(ctmo));
     ctmo.ReadIntervalTimeout = 0;
     ctmo.ReadTotalTimeoutMultiplier = 0;
-    ctmo.ReadTotalTimeoutConstant = 5000;
+    ctmo.ReadTotalTimeoutConstant = timeout_msec;
     if (! SetCommTimeouts (fd, &ctmo)) {
         fprintf (stderr, "Cannot set timeouts\n");
         return -1;
@@ -402,4 +406,3 @@ int serial_baud (int baud_rate)
 #endif
     return 0;
 }
-

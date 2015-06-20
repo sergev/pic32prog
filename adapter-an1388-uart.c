@@ -362,7 +362,7 @@ adapter_t *adapter_open_an1388_uart (const char *port, int baud_rate)
     an1388_adapter_t *a;
 
     /* open serial port */
-    if (serial_open (port, baud_rate) < 0) {
+    if (serial_open (port, baud_rate, 1000) < 0) {
         /* failed to open serial port */
         return 0;
     }
