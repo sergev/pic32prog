@@ -87,7 +87,7 @@ static void bitbang_delay10mS (bitbang_adapter_t *a)
 /*
  * Current version of bitbang_send, sends a string of data out to the target encoded
  * as ASCII characters to be interpreted by an intellenent ICSP programmer.
-
+ *
  * NOTE: this version of pic32prog implements the 2-wire communications mode via the
  * ICSP port. This means we need to encode TDI, TMS, and read_flag into one character,
  * sending all three out at once to an Arduino NANO acting as an intelligent programmer.
@@ -111,7 +111,6 @@ static void bitbang_delay10mS (bitbang_adapter_t *a)
  *
  * '0' : clock out a 0 on PGD pin
  * '1' : clock out a 1 on PGD pin
-
  * '2' : set MCLR low
  * '3' : set MCLR high
  * '4' : turn target power off
@@ -119,7 +118,7 @@ static void bitbang_delay10mS (bitbang_adapter_t *a)
  * '8' : insert 10mS delay
  * '?' : return ID string, "ascii JTAG XN"
  *
- * if the request is 'D'..'E', then respond with '0'/'1' to indicate TDO = 0/1
+ * if the request is 'D'..'G', then respond with '0'/'1' to indicate TDO = 0/1
  *
  * (by RR)
  */
@@ -147,43 +146,48 @@ static void bitbang_send (bitbang_adapter_t *a,
     int i, n;
     unsigned char ch;
 
-    if (read_flag && (a->BitsToRead != 0)) fprintf (stderr, "WARNING - double read request (in send)\n");
-    if (read_flag && (tdi_nbits == 0)) fprintf (stderr, "WARNING - request to read 0 bits (in send)\n");
+    if (read_flag && (a->BitsToRead != 0))
+        fprintf (stderr, "WARNING - double read request (in send)\n");
+    if (read_flag && (tdi_nbits == 0))
+        fprintf (stderr, "WARNING - request to read 0 bits (in send)\n");
 
     for (i = tms_nbits; i > 0; --i) {           // for each of the n bits...
-        ch = ((tms & 1) + 0x64);                // d, e, f, g
+        ch = (tms & 1) + 'd';                   // d, e, f, g
         buffer [index++] = ch;                  // append to buffer
         tms >>= 1;                              // shift TMS right one bit
     }
     count += tms_nbits;
 
-    if (DBG1 && (tms_nbits != 0)) buffer[index++] = '.';   // spacer, ignored by programmer
+    if (DBG1 && (tms_nbits != 0))
+        buffer[index++] = '.';                  // spacer, ignored by programmer
 
     if (tdi_nbits != 0) {                       // 1-0-0 if nTDI <> 0
-        ch = (1 + 0x64);
+        ch = 1 + 'd';
         buffer[index++] = ch;
-        ch = (0 + 0x64);
+        ch = 0 + 'd';
         buffer[index++] = ch;
-        ch = (0 + (read_flag ? 0x44 : 0x64));
+        ch = 0 + (read_flag ? 'D' : 'd');
         buffer[index++] = ch;
         count += 3;
-        if (DBG1) buffer[index++] = '.';        // spacer, ignored by programmer
+        if (DBG1)
+            buffer[index++] = '.';              // spacer, ignored by programmer
     }
 
     for (i = tdi_nbits; i > 0; --i) {
-        ch = ( (tdi & 1) << 1) + (i==1) +       // TMS=0 for n-1 bits, then 1 on last bit
-               (  ((read_flag == 1)             // 0 = no read, 1 = normal read, 2 = oPrAcc read
-                  && (i != 1)) ? 0x44 : 0x64);  // UC = read, LC = none, no read on last bit
+        ch = ((tdi & 1) << 1) + (i==1) +        // TMS=0 for n-1 bits, then 1 on last bit
+             ((read_flag == 1 && i != 1) ?      // 0 = no read, 1 = normal read, 2 = oPrAcc read
+              'D' : 'd');                       // UC = read, LC = none, no read on last bit
         buffer[index++] = ch;                   // append to buffer
         tdi >>= 1;                              // shift TDI right one bit
     }
     count += tdi_nbits;
 
     if (tdi_nbits != 0) {                       // 1-0 if nTDI <> 0
-        if (DBG1) buffer[index++] = '.';        // spacer, ignored by programmer
-        ch = (1 + 0x64);
+        if (DBG1)
+            buffer[index++] = '.';              // spacer, ignored by programmer
+        ch = 1 + 'd';
         buffer[index++] = ch;
-        ch = (0 + 0x64);
+        ch = 0 + 'd';
         buffer[index++] = ch;
         count += 2;
     }
@@ -205,7 +209,8 @@ static void bitbang_send (bitbang_adapter_t *a,
         n = serial_read (&ch, 1);
         a->Read2Count++;
 
-        if ((n != 1) || (ch != '<')) fprintf (stderr, "WARNING - handshake read error (in send)\n");
+        if (n != 1 || ch != '<')
+            fprintf (stderr, "WARNING - handshake read error (in send)\n");
     }
 
     //
@@ -215,8 +220,8 @@ static void bitbang_send (bitbang_adapter_t *a,
 #if 0
     if ((CFG1 == 1) && !read_flag)
     {
-      buffer[index++] = '>';
-      a->PendingHandshake = 1;
+        buffer[index++] = '>';
+        a->PendingHandshake = 1;
     }
 #endif
 
@@ -225,10 +230,10 @@ static void bitbang_send (bitbang_adapter_t *a,
     // NOTE: assumes the Rx buffer in the programmer is 1024 bytes long
     //                                                  **********
 
-    if ((CFG1 == 2) && !read_flag && ((a->RunningWriteCount + index) > 900) )   // 900 + 50 < 1024
+    if (CFG1 == 2 && !read_flag && (a->RunningWriteCount + index) > 900)    // 900 + 50 < 1024
     {
-      buffer[index++] = '>';
-      a->PendingHandshake = 1;
+        buffer[index++] = '>';
+        a->PendingHandshake = 1;
     }
 
     //
@@ -236,17 +241,20 @@ static void bitbang_send (bitbang_adapter_t *a,
     //
 
     buffer[index] = 0;          // append trailing zero so can print as a string
-    if (DBG1) fprintf (stderr, "n=%i, <%s> read=%i\n", index, buffer, read_flag);
+    if (DBG1)
+        fprintf (stderr, "n=%i, <%s> read=%i\n", index, buffer, read_flag);
 
     a->TotalBitPairsSent += count;
     a->RunningWriteCount += index;
 
-    if (a->BitsToRead != 0) fprintf (stderr, "WARNING - write while pending read (in send)\n");
+    if (a->BitsToRead != 0)
+        fprintf (stderr, "WARNING - write while pending read (in send)\n");
 
     serial_write (buffer, index);
     a->WriteCount++;
 
-    if (read_flag) a->BitsToRead += tdi_nbits;
+    if (read_flag)
+        a->BitsToRead += tdi_nbits;
 }
 
 /*
@@ -264,21 +272,26 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
     a->RunningWriteCount = 0;
     //////////////////////////////////////////////////////////////
 
-    if (a->PendingHandshake) fprintf (stderr, "WARNING - handshake pending error (in recv)\n");
+    if (a->PendingHandshake)
+        fprintf (stderr, "WARNING - handshake pending error (in recv)\n");
 
     n = serial_read (buffer, a->BitsToRead);
     a->Read1Count++;
 
-    if (n != a->BitsToRead) fprintf (stderr,
-        "WARNING - fewer bits read (%i) than expected (%i) (in recv)\n",
-                                    n,          a->BitsToRead);
+    if (n != a->BitsToRead)
+        fprintf (stderr,
+            "WARNING - fewer bits read (%i) than expected (%i) (in recv)\n",
+                                        n,          a->BitsToRead);
 
     word = 0;
 
     for (i = 0; i < n; ++i) {
-        if (buffer[i] == '1') word |= 1 << i; else
-        if (buffer[i] != '0') fprintf (stderr,
-            "WARNING - unexpected character (0x%02x) returned (in recv)\n", buffer[i]);
+        if (buffer[i] == '1')
+            word |= 1 << i;
+        else if (buffer[i] != '0')
+            fprintf (stderr,
+                "WARNING - unexpected character (0x%02x) returned (in recv)\n",
+                buffer[i]);
     }
 
     if (DBG1) {
@@ -372,7 +385,8 @@ static unsigned bitbang_get_idcode (adapter_t *adapter)
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
     unsigned idcode;
 
-    if (DBG2) fprintf (stderr, "get_idcode\n");
+    if (DBG2)
+        fprintf (stderr, "get_idcode\n");
 
     /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
      * After reset, the IDCODE register is always selected.
@@ -392,13 +406,16 @@ static unsigned bitbang_get_idcode (adapter_t *adapter)
  */
 static void serial_execution (bitbang_adapter_t *a)
 {
-    if (DBG2) fprintf (stderr, "serial_execution\n");
+    if (DBG2)
+        fprintf (stderr, "serial_execution\n");
 
-    if (a->serial_execution_mode) return;
+    if (a->serial_execution_mode)
+        return;
     a->serial_execution_mode = 1;
 
     /* Enter serial execution. */
-    if (debug_level > 0) fprintf (stderr, "enter serial execution\n");
+    if (debug_level > 0)
+        fprintf (stderr, "enter serial execution\n");
 
     bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */  // missing M: MTAP     // 1.
     bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */                         // 2.
@@ -444,7 +461,8 @@ static void xfer_fastdata (bitbang_adapter_t *a, unsigned word)
     if (CFG2 == 2) {
         bitbang_send (a, 0, 0, 33, (unsigned long long) word << 1, 2);
         unsigned status = bitbang_recv (a);
-        if (!(status & 1)) printf ("!");
+        if (! (status & 1))
+            printf ("!");
     }
     //
     // add in code above to handle retrying if oPrAcc == 0
@@ -474,7 +492,8 @@ static void xfer_instruction (bitbang_adapter_t *a, unsigned instruction)
 
     int i = 0;
     do {
-        if (i > 100) bitbang_delay10mS (a);
+        if (i > 100)
+            bitbang_delay10mS (a);
         bitbang_send (a, 0, 0, 32, CONTROL_PRACC |    /* Xfer data. */
                                   CONTROL_PROBEN |
                                 CONTROL_PROBTRAP |
@@ -486,7 +505,7 @@ static void xfer_instruction (bitbang_adapter_t *a, unsigned instruction)
 
         ctl = bitbang_recv (a);
         i++;
-    } while ( (! (ctl & CONTROL_PRACC)) & (i<150) );
+    } while ((! (ctl & CONTROL_PRACC)) & (i < 150));
 
     if (i == 150) {
         fprintf (stderr, "PE response, PrAcc not set (in XferInstruction)\n");
@@ -516,7 +535,8 @@ static unsigned get_pe_response (bitbang_adapter_t *a)
 
     int i = 0;
     do {
-        if (i > 100) bitbang_delay10mS (a);
+        if (i > 100)
+            bitbang_delay10mS (a);
         bitbang_send (a, 0, 0, 32, CONTROL_PRACC |    /* Xfer data. */
                                   CONTROL_PROBEN |
                                 CONTROL_PROBTRAP |
@@ -528,7 +548,7 @@ static unsigned get_pe_response (bitbang_adapter_t *a)
 
         ctl = bitbang_recv (a);
         i++;
-    } while ( (! (ctl & CONTROL_PRACC)) & (i<150) );
+    } while ((! (ctl & CONTROL_PRACC)) & (i < 150));
 
     if (i == 150) {
         fprintf (stderr, "PE response, PrAcc not set (in GetPEResponse)\n");
@@ -561,10 +581,10 @@ static unsigned bitbang_read_word (adapter_t *adapter, unsigned addr)
     unsigned addr_lo = addr & 0xFFFF;
     unsigned addr_hi = (addr >> 16) & 0xFFFF;
 
-    if (DBG2) fprintf (stderr, "read_word\n");
+    if (DBG2)
+        fprintf (stderr, "read_word\n");
 
     serial_execution (a);
-//  fprintf (stderr, "read word from %08x\n", addr);
 
     xfer_instruction (a, 0x3c04bf80);           // lui s3, 0xFF20
     xfer_instruction (a, 0x3c080000 | addr_hi); // lui t0, addr_hi
@@ -596,9 +616,8 @@ static void bitbang_read_data (adapter_t *adapter,
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
     unsigned words_read, i;
 
-    if (DBG2) fprintf (stderr, "read_data\n");
-
-    //fprintf (stderr, "read %d bytes from %08x\n", nwords*4, addr);
+    if (DBG2)
+        fprintf (stderr, "read_data\n");
 
     if (! a->use_executive) {
         /* Without PE. */
@@ -738,7 +757,8 @@ static void bitbang_erase_chip (adapter_t *adapter)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
-    if (DBG2) fprintf (stderr, "erase_chip\n");
+    if (DBG2)
+        fprintf (stderr, "erase_chip\n");
 
     bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
     bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
@@ -753,9 +773,9 @@ static void bitbang_erase_chip (adapter_t *adapter)
         bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
         status = bitbang_recv (a);
         i++;
-    } while ( ((status & (MCHP_STATUS_CFGRDY |
-                          MCHP_STATUS_FCBUSY)) != MCHP_STATUS_CFGRDY)
-              & (i<100) );
+    } while (((status & (MCHP_STATUS_CFGRDY |
+                         MCHP_STATUS_FCBUSY)) != MCHP_STATUS_CFGRDY) &&
+              (i < 100));
 
     if (i == 100) {
         fprintf (stderr, "invalid status = %04x (in erase chip)\n", status);
@@ -773,7 +793,8 @@ static void bitbang_program_word (adapter_t *adapter,
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
-    if (DBG2) fprintf (stderr, "program_word\n");
+    if (DBG2)
+        fprintf (stderr, "program_word\n");
 
     if (debug_level > 0)
         fprintf (stderr, "program word at %08x: %08x\n", addr, word);
@@ -805,9 +826,11 @@ static void bitbang_program_row (adapter_t *adapter, unsigned addr,
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
-    if (DBG2) fprintf (stderr, "program_row\n");
-    if (DBG3) fprintf (stderr, "\nprogramming %u words at %08x ",
-                                         words_per_row,   addr);
+    if (DBG2)
+        fprintf (stderr, "program_row\n");
+    if (DBG3)
+        fprintf (stderr, "\nprogramming %u words at %08x ",
+                                   words_per_row,   addr);
 
     if (debug_level > 0)
         fprintf (stderr, "row program %u words at %08x\n", words_per_row, addr);
@@ -849,8 +872,10 @@ static void bitbang_verify_data (adapter_t *adapter,
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
     unsigned data_crc, flash_crc;
 
-    if (DBG2) fprintf (stderr, "verify_data\n");
-    if (DBG3) fprintf (stderr, "\nverifying %u words at %08x ", nwords, addr);
+    if (DBG2)
+        fprintf (stderr, "verify_data\n");
+    if (DBG3)
+        fprintf (stderr, "\nverifying %u words at %08x ", nwords, addr);
 
     if (! a->use_executive) {
         /* Without PE. */
@@ -925,13 +950,17 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     for (i = 0; i < 20; i++ ) {
         ch = '>';
         serial_write (&ch, 1);
-//      mdelay (50);
         usleep (50000);
         n = serial_read (&ch, 1);
-        if ( (n == 1) && (ch == '<') ) i = 100; else printf (".");
+        if ((n == 1) && (ch == '<'))
+            i = 100;
+        else
+            printf (".");
     }
 
-    if (i >50) printf("OK1 "); else {
+    if (i > 50)
+        printf("OK1 ");
+    else {
         fprintf (stderr, "\nNo response from 'ascii ICSP' adapter\n");
         serial_close();
         free (a);
@@ -942,11 +971,10 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     unsigned char buffer[15] = "..............\0";
                             // "ascii ICSP v1C"
     serial_write (&ch, 1);
-//  mdelay (50);
     usleep (50000);
     n = serial_read (buffer, 14);
 
-    if ( (n == 14) && (memcmp(buffer, "ascii ICSP v1", 13) == 0) )
+    if (n == 14 && memcmp(buffer, "ascii ICSP v1", 13) == 0)
         printf ("OK2 - %s\n", buffer);
     else {
         fprintf (stderr, "\nBad response from 'ascii ICSP' adapter\n");
@@ -1016,11 +1044,11 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     }
 
     /* Check status. */
-    bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
-    bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    bitbang_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0);  /* Xfer data. */
+    bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);      /* Send command. */
+    bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);     /* Send command. */
+    bitbang_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0); /* Xfer data. */
     // (above line) "This command requires a NOP to complete."
-    bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
+    bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);      /* Xfer data. */
     unsigned status = bitbang_recv (a);
     if (debug_level > 0)
         fprintf (stderr, "status %04x\n", status);

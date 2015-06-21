@@ -24,6 +24,9 @@ extern print_func_t print_mx1;
 extern print_func_t print_mx3;
 extern print_func_t print_mz;
 
+/*
+ * PIC32 families.
+ */
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
 static const
 family_t family_mx1 = { 3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
@@ -32,6 +35,9 @@ family_t family_mx3 = { 12, 0x2ff0, 512,  print_mx3, pic32_pemx3, 1044, 0x0201 }
 static const
 family_t family_mz  = { 80, 0xffc0, 2048, print_mz,  pic32_pemz,  1052, 0x0502 };
 
+/*
+ * Table of PIC32 chip variants.
+ */
 static const struct {
     unsigned        devid;
     const char      *name;
@@ -186,6 +192,19 @@ static const struct {
     {0}
 };
 
+/*
+ * Table of supported serial protocols.
+ */
+static const struct {
+    const char *prefix;
+    adapter_t *(*func)(const char *port, int baud);
+} serial_tab[] = {
+    { "arduino",    adapter_open_stk500v2       },  /* Default */
+    { "microchip",  adapter_open_an1388_uart    },
+    { "bitbang",    adapter_open_bitbang        },
+    { 0 },
+};
+
 #if defined (__CYGWIN32__) || defined (MINGW32)
 /*
  * Delay in milliseconds: Windows.
@@ -207,6 +226,60 @@ void mdelay (unsigned msec)
 #endif
 
 /*
+ * Open USB adapter, detected by vendor/product ID.
+ * Return a pointer to adapter structure, or 0 when not found.
+ */
+static adapter_t *open_usb_adapter()
+{
+    adapter_t *a;
+
+    a = adapter_open_pickit();
+#ifdef USE_MPSSE
+    if (! a)
+        a = adapter_open_mpsse();
+#endif
+    if (! a)
+        a = adapter_open_hidboot();
+    if (! a)
+        a = adapter_open_an1388();
+    if (! a)
+        a = adapter_open_uhb();
+    return a;
+}
+
+/*
+ * Open serial adapter.
+ * Use Arduino-compatible protocol (stk500v2) by default.
+ * To select other protocols, add a prefix to the port name,
+ * like "bitbang:COM5".
+ */
+static adapter_t *open_serial_adapter(const char *port_name, int baud_rate)
+{
+    const char *prefix, *delimiter;
+    int prefix_len, len, i;
+
+    /* Get protocol prefix. */
+    delimiter = strchr(port_name, ':');
+    if (! delimiter) {
+        /* Use stk500v2 protocol by default. */
+        return serial_tab[0].func(port_name, baud_rate);
+    }
+    prefix_len = delimiter - port_name;
+    prefix = port_name;
+    port_name = delimiter + 1;
+
+    /* Find prefix in the protocol table. */
+    for (i=0; serial_tab[i].prefix; i++) {
+        len = strlen(serial_tab[i].prefix);
+        if (prefix_len == len &&
+            strncmp(prefix, serial_tab[i].prefix, len) == 0) {
+            return serial_tab[i].func(port_name, baud_rate);
+        }
+    }
+    return 0;
+}
+
+/*
  * Connect to JTAG adapter.
  */
 target_t *target_open (const char *port_name, int baud_rate)
@@ -222,25 +295,9 @@ target_t *target_open (const char *port_name, int baud_rate)
 
     /* Find adapter. */
     if (port_name) {
-        t->adapter = adapter_open_stk500v2 (port_name, baud_rate);
-#ifdef USE_AN1388_UART
-        if (! t->adapter)
-            t->adapter = adapter_open_an1388_uart (port_name, baud_rate);
-#endif
-        if (! t->adapter)
-            t->adapter = adapter_open_bitbang (port_name, baud_rate);
+        t->adapter = open_serial_adapter(port_name, baud_rate);
     } else {
-        t->adapter = adapter_open_pickit ();
-#ifdef USE_MPSSE
-        if (! t->adapter)
-            t->adapter = adapter_open_mpsse ();
-#endif
-        if (! t->adapter)
-            t->adapter = adapter_open_hidboot ();
-        if (! t->adapter)
-            t->adapter = adapter_open_an1388 ();
-        if (! t->adapter)
-            t->adapter = adapter_open_uhb ();
+        t->adapter = open_usb_adapter();
     }
     if (! t->adapter) {
         fprintf (stderr, "\n");
