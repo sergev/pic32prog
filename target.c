@@ -29,11 +29,14 @@ extern print_func_t print_mz;
  */
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
 static const
-family_t family_mx1 = { 3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
+family_t family_mx1 = { "mx",
+                        3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
 static const
-family_t family_mx3 = { 12, 0x2ff0, 512,  print_mx3, pic32_pemx3, 1044, 0x0201 };
+family_t family_mx3 = { "mx3",
+                        12, 0x2ff0, 512,  print_mx3, pic32_pemx3, 1044, 0x0201 };
 static const
-family_t family_mz  = { 80, 0xffc0, 2048, print_mz,  pic32_pemz,  1052, 0x0502 };
+family_t family_mz  = { "mz",
+                        80, 0xffc0, 2048, print_mz,  pic32_pemz,  1052, 0x0502 };
 
 /*
  * Table of PIC32 chip variants.
@@ -332,6 +335,7 @@ target_t *target_open (const char *port_name, int baud_rate)
         t->flash_bytes = t->adapter->user_nbytes;
         t->boot_bytes = t->adapter->boot_nbytes;
     }
+    t->adapter->family_name = t->family->name;
     return t;
 }
 

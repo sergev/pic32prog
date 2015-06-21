@@ -16,6 +16,7 @@
 typedef void print_func_t (unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3);
 
 typedef struct {
+    const char      *name;
     unsigned        boot_kbytes;
     unsigned        devcfg_offset;
     unsigned        bytes_per_row;

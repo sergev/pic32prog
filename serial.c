@@ -154,7 +154,7 @@ int serial_write (unsigned char *data, int len)
 
     if (! WriteFile (fd, data, len, &written, 0))
         return -1;
-    return len;
+    return written;
 #else
     return write (fd, data, len);
 #endif
@@ -180,8 +180,8 @@ int serial_read (unsigned char *data, int len)
 
     timeout.tv_sec = timeout_msec / 1000;
     timeout.tv_usec = timeout_msec % 1000 * 1000;
-    to2 = timeout;
 again:
+    to2 = timeout;
     FD_ZERO (&rfds);
     FD_SET (fd, &rfds);
 
@@ -193,7 +193,7 @@ again:
             goto again;
         }
         fprintf (stderr, "stk-send: select error: %s\n", strerror (errno));
-        exit (1);
+        exit (-1);
     }
 #endif
     if (got == 0) {

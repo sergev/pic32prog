@@ -26,6 +26,7 @@ struct _adapter_t {
     unsigned boot_nbytes;               /* Size of user boot area */
 
     unsigned flags;
+    const char *family_name;            /* Name of pic32 family */
 
     void (*close) (adapter_t *a, int power_on);
     unsigned (*get_idcode) (adapter_t *a);
