@@ -202,9 +202,9 @@ static const struct {
     const char *prefix;
     adapter_t *(*func)(const char *port, int baud);
 } serial_tab[] = {
-    { "arduino",    adapter_open_stk500v2       },  /* Default */
-    { "microchip",  adapter_open_an1388_uart    },
-    { "bitbang",    adapter_open_bitbang        },
+    { "stk500",     adapter_open_stk500v2       },  /* Default */
+    { "an1388",     adapter_open_an1388_uart    },
+    { "ascii",      adapter_open_bitbang        },
     { 0 },
 };
 
@@ -275,7 +275,7 @@ static adapter_t *open_serial_adapter(const char *port_name, int baud_rate)
     for (i=0; serial_tab[i].prefix; i++) {
         len = strlen(serial_tab[i].prefix);
         if (prefix_len == len &&
-            strncmp(prefix, serial_tab[i].prefix, len) == 0) {
+            strncasecmp(prefix, serial_tab[i].prefix, len) == 0) {
             return serial_tab[i].func(port_name, baud_rate);
         }
     }

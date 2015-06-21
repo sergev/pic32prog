@@ -217,13 +217,11 @@ static void bitbang_send (bitbang_adapter_t *a,
     // the below block is to implement handshake on
     // EVERY write that does not have (read_flag != 0)
     //
-#if 0
-    if ((CFG1 == 1) && !read_flag)
+    if (CFG1 == 1 && !read_flag)
     {
         buffer[index++] = '>';
         a->PendingHandshake = 1;
     }
-#endif
 
     //
     // this block is to implement handshake on every 900 bytes sent out
@@ -299,8 +297,9 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
         unsigned L3 = (word >> 32) & 0xFFFF;
         unsigned L2 = (word >> 16) & 0xFFFF;
         unsigned L1 = word & 0xFFFF;
-        fprintf (stderr, "TDO = %04x %04x %04x %04x (%i bits)   %jx (dec)\n",
-                                 L4,  L3,  L2,  L1, a->BitsToRead, (intmax_t)word);
+        fprintf (stderr, "TDO = %04x %04x %04x %04x (%i bits)   %08x%08x (hex)\n",
+                                 L4,  L3,  L2,  L1, a->BitsToRead,
+                                (int)(word >> 32), (int)word & 0xffffffff);
     }
 
     a->TotalBitsReceived += a->BitsToRead;
@@ -505,7 +504,7 @@ static void xfer_instruction (bitbang_adapter_t *a, unsigned instruction)
 
         ctl = bitbang_recv (a);
         i++;
-    } while ((! (ctl & CONTROL_PRACC)) & (i < 150));
+    } while (! (ctl & CONTROL_PRACC) && i < 150);
 
     if (i == 150) {
         fprintf (stderr, "PE response, PrAcc not set (in XferInstruction)\n");
@@ -548,7 +547,7 @@ static unsigned get_pe_response (bitbang_adapter_t *a)
 
         ctl = bitbang_recv (a);
         i++;
-    } while ((! (ctl & CONTROL_PRACC)) & (i < 150));
+    } while (! (ctl & CONTROL_PRACC) && i < 150);
 
     if (i == 150) {
         fprintf (stderr, "PE response, PrAcc not set (in GetPEResponse)\n");
@@ -773,9 +772,9 @@ static void bitbang_erase_chip (adapter_t *adapter)
         bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
         status = bitbang_recv (a);
         i++;
-    } while (((status & (MCHP_STATUS_CFGRDY |
-                         MCHP_STATUS_FCBUSY)) != MCHP_STATUS_CFGRDY) &&
-              (i < 100));
+    } while ((status & (MCHP_STATUS_CFGRDY |
+                        MCHP_STATUS_FCBUSY)) != MCHP_STATUS_CFGRDY &&
+              i < 100);
 
     if (i == 100) {
         fprintf (stderr, "invalid status = %04x (in erase chip)\n", status);
@@ -952,7 +951,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         serial_write (&ch, 1);
         usleep (50000);
         n = serial_read (&ch, 1);
-        if ((n == 1) && (ch == '<'))
+        if (n == 1 && ch == '<')
             i = 100;
         else
             printf (".");
@@ -1026,7 +1025,6 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         return 0;
     }
 
-
     /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
      * After reset, the IDCODE register is always selected.
      * Read out 32 bits of data. */
@@ -1060,6 +1058,8 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         free (a);
         return 0;
     }
+
+    a->adapter.flags = AD_PROBE | AD_ERASE | AD_READ | AD_WRITE;
 
     /* User functions. */
     a->adapter.close = bitbang_close;

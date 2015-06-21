@@ -1,5 +1,4 @@
-#CC		= gcc
-CC		= i586-mingw32msvc-gcc
+CC              = gcc
 SVNVERS         = $(shell git rev-list HEAD --count)
 CFLAGS          = -Wall -g -O -DMINGW32 -Ilibusb-win32 -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
 LDFLAGS         = -s
@@ -11,13 +10,19 @@ HIDSRC          = hidapi/hid-windows.c
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o serial.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o\
                   adapter-bitbang.o adapter-stk500v2.o adapter-uhb.o \
+                  adapter-an1388-uart.o \
                   family-mx1.o family-mx3.o family-mz.o
 #PROG_OBJS      += adapter-mpsse.o
 #LIBS           += -Llibusb-win32/x86 -lusb0_x86
 
-all:		pic32prog.exe
+# Compiling Windows binary from Linux
+ifeq (/usr/bin/i586-mingw32msvc-gcc,$(wildcard /usr/bin/i586-mingw32msvc-gcc))
+    CC          = i586-mingw32msvc-gcc
+endif
 
-pic32prog.exe:	$(PROG_OBJS)
+all:            pic32prog.exe
+
+pic32prog.exe:  $(PROG_OBJS)
 		$(CC) $(LDFLAGS) -o $@ $(PROG_OBJS) $(LIBS)
 
 hid.o:          $(HIDSRC)

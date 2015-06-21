@@ -8,36 +8,36 @@
  *
  * below is the currently implemented command set:
  *
- * 'd' : TDI = 0, TMS = 0, read_flag = 0	0x64
+ * 'd' : TDI = 0, TMS = 0, read_flag = 0        0x64
  * 'e' : TDI = 0, TMS = 1, read_flag = 0
  * 'f' : TDI = 1, TMS = 0, read_flag = 0
  * 'g' : TDI = 1, TMS = 1, read_flag = 0
  *
- * 'D' : TDI = 0, TMS = 0, read_flag = 1	0x44
+ * 'D' : TDI = 0, TMS = 0, read_flag = 1        0x44
  * 'E' : TDI = 0, TMS = 1, read_flag = 1
  * 'F' : TDI = 1, TMS = 0, read_flag = 1
  * 'G' : TDI = 1, TMS = 1, read_flag = 1
  *
- * '+' : TDI = 0, TMS = 0, accumulate PrAcc	0x2B
+ * '+' : TDI = 0, TMS = 0, accumulate PrAcc     0x2B
  *
  * (if read_flag = 1 then respond with TDO value of '0' or '1')
  *
  * '.' : no operation, used for formatting
- * '>' : request a sync response of '<''
+ * '>' : request a sync response of '<'
  * '=' : retrieve accumulated PrAcc values, then set PrAcc = 1
  *
  * '0' : clock out a 0 on PGD pin
  * '1' : clock out a 1 on PGD pin
- * '-' : clock in single PGD bit	(*** for other device families)
+ * '-' : clock in single PGD bit        (*** for other device families)
  *
- * '2' : set MCLR low (and RST high)
- * '3' : set MCLR high (and RST low)
+ * '2' : set MCLR low
+ * '3' : set MCLR hi-Z
  *
  * '4' : turn Vcc (power to target) OFF
  * '5' : turn Vcc (power to target) ON
  *
- * '6' : turn Vpp OFF			(*** for other device families)
- * '7' : turn Vpp ON			(*** for other device families)
+ * '6' : turn Vpp OFF, RST ON           (*** for other device families)
+ * '7' : turn RST OFF, Vpp ON           (*** for other device families)
 
  * '8' : insert 10mS delay
  * '@' : return A0..A5 inputs as 6 lines of text, CRLF terminated
@@ -52,7 +52,7 @@
  * note 3: commands '-', '6', '7' are intended to possibly allow the programming
  *         of other/older PIC families that use a different ICSP command set. these
  *         devices are likely to have much less flash storage, so any added time
- *         overhead is not a major concern
+ *         overhead is not of major concern. for future use
  *
  * note 4: commands '+' and '=' are to allow for accumulating the PrAcc bit when
  *         XferFastData is used. retrieving every PrAcc bit in the normal way would
@@ -75,8 +75,9 @@ should do)
 RST    : (8) base drive for external MCLR switching transistor
 Vpp    : (9) drive for external Vpp switching opto coupler
 
-the commands for turning RST and Vpp on/off check to to make sure that
-assertion of RST and Vpp are mutually exclusive as a safety feature.
+RST and Vpp are mutually exclusive. if an HV programmer is implemented it
+should have it's own seperate ICSP header. Vpp should NEVER be on the same
+header as MCLR to prevent the risk of damaging the 328p
 
 
 2-wire, 4-phase transaction:
@@ -96,7 +97,7 @@ Enter ICSP mode:
 MCLR := 0
 PGD := 0
 PGC := 0
-Vcc := 1		(apply power to target, wait 50mS to stabilize)
+Vcc := 1                (apply power to target, wait 50mS to stabilize)
 pulse MCLR high
 (pause P18)
 clock out "MCHP" signature
@@ -109,24 +110,24 @@ command string: "5.88888.32.8.0100.1101.0100.0011.0100.1000.0101.0000.8.3.8"
 
 Exit ICSP mode:
 --------------
-MCLR := 0	(hold target in reset)
-Vcc := 0	(target now powered down)
+MCLR := 0       (hold target in reset)
+Vcc := 0        (target now powered down)
 
 command string: "88888.4"    (first wait 50mS to ensure target is no longer busy)
 
 
-Using an Arduino Nano just as a USB to serial bridge:
+Using an Arduino NANO just as a USB to serial bridge:
 ----------------------------------------------------
-if pins 28 and 29 are jumpered together (RESET and GND) then the 328P will be
+if pins 28 and 29 are jumpered together (RESET and GND) then the 328p will be
 held in reset with the processors TxD and RxD pins hi-Z. while in this state the
 USB to serial bridge portion of the Nano can be used for communicating with a
 target processor
 
-if pins 28 and 27 are jumpered together, this prevents the Nano from being reset
-via the serial port. if not jumpered, opening the port on some systems will
-cause one or more resets, delaying the 328p being able to respond to commands.
-remember that the jumper must be removed to upload new firmware, and that while
-fitted NEVER press the reset button
+if pins 28 and 27 are jumpered together, resetting via the USB serial port will
+be disabled. if not jumpered, opening the port on some systems may cause one or
+more resets, delaying the 328p being able to respond to commands. remember that
+the jumper must be removed to upload new firmware, and that while fitted NEVER
+press the onboard reset button
 
 
 Arduino code:
@@ -143,50 +144,50 @@ int RST  = 8;
 int Vpp  = 9;
 int LED = 13;
 
-int LEDxx = 0;				// LED blink counter
-int PrAcc = 1;				// accumulated PrAcc flag
+int LEDxx = 0;                          // LED blink counter
+int PrAcc = 1;                          // accumulated PrAcc flag
 
 void setup()
 {
-  digitalWrite(PGC, LOW);		// PGC, open collector /w 3k3 pullup
-  digitalWrite(PGD, LOW);		// PGD, open collector /w 3k3 pullup
-  digitalWrite(MCLR, LOW);		// MCLR, open collector /w 3k3 pullup
-  pinMode(PGC, OUTPUT);			// PGC = 0
-  pinMode(PGD, OUTPUT);			// PGD = 0
-  pinMode(MCLR, OUTPUT);		// MCLR = 0
+  digitalWrite(PGC, LOW);               // PGC, open collector /w 3k3 pullup
+  digitalWrite(PGD, LOW);               // PGD, open collector /w 3k3 pullup
+  digitalWrite(MCLR, LOW);              // MCLR, open collector /w 3k3 pullup
+  pinMode(PGC, OUTPUT);                 // PGC = 0
+  pinMode(PGD, OUTPUT);                 // PGD = 0
+  pinMode(MCLR, OUTPUT);                // MCLR = 0
 
-  digitalWrite(RST, LOW);
+  digitalWrite(RST, HIGH);
   digitalWrite(Vpp, LOW);
   digitalWrite(LED, LOW);
-  pinMode(RST, OUTPUT);			// not MCLR (to drive base of NPN OC)
-  pinMode(Vpp, OUTPUT);			// Vpp enable output (use optocoupler)
-  pinMode(LED, OUTPUT);			// status LED on arduino
+  pinMode(RST, OUTPUT);                 // not MCLR (to drive base of NPN OC)
+  pinMode(Vpp, OUTPUT);                 // Vpp enable output (use optocoupler)
+  pinMode(LED, OUTPUT);                 // status LED on arduino
 
-  analogReference(INTERNAL);		// select internal 1.1v reference
+  analogReference(INTERNAL);            // select internal 1.1v reference
 
-  Serial.begin(500000);   // , SERIAL_8N1);
+  Serial.begin(500000);                 // , SERIAL_8N1);
   /* 38400, 115200, 230400, 256000, 460800, 921600, 250000, 500000, 1000000 */
 }
 
 
-#define NOP __asm__ __volatile__ ("nop\n\t")		// delay 62.5ns on a 16MHz AtMega
+#define NOP __asm__ __volatile__ ("nop\n\t")    // delay 62.5ns on a 16MHz AtMega
 
 
 char clock1(int D)
 {
-//if (D) pinMode(PGD, INPUT);				// PGD = hi-Z
-//  else pinMode(PGD, OUTPUT);				// PGD = 0
-//pinMode(PGC, INPUT);					// HIGH (via 3k3 pullup)
-//pinMode(PGC, OUTPUT);					// LOW
+//if (D) pinMode(PGD, INPUT);                   // PGD = hi-Z
+//  else pinMode(PGD, OUTPUT);                  // PGD = 0
+//pinMode(PGC, INPUT);                          // HIGH (via 3k3 pullup)
+//pinMode(PGC, OUTPUT);                         // LOW
 
 // below lines use direct port manipulation to improve speed
 
-  if (D) DDRD &= B11110111;				// PGD = hi-Z
-    else DDRD |= B00001000;				// PGD = 0
+  if (D) DDRD &= B11110111;                     // PGD = hi-Z
+    else DDRD |= B00001000;                     // PGD = 0
   delayMicroseconds(1);
-  DDRD &= B11111011;					// HIGH (via 3k3 pullup)
+  DDRD &= B11111011;                            // HIGH (via 3k3 pullup)
   delayMicroseconds(1);
-  DDRD |= B00000100;					// LOW
+  DDRD |= B00000100;                            // LOW
   delayMicroseconds(1);
 
   char ch = '0' + ((PIND & B00001000) >> 3);
@@ -197,38 +198,38 @@ char clock1(int D)
 char clock4( int TDI, int TMS)
 {
 // phase 1
-  if (TDI) DDRD &= B11110111;				// PGD = hi-Z
-      else DDRD |= B00001000;				// PGD = 0
+  if (TDI) DDRD &= B11110111;                   // PGD = hi-Z
+      else DDRD |= B00001000;                   // PGD = 0
   delayMicroseconds(1);
-  DDRD &= B11111011;					// HIGH (via 3k3 pullup)
+  DDRD &= B11111011;                            // HIGH (via 3k3 pullup)
   delayMicroseconds(1);
-  DDRD |= B00000100;					// LOW
+  DDRD |= B00000100;                            // LOW
   delayMicroseconds(1);
 
 // phase 2
-  if (TMS) DDRD &= B11110111;				// PGD = hi-Z
-      else DDRD |= B00001000;				// PGD = 0
+  if (TMS) DDRD &= B11110111;                   // PGD = hi-Z
+      else DDRD |= B00001000;                   // PGD = 0
   delayMicroseconds(1);
-  DDRD &= B11111011;					// HIGH (via 3k3 pullup)
+  DDRD &= B11111011;                            // HIGH (via 3k3 pullup)
   delayMicroseconds(1);
-  DDRD |= B00000100;					// LOW
+  DDRD |= B00000100;                            // LOW
   delayMicroseconds(1);
 
 // phase 3
-  DDRD &= B11110111;					// PGD = hi-Z (input)
+  DDRD &= B11110111;                            // PGD = hi-Z (input)
   delayMicroseconds(1);
-  DDRD &= B11111011;					// HIGH (via 3k3 pullup)
+  DDRD &= B11111011;                            // HIGH (via 3k3 pullup)
   delayMicroseconds(1);
-  DDRD |= B00000100;					// LOW
+  DDRD |= B00000100;                            // LOW
   delayMicroseconds(1);
 
 // read TDO
   char ch = '0' + ((PIND & B00001000) >> 3);
 
 // phase 4
-  DDRD &= B11111011;					// HIGH (via 3k3 pullup)
+  DDRD &= B11111011;                            // HIGH (via 3k3 pullup)
   delayMicroseconds(1);
-  DDRD |= B00000100;					// LOW
+  DDRD |= B00000100;                            // LOW
 
   return ch;
 }
@@ -237,91 +238,91 @@ char clock4( int TDI, int TMS)
 void loop()
 {
 
-//if (LEDxx == 0) digitalWrite(LED, HIGH);		// turn status LED ON
-//if (LEDxx == 3) digitalWrite(LED, LOW);		// turn status LED OFF
-  if (LEDxx == 0) PORTB |= B00100000;			// turn status LED ON
-  if (LEDxx == 3) PORTB &= B11011111;			// turn status LED OFF
+//if (LEDxx == 0) digitalWrite(LED, HIGH);      // turn status LED ON
+//if (LEDxx == 3) digitalWrite(LED, LOW);       // turn status LED OFF
+  if (LEDxx == 0) PORTB |= B00100000;           // turn status LED ON
+  if (LEDxx == 3) PORTB &= B11011111;           // turn status LED OFF
   LEDxx = ++LEDxx & 0x001F;
 
   char ch;
 
-  while (Serial.available())				// loop while data in buffer
-  {							// (buffer size is 64 bytes)
+  while (Serial.available())                    // loop while data in buffer
+  {                                             // (buffer size is 64 bytes)
     int I = Serial.read();
     switch (char(I))
     {
 
 // 'd','e','f','g': write TDI and TMS, no read back
 
-      case 'd':						// TDI = 0, TMS = 0, read_flag = 0
+      case 'd':                                 // TDI = 0, TMS = 0, read_flag = 0
         clock4(0, 0);
       break;
 
-      case 'e':						// TDI = 0, TMS = 1, read_flag = 0
+      case 'e':                                 // TDI = 0, TMS = 1, read_flag = 0
         clock4(0, 1);
       break;
 
-      case 'f':						// TDI = 1, TMS = 0, read_flag = 0
+      case 'f':                                 // TDI = 1, TMS = 0, read_flag = 0
         clock4(1, 0);
       break;
 
-      case 'g':						// TDI = 1, TMS = 1, read_flag = 0
+      case 'g':                                 // TDI = 1, TMS = 1, read_flag = 0
         clock4(1, 1);
       break;
 
 
 // 'D','E','F','G', '+': write TDI and TMS, read back TDO
 
-      case 'D':						// TDI = 0, TMS = 0, read_flag = 1
+      case 'D':                                 // TDI = 0, TMS = 0, read_flag = 1
         ch = clock4(0, 0);
         Serial.print(ch);
       break;
 
-      case 'E':						// TDI = 0, TMS = 1, read_flag = 1
+      case 'E':                                 // TDI = 0, TMS = 1, read_flag = 1
         ch = clock4(0, 1);
         Serial.print(ch);
       break;
 
-      case 'F':						// TDI = 1, TMS = 0, read_flag = 1
+      case 'F':                                 // TDI = 1, TMS = 0, read_flag = 1
         ch = clock4(1, 0);
         Serial.print(ch);
       break;
 
-      case 'G':						// TDI = 1, TMS = 1, read_flag = 1
+      case 'G':                                 // TDI = 1, TMS = 1, read_flag = 1
         ch = clock4(1, 1);
         Serial.print(ch);
       break;
 
-      case '+':						// TDI = 0, TMS = 0, accumulate PrAcc
+      case '+':                                 // TDI = 0, TMS = 0, accumulate PrAcc
         ch = clock4(0, 0);
-        if (ch == '0') PrAcc = 0;			// remember if any error ('0')
+        if (ch == '0') PrAcc = 0;               // remember if any error ('0')
       break;
 
 // '>', '.', '=': handshake and formatting commands, placed here for possible speed
 
-      case '>':						// request a sync response of '<'
+      case '>':                                 // request a sync response of '<'
         Serial.print('<');
       break;
 
-      case '=':						// retrieve value of PrAcc
+      case '=':                                 // retrieve value of PrAcc
         Serial.print(PrAcc ? '1' : '0');
-        PrAcc = 1;					// reset to default
+        PrAcc = 1;                              // reset to default
       break;
 
-      case '.':						// no operation, used for formatting
+      case '.':                                 // no operation, used for formatting
       break;
 
 // '0','1': used to clock out "MCHP" signature for ICSP entry
 
-      case '0':						// clock out a 0 bit on PGD pin
-        clock1(0);					// PGD = 0
+      case '0':                                 // clock out a 0 bit on PGD pin
+        clock1(0);                              // PGD = 0
       break;
 
-      case '1':						// clock out a 1 bit on PGD pin
-        clock1(1);					// PGD = 1
+      case '1':                                 // clock out a 1 bit on PGD pin
+        clock1(1);                              // PGD = 1
       break;
 
-      case '-':						// clock in single PGD bit
+      case '-':                                 // clock in single PGD bit
         ch = clock1(1);
         Serial.print(ch);
       break;
@@ -331,57 +332,59 @@ void loop()
 
 // '2','3': pulse MCLR high, clock out signature, set MCLR high
 
-      case '2':						// set MCLR low
-        pinMode(MCLR, OUTPUT);				// MCLR = 0
-        digitalWrite(Vpp, LOW);				// Vpp = 0 (safety lockout)
-        digitalWrite(RST, HIGH);			// RST = 1
+      case '2':                                 // set MCLR low
+        pinMode(MCLR, OUTPUT);                  // MCLR = 0
       break;
 
-      case '3':						// set MCLR high
-        pinMode(MCLR, INPUT);				// MCLR = 1
-        digitalWrite(RST, LOW);				// RST = 0
+      case '3':                                 // set MCLR high
+        pinMode(MCLR, INPUT);                   // MCLR = 1
       break;
 
 // '4','5': control power supply to target
 
-      case '4':						// turn power to target OFF
-        pinMode(MCLR, OUTPUT);				// hold target in reset
+      case '4':                                 // turn power to target OFF
+        pinMode(PGC, OUTPUT);                   // PGC = 0
+        pinMode(PGD, OUTPUT);                   // PGD = 0
+        pinMode(MCLR, OUTPUT);                  // hold target in reset
 
-        pinMode(Vcc1, INPUT);				// hi-Z
-        pinMode(Vcc2, INPUT);				// hi-Z
-        pinMode(Vcc3, INPUT);				// hi-Z
+        pinMode(Vcc1, INPUT);                   // hi-Z
+        pinMode(Vcc2, INPUT);                   // hi-Z
+        pinMode(Vcc3, INPUT);                   // hi-Z
 //      DDRD &= B00011111;
       break;
 
-      case '5':						// turn power to target ON
-        pinMode(PGC, OUTPUT);				// PGC = 0
-        pinMode(PGD, OUTPUT);				// PGD = 0
-        pinMode(MCLR, OUTPUT);				// hold target in reset
+      case '5':                                 // turn power to target ON
+        pinMode(PGC, OUTPUT);                   // PGC = 0
+        pinMode(PGD, OUTPUT);                   // PGD = 0
+        pinMode(MCLR, OUTPUT);                  // hold target in reset
 
-        digitalWrite(Vcc1, HIGH);			// Vcc1 )
-        digitalWrite(Vcc2, HIGH);			// Vcc2 )  reset to +5v
-        digitalWrite(Vcc3, HIGH);			// Vcc3 )
+        digitalWrite(Vcc1, HIGH);               // Vcc1 )
+        digitalWrite(Vcc2, HIGH);               // Vcc2 )  reset to +5v
+        digitalWrite(Vcc3, HIGH);               // Vcc3 )
 
-        pinMode(Vcc1, OUTPUT);				// +5v
-        pinMode(Vcc2, OUTPUT);				// +5v
-        pinMode(Vcc3, OUTPUT);				// +5v
+        pinMode(Vcc1, OUTPUT);                  // +5v
+        pinMode(Vcc2, OUTPUT);                  // +5v
+        pinMode(Vcc3, OUTPUT);                  // +5v
 //      DDRD |= B11100000;
       break;
 
 // HV programming commands, for older device families that require Vpp
 
-      case '6':						// turn OFF Vpp
-        digitalWrite(Vpp, LOW);				// Vpp = 0
+      case '6':                                 // turn OFF Vpp, hold in reset
+        digitalWrite(Vpp, LOW);                 // Vpp = 0
+        delay (1);                              // 1mS delay
+        digitalWrite(RST, HIGH);                // RST = 1
       break;
 
-      case '7':						// turn ON Vpp
-        digitalWrite(RST, LOW);				// RST = 0 (safety lockout)
-        digitalWrite(Vpp, HIGH);			// Vpp = 1
+      case '7':                                 // release reset, turn ON Vpp
+        digitalWrite(RST, LOW);                 // RST = 0 (release reset)
+        delay (1);                              // 1mS delay
+        digitalWrite(Vpp, HIGH);                // Vpp = 1
       break;
 
 // miscellaneous other commands
 
-      case '8':						// insert 10mS delay
+      case '8':                                 // insert 10mS delay
         delay(10);
       break;
 
@@ -394,17 +397,17 @@ void loop()
         Serial.println(analogRead(A5));
       break;
 
-      case '?':						// return ID string, "ascii ICSP v1X"
+      case '?':                                 // return ID string, "ascii ICSP v1X"
         Serial.print("ascii ICSP v1C");
       break;
 
-      default: tone(10, 440, 1000);			// invalid input - beep on pin 10
-    }	// end of switch
-  }	// end of while
-}	// end of function loop()
+      default: tone(10, 440, 1000);             // invalid input - beep on pin 10
+    }   // end of switch
+  }     // end of while
+}       // end of function loop()
 
 
 
 
-//  pinMode(pin, OUTPUT);				// drive pin to set value
-//  pinMode(pin, INPUT);				// hi-Z state
+//  pinMode(pin, OUTPUT);                       // drive pin to set value
+//  pinMode(pin, INPUT);                        // hi-Z state

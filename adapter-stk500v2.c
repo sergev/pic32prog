@@ -491,6 +491,8 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
             printf ("stk-probe: error %d\n", retry_count);
         if (retry_count >= 3) {
             /* Bad reply or no device connected */
+            free (a);
+            serial_close ();
             return 0;
         }
     }
