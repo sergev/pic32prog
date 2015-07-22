@@ -170,7 +170,7 @@ int serial_read (unsigned char *data, int len)
     DWORD got;
 
     if (! ReadFile (fd, data, len, &got, 0)) {
-        fprintf (stderr, "stk-send: read error\n");
+        fprintf (stderr, "serial_read: read error\n");
         exit (-1);
     }
 #else
@@ -189,23 +189,23 @@ again:
     if (got < 0) {
         if (errno == EINTR || errno == EAGAIN) {
             if (debug_level > 1)
-                printf ("stk-send: programmer is not responding\n");
+                printf ("serial_read: retry on select\n");
             goto again;
         }
-        fprintf (stderr, "stk-send: select error: %s\n", strerror (errno));
+        fprintf (stderr, "serial_read: select error: %s\n", strerror (errno));
         exit (-1);
     }
 #endif
     if (got == 0) {
         if (debug_level > 1)
-            printf ("stk-send: programmer is not responding\n");
+            printf ("serial_read: no characters to read\n");
         return 0;
     }
 
-#if ! defined(__WIN32__) && !defined(WIN32)
+#if ! defined(__WIN32__) && ! defined(WIN32)
     got = read (fd, data, (len > 1024) ? 1024 : len);
     if (got < 0) {
-        fprintf (stderr, "stk-send: read error\n");
+        fprintf (stderr, "serial_read: read error\n");
         exit (-1);
     }
 #endif

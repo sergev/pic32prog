@@ -26,7 +26,7 @@
 #include "adapter.h"
 
 #ifndef VERSION
-#define VERSION         "2.0."SVNVERSION
+#define VERSION         "2.0."GITCOUNT
 #endif
 #define MINBLOCKSZ      128
 #define FLASHV_BASE     0x9d000000

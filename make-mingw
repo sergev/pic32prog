@@ -1,6 +1,6 @@
 CC              = gcc
-SVNVERS         = $(shell git rev-list HEAD --count)
-CFLAGS          = -Wall -g -O -DMINGW32 -Ilibusb-win32 -Ihidapi -DSVNVERSION='"$(SVNVERS)"'
+GITCOUNT        = $(shell git rev-list HEAD --count)
+CFLAGS          = -Wall -g -O -DMINGW32 -Ilibusb-win32 -Ihidapi -DGITCOUNT='"$(GITCOUNT)"'
 LDFLAGS         = -s
 
 # Windows
