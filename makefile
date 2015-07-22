@@ -13,9 +13,15 @@ endif
 
 # Mac OS X
 ifeq ($(UNAME),Darwin)
-    CC          += -arch i386 -arch x86_64
     LIBS        += -framework IOKit -framework CoreFoundation
     HIDSRC      = hidapi/hid-mac.c
+    UNIV_ARCHS  = $(shell grep '^universal_archs' /opt/local/etc/macports/macports.conf)
+    ifneq ($(findstring i386,$(UNIV_ARCHS)),)
+        CC      += -arch i386
+    endif
+    ifneq ($(findstring x86_64,$(UNIV_ARCHS)),)
+        CC      += -arch x86_64
+    endif
 endif
 
 PROG_OBJS       = pic32prog.o target.o executive.o hid.o serial.o \
