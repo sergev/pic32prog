@@ -9,7 +9,6 @@
  */
 #include <stdio.h>
 #include <stdlib.h>
-#include <stdint.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
@@ -282,11 +281,13 @@ adapter_t *adapter_open_uhb (void)
         a->reply[32] != 7)                  /* Tag: board name */
         return 0;
 
-    a->flash_size  = *(uint32_t*) &a->reply[8];
-    a->erase_size  = *(uint16_t*) &a->reply[14];
-    a->write_size  = *(uint16_t*) &a->reply[18];
-    a->version     = *(uint16_t*) &a->reply[22];
-    a->boot_start  = *(uint32_t*) &a->reply[28];
+    a->flash_size  = a->reply[8] | (a->reply[9] << 8) |
+                     (a->reply[10] << 16) | (a->reply[11] << 24);
+    a->erase_size  = a->reply[14] | (a->reply[15] << 8);
+    a->write_size  = a->reply[18] | (a->reply[19] << 8);
+    a->version     = a->reply[22] | (a->reply[23] << 8);
+    a->boot_start  = a->reply[28] | (a->reply[29] << 8) |
+                     (a->reply[30] << 16) | (a->reply[31] << 24);
     memcpy (a->name, &a->reply[33], 31);
 
     a->adapter.user_start  = 0x1d000000;
