@@ -259,11 +259,6 @@ int serial_open (const char *devname, int baud_rate, int timeout)
         strncat(devicePath, devname, 10);
     }
 
-    // Strip off any trailing colon that might have been put in there
-    if (devicePath[strlen(devicePath)-1] == ':') {
-        devicePath[strlen(devicePath)-1] = 0;
-    }
-
     /* Open port */
     fd = CreateFile (devicePath, GENERIC_READ | GENERIC_WRITE,
         0, 0, OPEN_EXISTING, 0, 0);
