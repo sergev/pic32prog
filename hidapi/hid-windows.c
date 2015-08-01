@@ -12,11 +12,15 @@
 #include <setupapi.h>
 
 #ifdef __CYGWIN__
-#include <w32api/hidsdi.h>
+#   include <w32api/hidsdi.h>
 /* the definition below is missing from Cygwin' hidsdi.h ... */
 HIDAPI VOID NTAPI HidD_GetHidGuid (LPGUID);
 #else
-#include <ddk/hidsdi.h>
+#   ifdef __MINGW64_VERSION_MAJOR
+#       include <hidsdi.h>
+#   else
+#       include <ddk/hidsdi.h>
+#   endif
 #endif
 
 #include "hidapi.h"
