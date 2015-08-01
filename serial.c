@@ -242,18 +242,40 @@ int serial_open (const char *devname, int baud_rate, int timeout)
     timeout_msec = timeout;
 
 #if defined(__WIN32__) || defined(WIN32)
+    /* Check for the Windows device syntax and bend a DOS device
+     * into that syntax to allow higher COM numbers than 9
+     */
+
+    char devicePath[11] = "";
+
+    // If it doesn't start with "\\.\"
+    if (strncmp(devname, "\\\\.\\", 4) != 0) {
+        // Push the device spec header into the device path string
+        strcat(devicePath, "\\\\.\\");
+        // Push the device name into the device path string
+        strncat(devicePath, devname, 6);
+    } else {
+        // Push the device name into the device path string
+        strncat(devicePath, devname, 10);
+    }
+
+    // Strip off any trailing colon that might have been put in there
+    if (devicePath[strlen(devicePath)-1] == ':') {
+        devicePath[strlen(devicePath)-1] = 0;
+    }
+
     /* Open port */
-    fd = CreateFile (devname, GENERIC_READ | GENERIC_WRITE,
+    fd = CreateFile (devicePath, GENERIC_READ | GENERIC_WRITE,
         0, 0, OPEN_EXISTING, 0, 0);
     if (fd == INVALID_HANDLE_VALUE) {
-        fprintf (stderr, "%s: Cannot open\n", devname);
+        fprintf (stderr, "%s: Cannot open\n", devicePath);
         return -1;
     }
 
     /* Set serial attributes */
     memset (&saved_mode, 0, sizeof(saved_mode));
     if (! GetCommState (fd, &saved_mode)) {
-        fprintf (stderr, "%s: Cannot get state\n", devname);
+        fprintf (stderr, "%s: Cannot get state\n", devicePath);
         return -1;
     }
 
@@ -273,7 +295,7 @@ int serial_open (const char *devname, int baud_rate, int timeout)
     new_mode.fAbortOnError = FALSE;
     new_mode.fBinary = TRUE;
     if (! SetCommState (fd, &new_mode)) {
-        fprintf (stderr, "%s: Cannot set state\n", devname);
+        fprintf (stderr, "%s: Cannot set state\n", devicePath);
         return -1;
     }
 
@@ -282,7 +304,7 @@ int serial_open (const char *devname, int baud_rate, int timeout)
     ctmo.ReadTotalTimeoutMultiplier = 0;
     ctmo.ReadTotalTimeoutConstant = timeout_msec;
     if (! SetCommTimeouts (fd, &ctmo)) {
-        fprintf (stderr, "%s: Cannot set timeouts\n", devname);
+        fprintf (stderr, "%s: Cannot set timeouts\n", devicePath);
         return -1;
     }
 #else
