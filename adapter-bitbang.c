@@ -980,7 +980,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         buffer[0] = STK_ENTER_PROGMODE;                 // enter program mode (not needed)
         buffer[1] = CRC_EOP;
         serial_write (buffer, 2);
-        serial_read (buffer, 2);
+        n = serial_read (buffer, 2);
 
         if ((n != 2) || (buffer[0] != STK_INSYNC) || (buffer[1] != STK_OK)) {
             fprintf (stderr, "Failed to enter program mode\n");
