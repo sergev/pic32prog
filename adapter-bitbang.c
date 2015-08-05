@@ -1050,10 +1050,10 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
             exit (-1);
         }
         printf ("Firmware uploaded to 'ascii ICSP' adapter OK\n");
+        serial_close();
 #else
         printf ("Firmware upload to arduino/STK500 not included\n");
 #endif
-        serial_close();
         exit (0);                                       // finished performing function, exit program
     }
 
