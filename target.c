@@ -217,6 +217,9 @@ static const struct {
     {0x5145053, "MZ2048ECM124", 2048,   &family_mz},
     {0x514F053, "MZ2048ECM144", 2048,   &family_mz},
 
+    /* MZ family with FPU--------Flash---Family */
+    {0x17209053, "MZ2048EFH064", 2048,   &family_mz},
+
     /* USB bootloader */
     {0xEAFB00B, "Bootloader",   0,      &family_bl},
     {0}
