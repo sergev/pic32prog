@@ -744,6 +744,7 @@ int main (int argc, char **argv)
             continue;
         case 'b':
             target_speed = strtoul (optarg, 0, 0);
+            if (strncasecmp("ascii:", target_port, 6) != 0)                 // *** HORRIBLE HACK!! ***
             if (! serial_speed_valid (target_speed))
                 return 0;
             // If the alternate hasn't changed from default then keep
