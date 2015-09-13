@@ -201,8 +201,9 @@ static void bitbang_send (bitbang_adapter_t *a,
     a->CharToRead = (read_flag == 2 ? 1 : 0);
     a->BitsToRead = (read_flag == 2 ? 1 : 0);
 
+    i = tdi_nbits;
     if (CFG3) {                                 // while we can, package up lots of 4 TDI bits
-        for (i = tdi_nbits; i > 4; i -= 4) {    // make sure the last bit is NOT packaged
+        for (; i > 4; i -= 4) {                 // make sure the last bit is NOT packaged
             ch = (read_flag == 1 ? 'I' : 'i') + (tdi & 0xF);
             buffer[index++] = ch;
             tdi >>= 4;
