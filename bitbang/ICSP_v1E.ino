@@ -67,8 +67,8 @@
  #           'A' encodes the header sequence 'edD'
  #           '@' returns readings in units of millivolts
  #
- # the above additions first introduced in version 1D
- # RLE reduces the symbol stream length by around 50%
+ # the above additions first introduced in version 1E
+ # 4-bit encoding reduces the symbol stream length by around 70%
 
 
 Interface pins on Arduino:
@@ -195,7 +195,7 @@ long readVcc()                      // Read 1.1V reference against AVcc
 }
 
 
-char clock1(int D)
+int clock1(int D)
 {
 //if (D) pinMode(PGD, INPUT);                   // PGD = hi-Z
 //  else pinMode(PGD, OUTPUT);                  // PGD = 0
@@ -212,8 +212,8 @@ char clock1(int D)
   DDRD |= B00000100;                            // LOW
   delayMicroseconds(1);
 
-  char ch = '0' + ((PIND & B00001000) >> 3);
-  return ch;
+  int B = ((PIND & B00001000) >> 3);
+  return B;
 }
 
 
@@ -346,7 +346,7 @@ void loop()
       break;
 
       case '+':                                 // TDI = 0, TMS = 0, accumulate PrAcc
-        if (clock4(0, 0)) PrAcc = 0;            // remember if any error ('0')
+        if (!clock4(0, 0)) PrAcc = 0;           // remember if any error ('0')
       break;
 
 // '>', '.', '=': handshake and formatting commands, placed here for possible speed
