@@ -52,7 +52,8 @@ static int CFG2 = 1;    // 1/2 config to retrieve PrAcc and alert if (PrAcc != 1
                         // (note: option 2 doubles programming time)
 static int CFG3 = 1;    // 0 = uncompressed stream (use only 'd','e','f','g'
                         // 1 = use 4-bit packing (on data only) 'i'-'x','I'-'X','a','z','A'
-static int CFG4 = 1;    // decompression method in serial read (normally set to match CGF3)
+static int CFG4 = 1;    // decompression method in serial read (normally set to match CFG3)
+static int MAXW = 440;  // maximum continuous write before sync: 900 + 50 < 1024, 440 + 30 < 512
 
 /*
  * Calculate checksum.
@@ -274,12 +275,12 @@ static void bitbang_send (bitbang_adapter_t *a,
     }
 
     //
-    // this block is to implement handshake on every 900 bytes sent out
-    // NOTE: assumes the Rx buffer in the programmer is 1024 bytes long
-    //                                                  **********
+    // this block is to implement handshake on every 900/440 (MAXW) characters
+    // NOTE: assumes the Rx buffer in the programmer is 1024/512 bytes long
+    //                                                  **************
 
-    if (CFG1 == 2 && !read_flag && (a->RunningWriteCount + index) > 900)    // 900 + 50 < 1024
-    {
+    if (CFG1 == 2 && !read_flag && (a->RunningWriteCount + index) > MAXW)   // 900 + 50 < 1024
+    {                                                                       // 440 + 30 < 512
         buffer[index++] = '>';
         a->PendingHandshake = 1;
     }
