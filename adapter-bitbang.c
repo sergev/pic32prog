@@ -1,4 +1,4 @@
-// last edited: Sunday, 5 July, 2015 (release 2)
+// last edited: Sunday, 30 August, 2015 (release 3)
 
 /*
  * Interface to PIC32 ICSP port using bitbang adapter.
@@ -24,8 +24,11 @@ typedef struct {
     adapter_t adapter;              /* Common part */
 
     int BitsToRead;                 // number of 'bits' waiting in Rx buffer
+    int CharToRead;                 // number of characters the bits are encoded into
     int PendingHandshake;           // indicates a return handshake is expected
 
+    unsigned TotalCodeChrsSent;     // count of total # of code characters sent out
+    unsigned TotalCodeChrsRecv;     // count of total # of code characters received
     unsigned TotalBitPairsSent;     // count of total # of TDI and TMS pairs sent
     unsigned TotalBitsReceived;     // count of total # of TDO bits recieved
     unsigned MaxBufferedWrites;     // max continuous characters written before read
@@ -47,6 +50,10 @@ static int DBG3 = 0;    // print our row program parameters
 static int CFG1 = 2;    // 1/2 configure for 64/1024 byte buffer in programming adapter
 static int CFG2 = 1;    // 1/2 config to retrieve PrAcc and alert if (PrAcc != 1)
                         // (note: option 2 doubles programming time)
+static int CFG3 = 1;    // 0 = uncompressed stream (use only 'd','e','f','g'
+                        // 1 = use 4-bit packing (on data only) 'i'-'x','I'-'X','a','z','A'
+static int CFG4 = 1;    // decompression method in serial read (normally set to match CFG3)
+static int MAXW = 440;  // maximum continuous write before sync: 900 + 50 < 1024, 440 + 30 < 512
 
 /*
  * Calculate checksum.
@@ -102,10 +109,17 @@ static void bitbang_delay10mS (bitbang_adapter_t *a, int caller)
  * 'f' : TDI = 1, TMS = 0, read_flag = 0
  * 'g' : TDI = 1, TMS = 1, read_flag = 0
  *
+ * 'a' : data header
+ * 'z' : data footer
+ * 'i'..'x' : 4 TDI bits encoded, TMS = 0, read_flag = 0
+ *
  * 'D' : TDI = 0, TMS = 0, read_flag = 1   0x44
  * 'E' : TDI = 0, TMS = 1, read_flag = 1
  * 'F' : TDI = 1, TMS = 0, read_flag = 1
  * 'G' : TDI = 1, TMS = 1, read_flag = 1
+ *
+ * 'A' : data header with read_flag = 1 on last bit
+ * 'I'..'X' : 4 TDI bits encoded, TMS = 0, read_flag = 1
  *
  * '.' : no operation, used for formatting
  * '>' : request sync response - '<'
@@ -120,6 +134,7 @@ static void bitbang_delay10mS (bitbang_adapter_t *a, int caller)
  * '?' : return ID string, "ascii JTAG XN"
  *
  * if the request is 'D'..'G', then respond with '0'/'1' to indicate TDO = 0/1
+ * if the request is 'I'..'X', then respond with 'I'..'X' encoding 4 TDO bits
  *
  * (by RR)
  */
@@ -143,12 +158,13 @@ static void bitbang_send (bitbang_adapter_t *a,
 
     unsigned char buffer[110];  // @@@@@@@@@@ BUFFERED WRITES VERSION @@@@@@@@@@
     int index = 0;              // index of next slot to use in buffer
-    int count = 0;              // count of number of TDI/TMS pairs
+    int pairs = 0;              // count of number of TDI/TMS pairs
+    int count = 0;              // count of the number of symbols used
     int i, n;
     unsigned char ch;
 
-    if (read_flag && (a->BitsToRead != 0))
-        fprintf (stderr, "WARNING - double read request (in send)\n");
+    if (a->BitsToRead != 0)
+        fprintf (stderr, "WARNING - write while pending read (in send)\n");
     if (read_flag && (tdi_nbits == 0))
         fprintf (stderr, "WARNING - request to read 0 bits (in send)\n");
 
@@ -158,39 +174,73 @@ static void bitbang_send (bitbang_adapter_t *a,
         tms >>= 1;                              // shift TMS right one bit
     }
     count += tms_nbits;
+    pairs += tms_nbits;
 
     if (DBG1 && (tms_nbits != 0))
         buffer[index++] = '.';                  // spacer, ignored by programmer
 
     if (tdi_nbits != 0) {                       // 1-0-0 if nTDI <> 0
-        ch = 1 + 'd';
-        buffer[index++] = ch;
-        ch = 0 + 'd';
-        buffer[index++] = ch;
-        ch = 0 + (read_flag ? 'D' : 'd');
-        buffer[index++] = ch;
-        count += 3;
+        if (CFG3) {                             // use compression: edd -> a, edD -> A
+            buffer[index++] = (read_flag ? 'A' : 'a');
+            count++;
+        }
+        else {                                  // compression flag turned off
+            ch = 1 + 'd';
+            buffer[index++] = ch;
+            ch = 0 + 'd';
+            buffer[index++] = ch;
+            ch = 0 + (read_flag ? 'D' : 'd');
+            buffer[index++] = ch;
+            count += 3;
+        }
+        pairs += 3;
         if (DBG1)
             buffer[index++] = '.';              // spacer, ignored by programmer
     }
+    
+    long long Xtdi = tdi;
+    a->CharToRead = (read_flag == 2 ? 1 : 0);
+    a->BitsToRead = (read_flag == 2 ? 1 : 0);
 
-    for (i = tdi_nbits; i > 0; i--) {
+    i = tdi_nbits;
+    if (CFG3) {                                 // while we can, package up lots of 4 TDI bits
+        for (; i > 4; i -= 4) {                 // make sure the last bit is NOT packaged
+            ch = (read_flag == 1 ? 'I' : 'i') + (tdi & 0xF);
+            buffer[index++] = ch;
+            tdi >>= 4;
+            count++;
+            if (read_flag == 1) a->CharToRead++;
+        }
+    }
+    for (; i > 0; i--) {                        // (send all/remaining bits as singles)
         ch = ((tdi & 1) << 1) + (i == 1) +      // TMS=0 for n-1 bits, then 1 on last bit
              ((read_flag == 1 && i != 1) ?      // 0 = no read, 1 = normal read, 2 = oPrAcc read
               'D' : 'd');                       // UC = read, LC = none, no read on last bit
         buffer[index++] = ch;                   // append to buffer
         tdi >>= 1;                              // shift TDI right one bit
+        count++;
+        if (read_flag == 1) a->CharToRead++;
     }
-    count += tdi_nbits;
+    pairs += tdi_nbits;
+    if (read_flag == 1) a->BitsToRead = tdi_nbits;
+
 
     if (tdi_nbits != 0) {                       // 1-0 if nTDI <> 0
         if (DBG1)
             buffer[index++] = '.';              // spacer, ignored by programmer
-        ch = 1 + 'd';
-        buffer[index++] = ch;
-        ch = 0 + 'd';
-        buffer[index++] = ch;
-        count += 2;
+
+        if (CFG3) {
+            buffer[index++] ='z';               // use compression: ed -> z
+            count++;
+        }
+        else {                                  // compression flag turned off
+            ch = 1 + 'd';
+            buffer[index++] = ch;
+            ch = 0 + 'd';
+            buffer[index++] = ch;
+            count += 2;
+        }
+        pairs += 2;
     }
 
     //
@@ -225,12 +275,12 @@ static void bitbang_send (bitbang_adapter_t *a,
     }
 
     //
-    // this block is to implement handshake on every 900 bytes sent out
-    // NOTE: assumes the Rx buffer in the programmer is 1024 bytes long
-    //                                                  **********
+    // this block is to implement handshake on every 900/440 (MAXW) characters
+    // NOTE: assumes the Rx buffer in the programmer is 1024/512 bytes long
+    //                                                  **************
 
-    if (CFG1 == 2 && !read_flag && (a->RunningWriteCount + index) > 900)    // 900 + 50 < 1024
-    {
+    if (CFG1 == 2 && !read_flag && (a->RunningWriteCount + index) > MAXW)   // 900 + 50 < 1024
+    {                                                                       // 440 + 30 < 512
         buffer[index++] = '>';
         a->PendingHandshake = 1;
     }
@@ -240,20 +290,22 @@ static void bitbang_send (bitbang_adapter_t *a,
     //
 
     buffer[index] = 0;          // append trailing zero so can print as a string
-    if (DBG1)
-        fprintf (stderr, "n=%i, <%s> read=%i\n", index, buffer, read_flag);
 
-    a->TotalBitPairsSent += count;
-    a->RunningWriteCount += index;
+    a->RunningWriteCount += index;               // number of characters being written
+    a->TotalBitPairsSent += pairs;               // number of TDI/TMS pairs encoded
+    a->TotalCodeChrsSent += count;               // number of symbols used to send pairs
 
-    if (a->BitsToRead != 0)
-        fprintf (stderr, "WARNING - write while pending read (in send)\n");
+    if (DBG1) {
+        unsigned L4 = Xtdi >> 48;
+        unsigned L3 = (Xtdi >> 32) & 0xFFFF;
+        unsigned L2 = (Xtdi >> 16) & 0xFFFF;
+        unsigned L1 = Xtdi & 0xFFFF;
+        printf ("n=%i, <%s> read=%i TDI: %04x %04x %04x %04x\n", 
+                index, buffer, read_flag, L4,  L3,  L2,  L1);
+    }
 
     serial_write (buffer, index);
     a->WriteCount++;
-
-    if (read_flag)
-        a->BitsToRead += tdi_nbits;
 }
 
 /*
@@ -274,32 +326,47 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
     if (a->PendingHandshake)
         fprintf (stderr, "WARNING - handshake pending error (in recv)\n");
 
-    n = serial_read (buffer, a->BitsToRead);
-    a->Read1Count++;
+    int expected = (CFG4 ? a->CharToRead : a->BitsToRead);
 
-    if (n != a->BitsToRead)
+    n = serial_read (buffer, expected);
+    a->TotalCodeChrsRecv += n;
+    a->Read1Count++;
+    buffer[n] = 0;              // append trailing zero so can print as a string
+
+    if (n != expected)
         fprintf (stderr,
-            "WARNING - fewer bits read (%i) than expected (%i) (in recv)\n",
-                                        n,          a->BitsToRead);
+            "WARNING - fewer characters read (%i) than expected (%i) (in recv)\n",
+                                              n,              expected);
 
     word = 0;
 
-    for (i = 0; i < n; i++) {
-        if (buffer[i] == '1')
-            word |= 1 << i;
-        else if (buffer[i] != '0')
-            fprintf (stderr,
-                "WARNING - unexpected character (0x%02x) returned (in recv)\n",
-                                               buffer[i]);
-    }
+    for (i = n-1; i >=0; i--) {
+
+        if ((buffer[i] >= 'I') && (buffer[i] <= 'X'))
+            word = (word << 4) | (buffer[i] - 'I');
+        else {
+            switch (buffer[i]) {
+                case ('0'):
+                    word = (word << 1) | 0;
+                break;
+                case ('1'):
+                    word = (word << 1) | 1;
+                break;
+
+                default:fprintf (stderr,
+                        "WARNING - unexpected character (0x%02x) returned (in recv)\n",
+                                                       buffer[i]); 
+            }  // switch
+        }  // if ... else
+    }  // for loop
 
     if (DBG1) {
         unsigned L4 = word >> 48;
         unsigned L3 = (word >> 32) & 0xFFFF;
         unsigned L2 = (word >> 16) & 0xFFFF;
         unsigned L1 = word & 0xFFFF;
-        fprintf (stderr, "TDO = %04x %04x %04x %04x (%i bits)\n",
-                                 L4,  L3,  L2,  L1, a->BitsToRead);
+        printf ("TDO = %04x %04x %04x %04x (%i bits) <%s>\n",
+                        L4,  L3,  L2,  L1, a->BitsToRead, buffer);
     }
 
     a->TotalBitsReceived += a->BitsToRead;
@@ -361,6 +428,9 @@ static void bitbang_close (adapter_t *adapter, int power_on)
     printf ("\n");
     printf ("total TDI/TMS pairs sent = %i pairs\n", a->TotalBitPairsSent);
     printf ("total TDO bits received  = %i bits\n",  a->TotalBitsReceived);
+
+    printf ("total ascii codes sent   = %i\n", a->TotalCodeChrsSent);
+    printf ("total ascii codes recv   = %i\n", a->TotalCodeChrsRecv);
     printf ("maximum continuous write = %i chars\n", a->MaxBufferedWrites);
 
     printf ("O/S serial writes        = %i\n", a->WriteCount);
@@ -657,7 +727,7 @@ static void bitbang_load_executive (adapter_t *adapter,
 
     printf ("   Loading PE: ");
 
-    if (memcmp(a->adapter.family_name, "mz", 2) != 0) {            // steps 1. to 3. not needed for MZ processors
+    if (memcmp(a->adapter.family_name, "mz", 2) != 0) {            // steps 1. to 3. not needed for MZ
         /* Step 1. */
         xfer_instruction (a, 0x3c04bf88);   // lui a0, 0xbf88
         xfer_instruction (a, 0x34842000);   // ori a0, 0x2000 - address of BMXCON
@@ -945,7 +1015,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         #define STK_INSYNC              0x14            // response - insync
         #define STK_OK                  0x10            // response - OK
 
-        #include "bitbang/ICSP_v1C.inc"
+        #include "bitbang/ICSP_v1E.inc"
 
         int i, n;
         unsigned char buffer [140];                     // 0x80 + 12d (max used is 133)
@@ -1068,7 +1138,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     }
 
     /* Open serial port */
-    if (serial_open (port, 500000, 250) < 0) {
+    if (serial_open (port, 115200, 250) < 0) {
         /* failed to open serial port */
         fprintf (stderr, "Unable to configure serial port %s\n", port);
         serial_close();
@@ -1084,10 +1154,14 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     printf ("      Adapter: ");
     int i, n;
     unsigned char ch;
-    for (i = 0; i < 20; i++) {
+    for (i = 0; i < 40; i++) {
         ch = '>';
         serial_write (&ch, 1);
-        printf (".");
+        ch = (i < 20 ? '.': ':');
+        if (i == 20) 
+            for (n = 0; n < 20; n++ ) 
+                printf ("\b");
+        printf ("%c", ch);
         n = serial_read (&ch, 1);
         if (n == 1 && ch == '<')
             i = 100;
@@ -1103,7 +1177,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
 
     ch = '?';
     unsigned char buffer[15] = "..............\0";
-                            // "ascii ICSP v1C"
+                            // "ascii ICSP v1X"
     serial_write (&ch, 1);
     n = serial_read (buffer, 14);
 
@@ -1121,8 +1195,11 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     //
 
     a->BitsToRead = 0;
+    a->CharToRead = 0;
     a->PendingHandshake = 0;               // handshake read req'd before next write
 
+    a->TotalCodeChrsSent = 0;              // count of total # of code characters sent out
+    a->TotalCodeChrsRecv = 0;              // count of total # of code characters received
     a->TotalBitPairsSent = 0;              // count of total # of TDI+TMS bits sent
     a->TotalBitsReceived = 0;              // count of total # of TDO bits recieved
     a->MaxBufferedWrites = 0;              // maximum continuous write length (chars)
@@ -1190,7 +1267,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);      /* Send command. */      // 2.
     bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);     /* Send command. */      // 3.
 #ifdef OLDWAY
-    bitbang_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0); /* Xfer data. */        // may be an issue for MZ family
+    bitbang_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0); /* Xfer data. */        // may be an issue for MZ
     // (above line) "This command requires a NOP to complete."
 #else
     bitbang_send (a, 0, 0, 8, MCHP_STATUS, 0);      /* Xfer data. */         // 4a.
