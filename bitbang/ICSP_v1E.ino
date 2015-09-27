@@ -10,14 +10,14 @@
  *
  * 'd' : TDI = 0, TMS = 0, read_flag = 0	0x64
  * 'e' : TDI = 0, TMS = 1, read_flag = 0
- * 'f' : TDI = 1, TMS = 0, read_flag = 0 
+ * 'f' : TDI = 1, TMS = 0, read_flag = 0
  * 'g' : TDI = 1, TMS = 1, read_flag = 0
  *
  * 'D' : TDI = 0, TMS = 0, read_flag = 1	0x44
- * 'E' : TDI = 0, TMS = 1, read_flag = 1 
- * 'F' : TDI = 1, TMS = 0, read_flag = 1 
+ * 'E' : TDI = 0, TMS = 1, read_flag = 1
+ * 'F' : TDI = 1, TMS = 0, read_flag = 1
  * 'G' : TDI = 1, TMS = 1, read_flag = 1
- * 
+ *
  * '+' : TDI = 0, TMS = 0, accumulate PrAcc	0x2B
  *
  * (if read_flag = 1 then respond with TDO value of '0' or '1')
@@ -39,7 +39,7 @@
  * '6' : turn Vpp OFF, RST ON		(*** for other device families)
  * '7' : turn RST OFF, Vpp ON		(*** for other device families)
 
- * '8' : insert 10mS delay 
+ * '8' : insert 10mS delay
  * '@' : return A0..A5 inputs as 6 lines of text, null terminated after last line
  * '?' : return ID string, "ascii ICSP v1X"
  *
@@ -54,13 +54,13 @@
  *         devices are likely to have much less flash storage, so any added time
  *         overhead is not of major concern. for future use
  *
- * note 4: commands '+' and '=' are to allow for accumulating the PrAcc bit when 
+ * note 4: commands '+' and '=' are to allow for accumulating the PrAcc bit when
  *         XferFastData is used. retrieving every PrAcc bit in the normal way would
  *         double the time taken to program a device. for future use
  *
  * note 5: analog inputs A0 and A1 should be reserved for reading Vcc and Vpp
 
- # addendum: 'i' to 'x' are used to encode a TDI data packet, 4-bits per symbol 
+ # addendum: 'i' to 'x' are used to encode a TDI data packet, 4-bits per symbol
  #           'I' to 'X' encode as above, with read_flag set - returns same
  #           'a' encodes the header sequence 'edd'
  #           'z' encodes the footer sequence 'ed'
@@ -77,9 +77,9 @@ PGC    : (D2) open collector output, 3k3 pullup to Vcc (3v3)
 PGD    : (D3) open collector output, 3k3 pullup to Vcc (3v3)
 MCLR   : (D4) open collector output, pullup should be on target
 
-Vcc (multiple pins) : fed from multiple 5v output pins via current limiting 
-resistors (100r, 17mA ea), with a 3v3 zener diode to ground. alternatively, 
-replace zener with 3v3 LDO regulator and make resistor values smaller (22r 
+Vcc (multiple pins) : fed from multiple 5v output pins via current limiting
+resistors (100r, 17mA ea), with a 3v3 zener diode to ground. alternatively,
+replace zener with 3v3 LDO regulator and make resistor values smaller (22r
 should do)
 
 RST    : (8) base drive for external MCLR switching transistor
@@ -128,9 +128,9 @@ command string: "88888.4"    (first wait 50mS to ensure target is no longer busy
 
 Using an Arduino NANO just as a USB to serial bridge:
 ----------------------------------------------------
-if pins 28 and 29 are jumpered together (RESET and GND) then the 328p will be 
-held in reset with the processors TxD and RxD pins hi-Z. while in this state the 
-USB to serial bridge portion of the Nano can be used for communicating with a 
+if pins 28 and 29 are jumpered together (RESET and GND) then the 328p will be
+held in reset with the processors TxD and RxD pins hi-Z. while in this state the
+USB to serial bridge portion of the Nano can be used for communicating with a
 target processor
 
 if pins 28 and 27 are jumpered together, resetting via the USB serial port will
@@ -244,7 +244,7 @@ int clock4( int TDI, int TMS)
   delayMicroseconds(1);
   DDRD |= B00000100;                            // LOW
   delayMicroseconds(1);
-  
+
 // read TDO
   int B = ((PIND & B00001000) >> 3);
 
@@ -252,7 +252,7 @@ int clock4( int TDI, int TMS)
   DDRD &= B11111011;                            // HIGH (via 3k3 pullup)
   delayMicroseconds(1);
   DDRD |= B00000100;                            // LOW
-  
+
   return B;
 }
 
@@ -272,11 +272,11 @@ void loop()
   {                                             // (buffer size is 64 bytes)
     int I = Serial.read();
 
-    if (((I >= 'i') && (I <= 'x')) || ((I >= 'I') && (I <= 'X')))              
+    if (((I >= 'i') && (I <= 'x')) || ((I >= 'I') && (I <= 'X')))
     {                                           // 4-bit encoding of TDI, TMS = 0
        int J = tolower(I) - 'i';
        int B = 0;
-       
+
        if (clock4(J & 1, 0)) B |= 1;
        if (clock4(J & 2, 0)) B |= 2;
        if (clock4(J & 4, 0)) B |= 4;
@@ -359,7 +359,7 @@ void loop()
         Serial.print(PrAcc ? '1' : '0');
         PrAcc = 1;                              // reset to default
       break;
-      
+
       case '.':                                 // no operation, used for formatting
       break;
 
@@ -412,7 +412,7 @@ void loop()
         digitalWrite(Vcc1, HIGH);               // Vcc1 )
         digitalWrite(Vcc2, HIGH);               // Vcc2 )  reset to +5v
         digitalWrite(Vcc3, HIGH);               // Vcc3 )
-        
+
         pinMode(Vcc1, OUTPUT);                  // +5v
         pinMode(Vcc2, OUTPUT);                  // +5v
         pinMode(Vcc3, OUTPUT);                  // +5v
@@ -435,7 +435,7 @@ void loop()
 
 // miscellaneous other commands
 
-      case '8':                                 // insert 10mS delay 
+      case '8':                                 // insert 10mS delay
         delay(10);
       break;
 
@@ -450,11 +450,11 @@ void loop()
         Serial.println(analogRead(A5) * Vusb / 1024);
         Serial.print((char)0x00);               // null terminated
       break;
-      
+
       case '?':                                 // return ID string, "ascii ICSP v1X"
         Serial.print("ascii ICSP v1E");
       break;
-      
+
       default: tone(SPKR, 440, 1000);           // invalid input - beep on pin 10
     }	// end of switch
   }	// end of while
@@ -465,4 +465,3 @@ void loop()
 
 //  pinMode(pin, OUTPUT);                       // drive pin to set value
 //  pinMode(pin, INPUT);                        // hi-Z state
-

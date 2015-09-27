@@ -197,7 +197,7 @@ static void bitbang_send (bitbang_adapter_t *a,
         if (DBG1)
             buffer[index++] = '.';              // spacer, ignored by programmer
     }
-    
+
     long long Xtdi = tdi;
     a->CharToRead = (read_flag == 2 ? 1 : 0);
     a->BitsToRead = (read_flag == 2 ? 1 : 0);
@@ -300,7 +300,7 @@ static void bitbang_send (bitbang_adapter_t *a,
         unsigned L3 = (Xtdi >> 32) & 0xFFFF;
         unsigned L2 = (Xtdi >> 16) & 0xFFFF;
         unsigned L1 = Xtdi & 0xFFFF;
-        printf ("n=%i, <%s> read=%i TDI: %04x %04x %04x %04x\n", 
+        printf ("n=%i, <%s> read=%i TDI: %04x %04x %04x %04x\n",
                 index, buffer, read_flag, L4,  L3,  L2,  L1);
     }
 
@@ -355,7 +355,7 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
 
                 default:fprintf (stderr,
                         "WARNING - unexpected character (0x%02x) returned (in recv)\n",
-                                                       buffer[i]); 
+                                                       buffer[i]);
             }  // switch
         }  // if ... else
     }  // for loop
@@ -1158,8 +1158,8 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         ch = '>';
         serial_write (&ch, 1);
         ch = (i < 20 ? '.': ':');
-        if (i == 20) 
-            for (n = 0; n < 20; n++ ) 
+        if (i == 20)
+            for (n = 0; n < 20; n++ )
                 printf ("\b");
         printf ("%c", ch);
         n = serial_read (&ch, 1);
