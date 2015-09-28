@@ -996,6 +996,7 @@ adapter_t *adapter_open_pickit (void)
         return 0;
     }
 
+    a->adapter.block_override = 0;
     a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
 
     if (! (a->reply[1] & MCHP_STATUS_CPS)) {

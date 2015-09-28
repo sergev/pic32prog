@@ -269,6 +269,7 @@ adapter_t *adapter_open_hidboot (void)
     printf (" Program area: %08x-%08x\n", a->adapter.user_start,
         a->adapter.user_start + a->adapter.user_nbytes - 1);
 
+    a->adapter.block_override = 0;
     a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
 
     /* User functions. */

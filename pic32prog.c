@@ -452,7 +452,11 @@ void do_program (char *filename)
 
     flash_bytes = target_flash_bytes (target);
     boot_bytes = target_boot_bytes (target);
-    blocksz = target_block_size (target);
+    if (target->adapter->block_override != 0) {
+        blocksz = target->adapter->block_override;
+    } else {
+        blocksz = target_block_size (target);
+    }
     devcfg_offset = target_devcfg_offset (target);
     printf (_("    Processor: %s\n"), target_cpu_name (target));
     printf (_(" Flash memory: %d kbytes\n"), flash_bytes / 1024);

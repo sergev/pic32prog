@@ -1300,6 +1300,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
 // to return to old method, add line #define OLDWAY
 //
 
+    a->adapter.block_override = 0;
     a->adapter.flags = AD_PROBE | AD_ERASE | AD_READ | AD_WRITE;
 
     /* User functions. */

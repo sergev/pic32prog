@@ -1071,6 +1071,7 @@ failed: usb_release_interface (a->usbdev, 0);
     }
     printf ("      Adapter: %s\n", a->name);
 
+    a->adapter.block_override = 0;
     a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
 
     /* User functions. */

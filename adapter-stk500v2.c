@@ -303,7 +303,11 @@ static void load_address (stk_adapter_t *a, unsigned addr)
 
     // Convert an absolute address into a flash relative address
     if (addr >= (0x1D000000 >> 1)) {
+        if (debug_level > 1) 
+            printf("Adjusting address 0x%08x to ", addr << 1);
         addr -= (0x1D000000 >> 1);
+        if (debug_level > 1) 
+            printf("0x%08x\n", addr << 1);
     }
 
     unsigned char cmd [5] = { CMD_LOAD_ADDRESS,
@@ -314,7 +318,7 @@ static void load_address (stk_adapter_t *a, unsigned addr)
         return;
 
     if (debug_level > 1)
-        printf ("Load address: %#x\n", addr); // & 0x7f0000);
+        printf ("Load address: %#x\n", addr << 1); // & 0x7f0000);
 
     if (! send_receive (a, cmd, 5, response, 2) || response[0] != cmd[0] ||
         response[1] != STATUS_CMD_OK) {
@@ -597,6 +601,7 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
     a->adapter.user_start = 0x1d000000;
     a->adapter.user_nbytes = 2048 * 1024;
     a->adapter.boot_nbytes = 80 * 1024;
+    a->adapter.block_override = 1024;
     a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
 
     printf (" Program area: %08x-%08x\n", a->adapter.user_start,

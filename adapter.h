@@ -25,6 +25,8 @@ struct _adapter_t {
     unsigned user_nbytes;               /* Size of user flash area */
     unsigned boot_nbytes;               /* Size of user boot area */
 
+    unsigned block_override;            /* Overridden block size for target */
+
     unsigned flags;
     const char *family_name;            /* Name of pic32 family */
 
