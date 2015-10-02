@@ -26,6 +26,8 @@
 
 /* STK command constants */
 #define CMD_SIGN_ON             0x01
+#define CMD_SET_PARAMETER       0x02
+#define CMD_GET_PARAMETER       0x03
 #define CMD_LOAD_ADDRESS        0x06
 #define CMD_ENTER_PROGMODE_ISP  0x10
 #define CMD_LEAVE_PROGMODE_ISP  0x11
@@ -33,9 +35,17 @@
 #define CMD_PROGRAM_FLASH_ISP   0x13
 #define CMD_READ_FLASH_ISP      0x14
 #define CMD_SPI_MULTI           0x1D
-#define CMD_SET_PARAMETER       0x40
-#define CMD_GET_PARAMETER       0x41
 #define CMD_SET_BAUD            0x48
+
+#define PARAM_CK_VEND_LOW       0x40
+#define PARAM_CK_VEND_HIGH      0x41
+#define PARAM_CK_PROD_LOW       0x42
+#define PARAM_CK_PROD_HIGH      0x43
+#define PARAM_CK_DEVID_LOW      0x44
+#define PARAM_CK_DEVID_MID      0x45
+#define PARAM_CK_DEVID_HIGH     0x46
+#define PARAM_CK_DEVID_TOP      0x47
+#define PARAM_CK_DEVID_REV      0x48
 
 /* STK status constants */
 #define STATUS_CMD_OK           0x00    /* Success */
@@ -206,6 +216,35 @@ static void switch_baud(stk_adapter_t *a) {
     }
 }
 
+static unsigned char get_parameter(stk_adapter_t *a, unsigned char param) {
+    unsigned char cmd [2] = { CMD_GET_PARAMETER, param };
+    unsigned char response [3];
+
+    if (debug_level > 1)
+        printf ("Get parameter %x\n", param);
+
+    if (! send_receive (a, cmd, 2, response, 3) || response[0] != cmd[0] || response[1] != STATUS_CMD_OK) {
+        fprintf (stderr, "Error fetching parameter %d\n", param);
+        exit (-1);
+    }
+    if (debug_level > 1)
+        printf ("Value %x\n", response[2]);
+    return response[2];
+}
+
+static void set_parameter(stk_adapter_t *a, unsigned char param, int val) {
+    unsigned char cmd [3] = { CMD_SET_PARAMETER, param, val };
+    unsigned char response [2];
+
+    if (debug_level > 1)
+        printf ("Set parameter %x\n", param);
+
+    if (! send_receive (a, cmd, 3, response, 2) || response[0] != cmd[0] || response[1] != STATUS_CMD_OK) {
+        fprintf (stderr, "Error setting parameter %d\n", param);
+        exit (-1);
+    }
+}
+
 static void prog_enable (stk_adapter_t *a)
 {
     unsigned char cmd [12] = { CMD_ENTER_PROGMODE_ISP,
@@ -261,15 +300,25 @@ static void prog_disable (stk_adapter_t *a)
 
 static void load_address (stk_adapter_t *a, unsigned addr)
 {
+
+    // Convert an absolute address into a flash relative address
+    if (addr >= (0x1D000000 >> 1)) {
+        if (debug_level > 1) 
+            printf("Adjusting address 0x%08x to ", addr << 1);
+        addr -= (0x1D000000 >> 1);
+        if (debug_level > 1) 
+            printf("0x%08x\n", addr << 1);
+    }
+
     unsigned char cmd [5] = { CMD_LOAD_ADDRESS,
-        0, (addr >> 16) & 0x7f, addr >> 8, addr, };
+        (addr >> 24), (addr >> 16), addr >> 8, addr, };
     unsigned char response [2];
 
     if (a->last_load_addr == addr)
         return;
 
     if (debug_level > 1)
-        printf ("Load address: %#x\n", addr & 0x7f0000);
+        printf ("Load address: %#x\n", addr << 1); // & 0x7f0000);
 
     if (! send_receive (a, cmd, 5, response, 2) || response[0] != cmd[0] ||
         response[1] != STATUS_CMD_OK) {
@@ -363,6 +412,31 @@ static void stk_close (adapter_t *adapter, int power_on)
  */
 static unsigned stk_get_idcode (adapter_t *adapter)
 {
+    unsigned int i = 0;
+
+    // A non-DEVID aware bootloader will just store
+    // the parameters we send in the slot we specify. So
+    // let's set the DEAFBOOB ID into the parameter
+    // slots that correspond to the device ID.  A DEVID
+    // aware bootloader will overwrite these with the
+    // real device ID, so we can know if it's supported
+    // or not.
+    
+    set_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_LOW, 0x0B);
+    set_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_MID, 0xB0);
+    set_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_HIGH, 0xAF);
+    set_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_TOP, 0xDE);
+
+    i = get_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_LOW);
+    i |= (get_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_MID) << 8);
+    i |= (get_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_HIGH) << 16);
+    i |= (get_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_TOP) << 24);
+
+    if (i != 0) {
+        return i;
+    }
+    fprintf(stderr, "Error setting and getting the DEVID for the target\n");
+    exit(-1);
     /* Bootloader does not allow to get cpu ID code. */
     return 0xDEAFB00B;
 }
@@ -372,16 +446,22 @@ static unsigned stk_get_idcode (adapter_t *adapter)
  */
 static unsigned stk_read_word (adapter_t *adapter, unsigned addr)
 {
+    if (debug_level > 1)
+        printf("Reading word from %x\n", addr);
     stk_adapter_t *a = (stk_adapter_t*) adapter;
     unsigned char cmd [4] = { CMD_READ_FLASH_ISP, 0, 4, 0x20 };
     unsigned char response [7];
 
     load_address (a, addr >> 1);
+    if (debug_level > 1)
+        printf("Sending read request\n");
     if (! send_receive (a, cmd, 4, response, 7) || response[0] != cmd[0] ||
         response[1] != STATUS_CMD_OK || response[6] != STATUS_CMD_OK) {
         fprintf (stderr, "Read word failed.\n");
         exit (-1);
     }
+    if (debug_level > 1)
+        printf("Read request done\n");
     return response[2] | response[3] << 8 |
         response[4] << 16 | response[5] << 24;
 }
@@ -521,6 +601,7 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
     a->adapter.user_start = 0x1d000000;
     a->adapter.user_nbytes = 2048 * 1024;
     a->adapter.boot_nbytes = 80 * 1024;
+    a->adapter.block_override = 1024;
     a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
 
     printf (" Program area: %08x-%08x\n", a->adapter.user_start,

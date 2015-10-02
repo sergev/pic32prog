@@ -313,6 +313,7 @@ adapter_t *adapter_open_uhb (void)
         return 0;
     }
 
+    a->adapter.block_override = 0;
     a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);
 
     /* User functions. */
