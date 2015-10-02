@@ -562,7 +562,9 @@ adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate)
     for (;;) {
         /* Send CMD_SIGN_ON. */
         if (send_receive (a, (unsigned char*)"\1", 1, response, 11) &&
-            memcmp (response, "\1\0\10STK500_2", 11) == 0) {
+            ((memcmp (response, "\1\0\10STK500_2", 11) == 0)
+            ||
+            (memcmp (response, "\1\0\10AVRISP_2", 11) == 0))) {
             if (debug_level > 1)
                 printf ("stk-probe: OK\n");
             break;
