@@ -534,8 +534,10 @@ static void xfer_fastdata (bitbang_adapter_t *a, unsigned word)
     if (CFG2 == 2) {
         bitbang_send (a, 0, 0, 33, (unsigned long long) word << 1, 2);
         unsigned status = bitbang_recv (a);
-        if (! (status & 1))
+        if (! (status & 1)) {
             printf ("!");
+            fflush (stdout);
+        }
     }
     //
     // could add in code above to handle retrying if PrAcc == 0
@@ -726,6 +728,7 @@ static void bitbang_load_executive (adapter_t *adapter,
     serial_execution (a);
 
     printf ("   Loading PE: ");
+    fflush (stdout);
 
     if (memcmp(a->adapter.family_name, "mz", 2) != 0) {            // steps 1. to 3. not needed for MZ
         /* Step 1. */
@@ -735,23 +738,27 @@ static void bitbang_load_executive (adapter_t *adapter,
         xfer_instruction (a, 0x34a50040);   // ori a1, 0x40   - a1 has 001f0040
         xfer_instruction (a, 0xac850000);   // sw  a1, 0(a0)  - BMXCON initialized
         printf ("1");
+        fflush (stdout);
 
         /* Step 2. */
         xfer_instruction (a, 0x34050800);   // li  a1, 0x800  - a1 has 00000800
         xfer_instruction (a, 0xac850010);   // sw  a1, 16(a0) - BMXDKPBA initialized
         printf (" 2");
+        fflush (stdout);
 
         /* Step 3. */
         xfer_instruction (a, 0x8c850040);   // lw  a1, 64(a0) - load BMXDMSZ
         xfer_instruction (a, 0xac850020);   // sw  a1, 32(a0) - BMXDUDBA initialized
         xfer_instruction (a, 0xac850030);   // sw  a1, 48(a0) - BMXDUPBA initialized
         printf (" 3");
+        fflush (stdout);
     }
 
     /* Step 4. */
     xfer_instruction (a, 0x3c04a000);   // lui a0, 0xa000
     xfer_instruction (a, 0x34840800);   // ori a0, 0x800  - a0 has a0000800
     printf (" 4 (LDR)");
+    fflush (stdout);
 
     /* Download the PE loader. */
     int i;
@@ -766,6 +773,7 @@ static void bitbang_load_executive (adapter_t *adapter,
         xfer_instruction (a, 0x24840004);   // addiu a0, 4
     }
     printf (" 5");
+    fflush (stdout);
 
     /* Jump to PE loader (step 6). */
     xfer_instruction (a, 0x3c19a000);   // lui t9, 0xa000
@@ -773,6 +781,7 @@ static void bitbang_load_executive (adapter_t *adapter,
     xfer_instruction (a, 0x03200008);   // jr  t9
     xfer_instruction (a, 0x00000000);   // nop
     printf (" 6");
+    fflush (stdout);
 
     /* Switch from serial to fast execution mode. */
     //bitbang_send (a, 1, 1, 5, TAP_SW_ETAP, 0);
@@ -789,6 +798,7 @@ static void bitbang_load_executive (adapter_t *adapter,
     xfer_fastdata (a, 0xa0000900);
     xfer_fastdata (a, nwords);
     printf (" 7a (PE)");
+    fflush (stdout);
 
     /* Download the PE itself (step 7-B). */
     for (i = 0; i < nwords; i++) {
@@ -796,12 +806,14 @@ static void bitbang_load_executive (adapter_t *adapter,
     }
     bitbang_delay10mS (a, 3);
     printf (" 7b");
+    fflush (stdout);
 
     /* Download the PE instructions. */
     xfer_fastdata (a, 0);                       /* Step 8 - jump to PE. */
     xfer_fastdata (a, 0xDEAD0000);
     bitbang_delay10mS (a, 3);
     printf (" 8");
+    fflush (stdout);
 
     xfer_fastdata (a, PE_EXEC_VERSION << 16);
 
@@ -850,6 +862,7 @@ static void bitbang_erase_chip (adapter_t *adapter)
         exit (-1);
     }
     printf ("(%imS) ", i * 10);
+    fflush (stdout);
 }
 
 /*
@@ -876,8 +889,10 @@ static void bitbang_program_word (adapter_t *adapter,
         exit (-1);
     }
 
-    if (memcmp(a->adapter.family_name, "mz", 2) == 0)
+    if (memcmp(a->adapter.family_name, "mz", 2) == 0) {
         printf("!ECC!");                        // warn if word-write to MZ processor
+        fflush (stdout);
+    }
 
     /* Use PE to write flash memory. */
     bitbang_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
@@ -1027,6 +1042,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
             exit (-1);
         }
         printf("%i baud ", bps[baud_rate]);
+        fflush (stdout);
 
         for (i = 0; i < 40; i++) {
 
@@ -1035,6 +1051,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
 
             serial_write (buffer, 2);
             printf (".");
+            fflush (stdout);
             n = serial_read (buffer, 2);
             if ((n == 2) && (buffer[0] == STK_INSYNC) && (buffer[1] == STK_OK))
                 i = 100;
@@ -1078,6 +1095,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
 
         for (i = 0; i < sizeof(ICSP); i += 0x80) {
             printf ("#");
+            fflush (stdout);
 
             buffer[0] = STK_LOAD_ADDRESS;               // load address
             buffer[1] = (i >> 1) % 0x100;               // address low (word boundary)
@@ -1150,8 +1168,9 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     //
     // Serial port now open and configured.
     //
-
     printf ("      Adapter: ");
+    fflush (stdout);
+
     int i, n;
     unsigned char ch;
     for (i = 0; i < 40; i++) {
@@ -1162,6 +1181,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
             for (n = 0; n < 20; n++ )
                 printf ("\b");
         printf ("%c", ch);
+        fflush (stdout);
         n = serial_read (&ch, 1);
         if (n == 1 && ch == '<')
             i = 100;
@@ -1174,6 +1194,7 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         return 0;
     }
     printf(" OK1");
+    fflush (stdout);
 
     ch = '?';
     unsigned char buffer[15] = "..............\0";
