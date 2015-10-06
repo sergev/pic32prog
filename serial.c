@@ -19,6 +19,7 @@
     #include <windows.h>
     static void *fd = INVALID_HANDLE_VALUE;
     static DCB saved_mode;
+    void *alloca(size_t size);
 #else
     #include <termios.h>
     static int fd = -1;
