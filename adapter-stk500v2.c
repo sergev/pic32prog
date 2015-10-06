@@ -303,10 +303,10 @@ static void load_address (stk_adapter_t *a, unsigned addr)
 
     // Convert an absolute address into a flash relative address
     if (addr >= (0x1D000000 >> 1)) {
-        if (debug_level > 1) 
+        if (debug_level > 1)
             printf("Adjusting address 0x%08x to ", addr << 1);
         addr -= (0x1D000000 >> 1);
-        if (debug_level > 1) 
+        if (debug_level > 1)
             printf("0x%08x\n", addr << 1);
     }
 
@@ -421,7 +421,7 @@ static unsigned stk_get_idcode (adapter_t *adapter)
     // aware bootloader will overwrite these with the
     // real device ID, so we can know if it's supported
     // or not.
-    
+
     set_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_LOW, 0x0B);
     set_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_MID, 0xB0);
     set_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_HIGH, 0xAF);
@@ -432,13 +432,13 @@ static unsigned stk_get_idcode (adapter_t *adapter)
     i |= (get_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_HIGH) << 16);
     i |= (get_parameter((stk_adapter_t *)adapter, PARAM_CK_DEVID_TOP) << 24);
 
-    if (i != 0) {
-        return i;
+    if (i == 0) {
+        /* Bootloader does not allow to get cpu ID code. */
+        if (debug_level > 1)
+            printf("Cannot get the DEVID for the target\n");
+        return 0xDEAFB00B;
     }
-    fprintf(stderr, "Error setting and getting the DEVID for the target\n");
-    exit(-1);
-    /* Bootloader does not allow to get cpu ID code. */
-    return 0xDEAFB00B;
+    return i;
 }
 
 /*
