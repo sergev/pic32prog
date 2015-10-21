@@ -48,13 +48,12 @@ family_t family_bl  = { "bootloader",
 
 /*
  * Table of PIC32 chip variants.
+ * This list can be extended at run time from pic32prog.conf file.
  */
-static const struct {
-    unsigned        devid;
-    const char      *name;
-    unsigned        flash_kbytes;
-    const family_t  *family;
-} pic32mx_dev[] = {
+#define TABSZ   1000
+
+static variant_t pic32_tab[TABSZ] = {
+
     /* MX1/2 family-------------Flash---Family */
     {0x4A07053, "MX110F016B",     16,   &family_mx1},
     {0x4A09053, "MX110F016C",     16,   &family_mx1},
@@ -376,6 +375,9 @@ target_t *target_open (const char *port_name, int baud_rate)
     }
     t->cpu_name = "Unknown";
 
+    /* Update pic2_tab[] array from the pic32prog.conf file. */
+    target_configure();
+
     /* Find adapter. */
     if (port_name) {
         t->adapter = open_serial_adapter(port_name, baud_rate);
@@ -398,18 +400,18 @@ target_t *target_open (const char *port_name, int baud_rate)
     }
 
     unsigned i;
-    for (i=0; (t->cpuid ^ pic32mx_dev[i].devid) & 0x0fffffff; i++) {
-        if (pic32mx_dev[i].devid == 0) {
+    for (i=0; (t->cpuid ^ pic32_tab[i].devid) & 0x0fffffff; i++) {
+        if (pic32_tab[i].devid == 0) {
             /* Device not detected. */
             fprintf (stderr, _("Unknown CPUID=%08x.\n"), t->cpuid);
             t->adapter->close (t->adapter, 0);
             exit (1);
         }
     }
-    t->family = pic32mx_dev[i].family;
-    t->cpu_name = pic32mx_dev[i].name;
+    t->family = pic32_tab[i].family;
+    t->cpu_name = pic32_tab[i].name;
     t->flash_addr = 0x1d000000;
-    t->flash_bytes = pic32mx_dev[i].flash_kbytes * 1024;
+    t->flash_bytes = pic32_tab[i].flash_kbytes * 1024;
     if (! t->flash_bytes) {
         t->flash_addr = t->adapter->user_start;
         t->flash_bytes = t->adapter->user_nbytes;
@@ -455,6 +457,36 @@ unsigned target_devcfg_offset (target_t *t)
 unsigned target_block_size (target_t *t)
 {
     return t->family->bytes_per_row;
+}
+
+/*
+ * Add an entry to the pic32_tab[] array.
+ */
+void target_add_variant(char *name, unsigned id,
+    char *family, unsigned flash_kbytes)
+{
+    int i;
+
+    //printf("'%s'\t%07x\t'%s'\t%uk\n", name, id, family, flash_kbytes);
+    for (i=0; i<TABSZ; i++) {
+        if (pic32_tab[i].devid == 0 ||
+            id == pic32_tab[i].devid) {
+            /* Add a new entry or update an existing one
+             * with new data from config file. */
+            pic32_tab[i].name = strdup(name);
+            pic32_tab[i].flash_kbytes = flash_kbytes;
+            if (strcmp(family, "MX1") == 0)
+                pic32_tab[i].family = &family_mx1;
+            else if (strcmp(family, "MX3") == 0)
+                pic32_tab[i].family = &family_mx3;
+            else if (strcmp(family, "MZ") == 0)
+                pic32_tab[i].family = &family_mz;
+            else {
+                fprintf (stderr, "%s: Unknown family=%s.\n", name, family);
+            }
+            break;
+        }
+    }
 }
 
 /*

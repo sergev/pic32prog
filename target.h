@@ -27,6 +27,13 @@ typedef struct {
 } family_t;
 
 typedef struct {
+    unsigned        devid;
+    const char      *name;
+    unsigned        flash_kbytes;
+    const family_t  *family;
+} variant_t;
+
+typedef struct {
     adapter_t       *adapter;
     const char      *cpu_name;
     const family_t  *family;
@@ -36,10 +43,11 @@ typedef struct {
     unsigned        boot_bytes;
 } target_t;
 
-
 target_t *target_open (const char *port, int baud_rate);
 void target_close (target_t *t, int power_on);
 void target_use_executive (target_t *t);
+void target_configure (void);
+void target_add_variant(char *name, unsigned id, char *family, unsigned flash_kbytes);
 
 unsigned target_idcode (target_t *t);
 const char *target_cpu_name (target_t *t);
