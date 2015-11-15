@@ -22,6 +22,8 @@
     void *alloca(size_t size);
 #else
     #include <termios.h>
+    #include <sys/ioctl.h>
+    #include <sys/time.h>
     static int fd = -1;
     static struct termios saved_mode;
 #endif
@@ -238,6 +240,8 @@ int serial_open (const char *devname, int baud_rate, int timeout)
     COMMTIMEOUTS ctmo;
 #else
     struct termios new_mode;
+    unsigned int  ctl;
+    int rv;
 #endif
 
     timeout_msec = timeout;
@@ -337,6 +341,29 @@ int serial_open (const char *devname, int baud_rate, int timeout)
     int flags = fcntl (fd, F_GETFL, 0);
     if (flags >= 0)
         fcntl (fd, F_SETFL, flags & ~O_NONBLOCK);
+
+    rv = ioctl(fd, TIOCMGET, &ctl);
+    if (rv < 0) {
+        perror("ioctl(\"TIOCMGET\")");
+        return -1;
+    }
+    ctl &= ~(TIOCM_DTR | TIOCM_RTS);
+    rv = ioctl(fd, TIOCMSET, &ctl);
+    if (rv < 0) {
+        perror("ioctl(\"TIOCMSET\")");
+        return -1;
+    }
+    
+    usleep(250*1000);
+    
+    ctl |= (TIOCM_DTR | TIOCM_RTS);
+    rv = ioctl(fd, TIOCMSET, &ctl);
+    if (rv < 0) {
+        perror("ioctl(\"TIOCMSET\")");
+        return -1;
+    }
+
+    usleep(50*1000);    
 #endif
     return 0;
 }
