@@ -139,11 +139,15 @@ int hid_read_timeout (hid_device *device, unsigned char *data, size_t nbytes, in
     HANDLE dev = (HANDLE) device;
     unsigned long bytes_read = 0;
     BYTE buf [256];
-    OVERLAPPED ol;
+    static OVERLAPPED ol;
     int ret;
 
     // Start an Overlapped I/O read.
-    ResetEvent (ol.hEvent);
+    if (ol.hEvent == 0)
+        ol.hEvent = CreateEvent(NULL, 1, 0, NULL);
+    else
+        ResetEvent (ol.hEvent);
+
     ret = ReadFile (dev, buf, nbytes + 1, &bytes_read, &ol);
     if (! ret && GetLastError() != ERROR_IO_PENDING) {
         // ReadFile failed.

@@ -17,9 +17,9 @@
 
 #if defined(__WIN32__) || defined(WIN32)
     #include <windows.h>
+    #include <malloc.h>
     static void *fd = INVALID_HANDLE_VALUE;
     static DCB saved_mode;
-    void *alloca(size_t size);
 #else
     #include <termios.h>
     static int fd = -1;
