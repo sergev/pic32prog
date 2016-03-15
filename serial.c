@@ -275,6 +275,7 @@ int serial_open (const char *devname, int baud_rate, int timeout)
 
     new_mode = saved_mode;
 
+    new_mode.fDtrControl = DTR_CONTROL_ENABLE;
     new_mode.BaudRate = baud_rate;
     new_mode.ByteSize = 8;
     new_mode.StopBits = ONESTOPBIT;
