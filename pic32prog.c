@@ -471,8 +471,9 @@ void do_program (char *filename)
             exit (1);
         }
         if (devcfg_offset == 0xffc0) {
-            /* For MZ family, clear the bit DEVSIGN0[31]. */
+            /* For MZ family, clear bits DEVSIGN0[31] and ADEVSIGN0[31]. */
             boot_data[0xFFEF] &= 0x7f;
+            boot_data[0xFF6F] &= 0x7f;
         }
     }
 
