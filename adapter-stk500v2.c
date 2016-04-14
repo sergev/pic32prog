@@ -50,7 +50,8 @@
 /* STK status constants */
 #define STATUS_CMD_OK           0x00    /* Success */
 
-#define PAGE_NBYTES             256     /* Use 256-byte packets. */
+#define PAGE_NBYTES             128     /* Write packet sise */
+#define READ_NBYTES             256     /* Read packet size */
 
 unsigned int adapter_baud;
 
@@ -303,10 +304,10 @@ static void load_address (stk_adapter_t *a, unsigned addr)
 
     // Convert an absolute address into a flash relative address
     if (addr >= (0x1D000000 >> 1)) {
-        if (debug_level > 1)
+        if (debug_level > 2)
             printf("Adjusting address 0x%08x to ", addr << 1);
         addr -= (0x1D000000 >> 1);
-        if (debug_level > 1)
+        if (debug_level > 2)
             printf("0x%08x\n", addr << 1);
     }
 
@@ -375,25 +376,31 @@ static void write_byte (stk_adapter_t *a, unsigned addr, unsigned char byte)
     a->page [addr % PAGE_NBYTES] = byte;
 }
 
+/*
+ * Read 256 bytes from the flash memory.
+ * For some reason, the chipKIT bootloader fails to read blocks
+ * shorter that 256 bytes.
+ */
 static void read_page (stk_adapter_t *a, unsigned addr,
     unsigned char *buf)
 {
-    unsigned char cmd [4] = { CMD_READ_FLASH_ISP, 1, 0, 0x20 };
-    unsigned char response [3+PAGE_NBYTES];
+    unsigned char cmd [4] = { CMD_READ_FLASH_ISP,
+        READ_NBYTES >> 8, READ_NBYTES & 0xff, 0x20 };
+    unsigned char response [3+READ_NBYTES];
 
     load_address (a, addr >> 1);
     if (debug_level > 1)
         printf ("Read page: %#x\n", addr);
 
-    if (! send_receive (a, cmd, 4, response, 3+PAGE_NBYTES) ||
+    if (! send_receive (a, cmd, 4, response, 3+READ_NBYTES) ||
         response[0] != cmd[0] ||
         response[1] != STATUS_CMD_OK ||
-        response[2+PAGE_NBYTES] != STATUS_CMD_OK) {
+        response[2+READ_NBYTES] != STATUS_CMD_OK) {
         fprintf (stderr, "Read page failed.\n");
         exit (-1);
     }
-    memcpy (buf, response+2, PAGE_NBYTES);
-    a->last_load_addr += PAGE_NBYTES / 2;
+    memcpy (buf, response+2, READ_NBYTES);
+    a->last_load_addr += READ_NBYTES / 2;
 }
 
 static void stk_close (adapter_t *adapter, int power_on)
@@ -496,10 +503,10 @@ static void stk_verify_data (adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     stk_adapter_t *a = (stk_adapter_t*) adapter;
-    unsigned block [PAGE_NBYTES], i, expected, word;
+    unsigned block [1024/4], i, expected, word;
 
     /* Read block of data. */
-    for (i=0; i<1024; i+=PAGE_NBYTES)
+    for (i=0; i<1024; i+=READ_NBYTES)
         read_page (a, addr+i, i + (unsigned char*) block);
 
     /* Compare. */
@@ -523,7 +530,7 @@ static void stk_program_block (adapter_t *adapter,
     stk_adapter_t *a = (stk_adapter_t*) adapter;
     unsigned i;
 
-    for (i=0; i<PAGE_NBYTES; ++i) {
+    for (i=0; i<1024/4; ++i) {
         write_byte (a, addr + i*4,     data[i]);
         write_byte (a, addr + i*4 + 1, data[i] >> 8);
         write_byte (a, addr + i*4 + 2, data[i] >> 16);
