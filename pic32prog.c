@@ -240,10 +240,6 @@ int read_hex (char *filename)
             exit (1);
         }
 	address = high << 16 | HEX (buf+3) << 8 | HEX (buf+5);
-        if (address & 3) {
-            fprintf (stderr, _("%s: odd address\n"), filename);
-            exit (1);
-        }
 
 	sum = 0;
 	for (i=0; i<bytes; ++i) {
