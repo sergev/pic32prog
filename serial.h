@@ -48,4 +48,10 @@ int serial_read (unsigned char *data, int len);
  */
 int serial_speed_valid (int bps);
 
+/*
+ * Sets a new RX timeout in milliseconds
+ */
+void set_timeout (int new_timeout);
+
+
 #endif
