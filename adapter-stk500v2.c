@@ -50,7 +50,7 @@
 /* STK status constants */
 #define STATUS_CMD_OK           0x00    /* Success */
 
-#define PAGE_NBYTES             128     /* Write packet sise */
+#define PAGE_NBYTES             256     /* Write packet sise */
 #define READ_NBYTES             256     /* Read packet size */
 
 unsigned int adapter_baud;
