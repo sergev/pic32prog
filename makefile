@@ -67,6 +67,7 @@ pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo: pic32prog-ru.po
 
 clean:
 		rm -f *~ *.o core pic32prog adapter-mpsse pic32prog.po
+		make -C hidapi clean
 
 install:	pic32prog #pic32prog-ru.mo
 		install -c -s pic32prog /usr/local/bin/pic32prog
