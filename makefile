@@ -79,8 +79,7 @@ adapter-an1388.o: adapter-an1388.c adapter.h hidapi/hidapi.h pic32.h
 adapter-bitbang.o: adapter-bitbang.c adapter.h pic32.h serial.h \
   bitbang/ICSP_v1E.inc
 adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi.h pic32.h
-adapter-mpsse.o: adapter-mpsse.c /opt/local/include/libusb-legacy/usb.h \
-  adapter.h pic32.h
+adapter-mpsse.o: adapter-mpsse.c adapter.h pic32.h
 adapter-pickit2.o: adapter-pickit2.c adapter.h hidapi/hidapi.h pickit2.h \
   pic32.h
 adapter-stk500v2.o: adapter-stk500v2.c adapter.h pic32.h serial.h
