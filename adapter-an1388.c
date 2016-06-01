@@ -49,7 +49,7 @@ typedef struct {
 /*
  * Calculate checksum.
  */
-static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbytes)
+static unsigned calculate_crc(unsigned crc, unsigned char *data, unsigned nbytes)
 {
     static const unsigned short crc_table [16] = {
         0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -67,44 +67,44 @@ static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbyte
     return crc & 0xffff;
 }
 
-static void an1388_send (hid_device *hiddev, unsigned char *buf, unsigned nbytes)
+static void an1388_send(hid_device *hiddev, unsigned char *buf, unsigned nbytes)
 {
     if (debug_level > 0) {
         int k;
-        fprintf (stderr, "---Send");
+        fprintf(stderr, "---Send");
         for (k=0; k<nbytes; ++k) {
             if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", buf[k]);
+                fprintf(stderr, "\n       ");
+            fprintf(stderr, " %02x", buf[k]);
         }
-        fprintf (stderr, "\n");
+        fprintf(stderr, "\n");
     }
-    hid_write (hiddev, buf, 64);
+    hid_write(hiddev, buf, 64);
 }
 
-static int an1388_recv (hid_device *hiddev, unsigned char *buf)
+static int an1388_recv(hid_device *hiddev, unsigned char *buf)
 {
     int n;
 
-    n = hid_read (hiddev, buf, 64);
+    n = hid_read(hiddev, buf, 64);
     if (n <= 0) {
-        fprintf (stderr, "hidboot: error %d receiving packet\n", n);
-        exit (-1);
+        fprintf(stderr, "hidboot: error %d receiving packet\n", n);
+        exit(-1);
     }
     if (debug_level > 0) {
         int k;
-        fprintf (stderr, "---Recv");
+        fprintf(stderr, "---Recv");
         for (k=0; k<n; ++k) {
             if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", buf[k]);
+                fprintf(stderr, "\n       ");
+            fprintf(stderr, " %02x", buf[k]);
         }
-        fprintf (stderr, "\n");
+        fprintf(stderr, "\n");
     }
     return n;
 }
 
-static inline unsigned add_byte (unsigned char c,
+static inline unsigned add_byte(unsigned char c,
     unsigned char *buf, unsigned indx)
 {
     if (c == FRAME_EOT || c == FRAME_SOH || c == FRAME_DLE)
@@ -117,7 +117,7 @@ static inline unsigned add_byte (unsigned char c,
  * Send a request to the device.
  * Store the reply into the a->reply[] array.
  */
-static void an1388_command (an1388_adapter_t *a, unsigned char cmd,
+static void an1388_command(an1388_adapter_t *a, unsigned char cmd,
     unsigned char *data, unsigned data_len)
 {
     unsigned char buf [64];
@@ -125,37 +125,37 @@ static void an1388_command (an1388_adapter_t *a, unsigned char cmd,
 
     if (debug_level > 0) {
         int k;
-        fprintf (stderr, "---Cmd%d", cmd);
+        fprintf(stderr, "---Cmd%d", cmd);
         for (k=0; k<data_len; ++k) {
             if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", data[k]);
+                fprintf(stderr, "\n       ");
+            fprintf(stderr, " %02x", data[k]);
         }
-        fprintf (stderr, "\n");
+        fprintf(stderr, "\n");
     }
-    memset (buf, FRAME_EOT, sizeof(buf));
+    memset(buf, FRAME_EOT, sizeof(buf));
     n = 0;
     buf[n++] = FRAME_SOH;
 
-    n = add_byte (cmd, buf, n);
-    crc = calculate_crc (0, &cmd, 1);
+    n = add_byte(cmd, buf, n);
+    crc = calculate_crc(0, &cmd, 1);
 
     if (data_len > 0) {
         for (i=0; i<data_len; ++i)
-            n = add_byte (data[i], buf, n);
-        crc = calculate_crc (crc, data, data_len);
+            n = add_byte(data[i], buf, n);
+        crc = calculate_crc(crc, data, data_len);
     }
-    n = add_byte (crc, buf, n);
-    n = add_byte (crc >> 8, buf, n);
+    n = add_byte(crc, buf, n);
+    n = add_byte(crc >> 8, buf, n);
 
     buf[n++] = FRAME_EOT;
-    an1388_send (a->hiddev, buf, n);
+    an1388_send(a->hiddev, buf, n);
 
     if (cmd == CMD_JUMP_APP) {
         /* No reply expected. */
         return;
     }
-    n = an1388_recv (a->hiddev, buf);
+    n = an1388_recv(a->hiddev, buf);
     c = 0;
     for (i=0; i<n; ++i) {
         switch (buf[i]) {
@@ -172,37 +172,37 @@ static void an1388_command (an1388_adapter_t *a, unsigned char cmd,
             a->reply_len = 0;
             if (c > 2) {
                 unsigned crc = a->reply[c-2] | (a->reply[c-1] << 8);
-                if (crc == calculate_crc (0, a->reply, c-2))
+                if (crc == calculate_crc(0, a->reply, c-2))
                     a->reply_len = c - 2;
             }
             if (a->reply_len > 0 && debug_level > 0) {
                 int k;
-                fprintf (stderr, "--->>>>");
+                fprintf(stderr, "--->>>>");
                 for (k=0; k<a->reply_len; ++k) {
                     if (k != 0 && (k & 15) == 0)
-                        fprintf (stderr, "\n       ");
-                    fprintf (stderr, " %02x", a->reply[k]);
+                        fprintf(stderr, "\n       ");
+                    fprintf(stderr, " %02x", a->reply[k]);
                 }
-                fprintf (stderr, "\n");
+                fprintf(stderr, "\n");
             }
             return;
         }
     }
 }
 
-static void an1388_close (adapter_t *adapter, int power_on)
+static void an1388_close(adapter_t *adapter, int power_on)
 {
     an1388_adapter_t *a = (an1388_adapter_t*) adapter;
 
     /* Jump to application. */
-    an1388_command (a, CMD_JUMP_APP, 0, 0);
-    free (a);
+    an1388_command(a, CMD_JUMP_APP, 0, 0);
+    free(a);
 }
 
 /*
  * Return the Device Identification code
  */
-static unsigned an1388_get_idcode (adapter_t *adapter)
+static unsigned an1388_get_idcode(adapter_t *adapter)
 {
     return 0xDEAFB00B;
 }
@@ -210,7 +210,7 @@ static unsigned an1388_get_idcode (adapter_t *adapter)
 /*
  * Read a configuration word from memory.
  */
-static unsigned an1388_read_word (adapter_t *adapter, unsigned addr)
+static unsigned an1388_read_word(adapter_t *adapter, unsigned addr)
 {
     /* Not supported by booloader. */
     return 0;
@@ -219,25 +219,25 @@ static unsigned an1388_read_word (adapter_t *adapter, unsigned addr)
 /*
  * Write a configuration word to flash memory.
  */
-static void an1388_program_word (adapter_t *adapter,
+static void an1388_program_word(adapter_t *adapter,
     unsigned addr, unsigned word)
 {
     /* Not supported by booloader. */
     if (debug_level > 0)
-        fprintf (stderr, "hidboot: program word at %08x: %08x\n", addr, word);
+        fprintf(stderr, "hidboot: program word at %08x: %08x\n", addr, word);
 }
 
 /*
  * Verify a block of memory.
  */
-static void an1388_verify_data (adapter_t *adapter,
+static void an1388_verify_data(adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     an1388_adapter_t *a = (an1388_adapter_t*) adapter;
     unsigned char request [8];
     unsigned data_crc, flash_crc, nbytes = nwords * 4;
 
-    //fprintf (stderr, "hidboot: verify %d bytes at %08x\n", nbytes, addr);
+    //fprintf(stderr, "hidboot: verify %d bytes at %08x\n", nbytes, addr);
     request[0] = addr;
     request[1] = addr >> 8;
     request[2] = addr >> 16;
@@ -246,22 +246,22 @@ static void an1388_verify_data (adapter_t *adapter,
     request[5] = nbytes >> 8;
     request[6] = nbytes >> 16;
     request[7] = nbytes >> 24;
-    an1388_command (a, CMD_READ_CRC, request, 8);
+    an1388_command(a, CMD_READ_CRC, request, 8);
     if (a->reply_len != 3 || a->reply[0] != CMD_READ_CRC) {
-        fprintf (stderr, "hidboot: cannot read crc at %08x\n", addr);
-        exit (-1);
+        fprintf(stderr, "hidboot: cannot read crc at %08x\n", addr);
+        exit(-1);
     }
     flash_crc = a->reply[1] | a->reply[2] << 8;
 
-    data_crc = calculate_crc (0, (unsigned char*) data, nbytes);
+    data_crc = calculate_crc(0, (unsigned char*) data, nbytes);
     if (flash_crc != data_crc) {
-        fprintf (stderr, "hidboot: checksum failed at %08x: sum=%04x, expected=%04x\n",
+        fprintf(stderr, "hidboot: checksum failed at %08x: sum=%04x, expected=%04x\n",
             addr, flash_crc, data_crc);
-        //exit (-1);
+        //exit(-1);
     }
 }
 
-static void set_flash_address (an1388_adapter_t *a, unsigned addr)
+static void set_flash_address(an1388_adapter_t *a, unsigned addr)
 {
     unsigned char request[7];
     unsigned sum, i;
@@ -279,14 +279,14 @@ static void set_flash_address (an1388_adapter_t *a, unsigned addr)
         sum += request[i];
     request[6] = -sum;
 
-    an1388_command (a, CMD_PROGRAM_FLASH, request, 7);
+    an1388_command(a, CMD_PROGRAM_FLASH, request, 7);
     if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
-        fprintf (stderr, "hidboot: error setting flash address at %08x\n", addr);
-        exit (-1);
+        fprintf(stderr, "hidboot: error setting flash address at %08x\n", addr);
+        exit(-1);
     }
 }
 
-static void program_flash (an1388_adapter_t *a,
+static void program_flash(an1388_adapter_t *a,
     unsigned addr, unsigned char *data, unsigned nbytes)
 {
     unsigned char request[64];
@@ -302,14 +302,14 @@ static void program_flash (an1388_adapter_t *a,
     }
     if (empty)
         return;
-    //fprintf (stderr, "hidboot: program %d bytes at %08x: %02x-%02x-...-%02x\n",
+    //fprintf(stderr, "hidboot: program %d bytes at %08x: %02x-%02x-...-%02x\n",
     //    nbytes, addr, data[0], data[1], data[31]);
 
     request[0] = nbytes;
     request[1] = addr >> 8;
     request[2] = addr;
     request[3] = 0;             /* Type: data record */
-    memcpy (request+4, data, nbytes);
+    memcpy(request+4, data, nbytes);
 
     /* Compute checksum. */
     sum = 0;
@@ -319,26 +319,26 @@ static void program_flash (an1388_adapter_t *a,
     }
     request[nbytes+4] = -sum;
 
-    an1388_command (a, CMD_PROGRAM_FLASH, request, nbytes + 5);
+    an1388_command(a, CMD_PROGRAM_FLASH, request, nbytes + 5);
     if (a->reply_len != 1 || a->reply[0] != CMD_PROGRAM_FLASH) {
-        fprintf (stderr, "hidboot: error programming flash at %08x\n", addr);
-        exit (-1);
+        fprintf(stderr, "hidboot: error programming flash at %08x\n", addr);
+        exit(-1);
     }
 }
 
 /*
  * Flash write, 1-kbyte blocks.
  */
-static void an1388_program_block (adapter_t *adapter,
+static void an1388_program_block(adapter_t *adapter,
     unsigned addr, unsigned *data)
 {
     an1388_adapter_t *a = (an1388_adapter_t*) adapter;
     unsigned i;
 
-    set_flash_address (a, addr);
+    set_flash_address(a, addr);
     for (i=0; i<256; i+=8) {
         /* 8 words per cycle. */
-        program_flash (a, addr, (unsigned char*) data, 32);
+        program_flash(a, addr, (unsigned char*) data, 32);
         data += 8;
         addr += 32;
     }
@@ -347,15 +347,15 @@ static void an1388_program_block (adapter_t *adapter,
 /*
  * Erase all flash memory.
  */
-static void an1388_erase_chip (adapter_t *adapter)
+static void an1388_erase_chip(adapter_t *adapter)
 {
     an1388_adapter_t *a = (an1388_adapter_t*) adapter;
 
-    //fprintf (stderr, "hidboot: erase chip\n");
-    an1388_command (a, CMD_ERASE_FLASH, 0, 0);
+    //fprintf(stderr, "hidboot: erase chip\n");
+    an1388_command(a, CMD_ERASE_FLASH, 0, 0);
     if (a->reply_len != 1 || a->reply[0] != CMD_ERASE_FLASH) {
-        fprintf (stderr, "hidboot: Erase failed\n");
-        exit (-1);
+        fprintf(stderr, "hidboot: Erase failed\n");
+        exit(-1);
     }
 }
 
@@ -364,32 +364,32 @@ static void an1388_erase_chip (adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_an1388 (void)
+adapter_t *adapter_open_an1388(void)
 {
     an1388_adapter_t *a;
     hid_device *hiddev;
 
-    hiddev = hid_open (MICROCHIP_VID, BOOTLOADER_PID, 0);
+    hiddev = hid_open(MICROCHIP_VID, BOOTLOADER_PID, 0);
     if (! hiddev) {
-        /*fprintf (stderr, "AN1388 bootloader not found: vid=%04x, pid=%04x\n",
+        /*fprintf(stderr, "AN1388 bootloader not found: vid=%04x, pid=%04x\n",
             MICROCHIP_VID, BOOTLOADER_PID);*/
         return 0;
     }
-    a = calloc (1, sizeof (*a));
+    a = calloc(1, sizeof(*a));
     if (! a) {
-        fprintf (stderr, "Out of memory\n");
+        fprintf(stderr, "Out of memory\n");
         return 0;
     }
     a->hiddev = hiddev;
 
     /* Read version of adapter. */
-    an1388_command (a, CMD_READ_VERSION, 0, 0);
-    printf ("      Adapter: AN1388 Bootloader Version %d.%d\n",
+    an1388_command(a, CMD_READ_VERSION, 0, 0);
+    printf("      Adapter: AN1388 Bootloader Version %d.%d\n",
         a->reply[1], a->reply[2]);
 
     a->adapter.user_start = 0x1d000000;
     a->adapter.user_nbytes = 512 * 1024;
-    printf (" Program area: %08x-%08x\n", a->adapter.user_start,
+    printf(" Program area: %08x-%08x\n", a->adapter.user_start,
         a->adapter.user_start + a->adapter.user_nbytes - 1);
     a->adapter.block_override = 0;
     a->adapter.flags = (AD_PROBE | AD_ERASE | AD_READ | AD_WRITE);

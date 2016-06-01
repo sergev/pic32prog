@@ -58,7 +58,7 @@ typedef struct {
  * Send a request to the device.
  * Store the reply into the a->reply[] array.
  */
-static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
+static void uhb_command(uhb_adapter_t *a, unsigned char cmd,
     unsigned addr, unsigned count, unsigned char *data, unsigned data_bytes)
 {
     unsigned char buf [64];
@@ -66,7 +66,7 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
     int reply_len;
 
     /* Send command packet. */
-    memset (buf, 0, sizeof(buf));
+    memset(buf, 0, sizeof(buf));
     buf[0] = STX;
     buf[1] = cmd;
     if (cmd == CMD_WRITE || cmd == CMD_ERASE) {
@@ -86,15 +86,15 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
     }
 
     if (debug_level > 0) {
-        fprintf (stderr, "---Send");
+        fprintf(stderr, "---Send");
         for (k=0; k<nbytes; ++k) {
             if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", buf[k]);
+                fprintf(stderr, "\n       ");
+            fprintf(stderr, " %02x", buf[k]);
         }
-        fprintf (stderr, "\n");
+        fprintf(stderr, "\n");
     }
-    hid_write (a->hiddev, buf, 64);
+    hid_write(a->hiddev, buf, 64);
 
     if (cmd == CMD_REBOOT) {
         /* No reply expected. */
@@ -105,54 +105,54 @@ static void uhb_command (uhb_adapter_t *a, unsigned char cmd,
         /* Send data. */
         for (; data_bytes>0; data_bytes-=64) {
             if (debug_level > 0) {
-                fprintf (stderr, "---    ");
+                fprintf(stderr, "---    ");
                 for (k=0; k<64; ++k) {
                     if (k != 0 && (k & 15) == 0)
-                        fprintf (stderr, "\n       ");
-                    fprintf (stderr, " %02x", data[k]);
+                        fprintf(stderr, "\n       ");
+                    fprintf(stderr, " %02x", data[k]);
                 }
-                fprintf (stderr, "\n");
+                fprintf(stderr, "\n");
             }
-            hid_write (a->hiddev, data, 64);
+            hid_write(a->hiddev, data, 64);
             data += 64;
         }
     }
 
     /* Get reply. */
-    memset (a->reply, 0, sizeof(a->reply));
-    reply_len = hid_read_timeout (a->hiddev, a->reply, 64, 500);
+    memset(a->reply, 0, sizeof(a->reply));
+    reply_len = hid_read_timeout(a->hiddev, a->reply, 64, 500);
     if (reply_len == 0) {
-        fprintf (stderr, "Timed out.\n");
-        exit (-1);
+        fprintf(stderr, "Timed out.\n");
+        exit(-1);
     }
     if (reply_len != 64) {
-        fprintf (stderr, "uhb: error %d receiving packet\n", reply_len);
-        exit (-1);
+        fprintf(stderr, "uhb: error %d receiving packet\n", reply_len);
+        exit(-1);
     }
     if (debug_level > 0) {
-        fprintf (stderr, "---Recv");
+        fprintf(stderr, "---Recv");
         for (k=0; k<2; ++k) {
             if (k != 0 && (k & 15) == 0)
-                fprintf (stderr, "\n       ");
-            fprintf (stderr, " %02x", a->reply[k]);
+                fprintf(stderr, "\n       ");
+            fprintf(stderr, " %02x", a->reply[k]);
         }
-        fprintf (stderr, "\n");
+        fprintf(stderr, "\n");
     }
 }
 
-static void uhb_close (adapter_t *adapter, int power_on)
+static void uhb_close(adapter_t *adapter, int power_on)
 {
     uhb_adapter_t *a = (uhb_adapter_t*) adapter;
 
     /* Jump to application. */
-    uhb_command (a, CMD_REBOOT, 0, 0, 0, 0);
-    free (a);
+    uhb_command(a, CMD_REBOOT, 0, 0, 0, 0);
+    free(a);
 }
 
 /*
  * Return the Device Identification code
  */
-static unsigned uhb_get_idcode (adapter_t *adapter)
+static unsigned uhb_get_idcode(adapter_t *adapter)
 {
     return 0xDEAFB00B;
 }
@@ -160,7 +160,7 @@ static unsigned uhb_get_idcode (adapter_t *adapter)
 /*
  * Read a configuration word from memory.
  */
-static unsigned uhb_read_word (adapter_t *adapter, unsigned addr)
+static unsigned uhb_read_word(adapter_t *adapter, unsigned addr)
 {
     /* Not supported by UHB bootloader. */
     return 0;
@@ -169,18 +169,18 @@ static unsigned uhb_read_word (adapter_t *adapter, unsigned addr)
 /*
  * Write a configuration word to flash memory.
  */
-static void uhb_program_word (adapter_t *adapter,
+static void uhb_program_word(adapter_t *adapter,
     unsigned addr, unsigned word)
 {
     /* Not supported by UHB bootloader. */
     if (debug_level > 0)
-        fprintf (stderr, "uhb: program word at %08x: %08x\n", addr, word);
+        fprintf(stderr, "uhb: program word at %08x: %08x\n", addr, word);
 }
 
 /*
  * Verify a block of memory (1024 bytes).
  */
-static void uhb_verify_data (adapter_t *adapter,
+static void uhb_verify_data(adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     /* Not supported by UHB bootloader. */
@@ -189,20 +189,20 @@ static void uhb_verify_data (adapter_t *adapter,
 /*
  * Flash write, 1-kbyte blocks.
  */
-static void uhb_program_block (adapter_t *adapter,
+static void uhb_program_block(adapter_t *adapter,
     unsigned addr, unsigned *data)
 {
     uhb_adapter_t *a = (uhb_adapter_t*) adapter;
 
     if (debug_level > 0)
-        fprintf (stderr, "uhb: program 1024 bytes at %08x: %08x-%08x-...-%08x\n",
+        fprintf(stderr, "uhb: program 1024 bytes at %08x: %08x-%08x-...-%08x\n",
             addr, data[0], data[1], data[255]);
 
     if (! (addr >= a->adapter.user_start &&
            addr + 1024 <= a->adapter.user_start + a->adapter.user_nbytes) &&
         ! (addr >= 0x1fc00000 &&
            addr + 1024 <= 0x1fc00000 + 8*1024)) {
-        fprintf (stderr, "address %08x out of program area\n", addr);
+        fprintf(stderr, "address %08x out of program area\n", addr);
         return;
     }
 
@@ -215,21 +215,21 @@ static void uhb_program_block (adapter_t *adapter,
         unsigned ba = 0x1fc00000;
         for (; nblocks-- > 0; addr += a->erase_size) {
             if (debug_level > 0)
-                fprintf (stderr, "*** uhb: erase boot block %08x\n", ba);
+                fprintf(stderr, "*** uhb: erase boot block %08x\n", ba);
 
             /* Erase one block. */
-            uhb_command (a, CMD_ERASE, ba, 1, 0, 0);
+            uhb_command(a, CMD_ERASE, ba, 1, 0, 0);
         }
         a->boot_erased = 1;
     }
 
-    uhb_command (a, CMD_WRITE, addr, 1024, (unsigned char*)data, 1024);
+    uhb_command(a, CMD_WRITE, addr, 1024, (unsigned char*)data, 1024);
 }
 
 /*
  * Erase all flash memory.
  */
-static void uhb_erase_chip (adapter_t *adapter)
+static void uhb_erase_chip(adapter_t *adapter)
 {
     uhb_adapter_t *a = (uhb_adapter_t*) adapter;
     int nblocks;
@@ -239,10 +239,10 @@ static void uhb_erase_chip (adapter_t *adapter)
     nblocks = a->adapter.user_nbytes / a->erase_size;
     for (addr = a->adapter.user_start; nblocks-- > 0; addr += a->erase_size) {
         if (debug_level > 0)
-            fprintf (stderr, "*** uhb: erase flash block %08x\n", addr);
+            fprintf(stderr, "*** uhb: erase flash block %08x\n", addr);
 
         /* Erase one block. */
-        uhb_command (a, CMD_ERASE, addr, 1, 0, 0);
+        uhb_command(a, CMD_ERASE, addr, 1, 0, 0);
     }
 }
 
@@ -251,25 +251,25 @@ static void uhb_erase_chip (adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_uhb (void)
+adapter_t *adapter_open_uhb(void)
 {
     uhb_adapter_t *a;
     hid_device *hiddev;
 
-    hiddev = hid_open (MIKROE_VID, MIKROEBOOT_PID, 0);
+    hiddev = hid_open(MIKROE_VID, MIKROEBOOT_PID, 0);
     if (! hiddev) {
-        /*fprintf (stderr, "HID bootloader not found\n");*/
+        /*fprintf(stderr, "HID bootloader not found\n");*/
         return 0;
     }
-    a = calloc (1, sizeof (*a));
+    a = calloc(1, sizeof(*a));
     if (! a) {
-        fprintf (stderr, "Out of memory\n");
+        fprintf(stderr, "Out of memory\n");
         return 0;
     }
     a->hiddev = hiddev;
 
     /* Read version of adapter. */
-    uhb_command (a, CMD_INFO, 0, 0, 0, 0);
+    uhb_command(a, CMD_INFO, 0, 0, 0, 0);
     if (a->reply[0] != 56 ||                /* Info packet size */
         a->reply[1] != 1 ||                 /* Tag: MCU type */
         a->reply[2] != 20 ||                /* PIC32 family */
@@ -288,28 +288,28 @@ adapter_t *adapter_open_uhb (void)
     a->version     = a->reply[22] | (a->reply[23] << 8);
     a->boot_start  = a->reply[28] | (a->reply[29] << 8) |
                      (a->reply[30] << 16) | (a->reply[31] << 24);
-    memcpy (a->name, &a->reply[33], 31);
+    memcpy(a->name, &a->reply[33], 31);
 
     a->adapter.user_start  = 0x1d000000;
     a->adapter.user_nbytes = a->boot_start & 0x00ffffff;
     a->adapter.boot_nbytes = 12*1024 - a->erase_size;
-    printf ("      Adapter: UHB Bootloader '%s', Version %x.%02x\n",
+    printf("      Adapter: UHB Bootloader '%s', Version %x.%02x\n",
         a->name, a->version >> 8, a->version & 0xff);
-    printf (" Program area: %08x-%08x, %08x-%08x\n", a->adapter.user_start,
+    printf(" Program area: %08x-%08x, %08x-%08x\n", a->adapter.user_start,
         a->adapter.user_start + a->adapter.user_nbytes - 1,
         0x1fc00000, 0x1fc00000+ a->adapter.boot_nbytes - 1);
 
     if (debug_level > 0) {
-        printf ("   Flash size: %u bytes\n", a->flash_size);
-        printf ("  Write block: %u bytes\n", a->write_size);
-        printf ("  Erase block: %u bytes\n", a->erase_size);
-        printf ("   Boot start: %08x\n", a->boot_start);
+        printf("   Flash size: %u bytes\n", a->flash_size);
+        printf("  Write block: %u bytes\n", a->write_size);
+        printf("  Erase block: %u bytes\n", a->erase_size);
+        printf("   Boot start: %08x\n", a->boot_start);
     }
 
     /* Enter Bootloader mode. */
-    uhb_command (a, CMD_BOOT, 0, 0, 0, 0);
+    uhb_command(a, CMD_BOOT, 0, 0, 0, 0);
     if (a->reply[0] != STX || a->reply[1] != CMD_BOOT) {
-        fprintf (stderr, "uhb: Cannot enter bootloader mode.\n");
+        fprintf(stderr, "uhb: Cannot enter bootloader mode.\n");
         return 0;
     }
 

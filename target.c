@@ -287,23 +287,23 @@ static const struct {
     { 0 },
 };
 
-#if defined (__CYGWIN32__) || defined (MINGW32)
+#if defined(__CYGWIN32__) || defined(MINGW32)
 /*
  * Delay in milliseconds: Windows.
  */
 #include <windows.h>
 
-void mdelay (unsigned msec)
+void mdelay(unsigned msec)
 {
-    Sleep (msec);
+    Sleep(msec);
 }
 #else
 /*
  * Delay in milliseconds: Unix.
  */
-void mdelay (unsigned msec)
+void mdelay(unsigned msec)
 {
-    usleep (msec * 1000);
+    usleep(msec * 1000);
 }
 #endif
 
@@ -364,14 +364,14 @@ static adapter_t *open_serial_adapter(const char *port_name, int baud_rate)
 /*
  * Connect to JTAG adapter.
  */
-target_t *target_open (const char *port_name, int baud_rate)
+target_t *target_open(const char *port_name, int baud_rate)
 {
     target_t *t;
 
-    t = calloc (1, sizeof (target_t));
+    t = calloc(1, sizeof(target_t));
     if (! t) {
-        fprintf (stderr, _("Out of memory\n"));
-        exit (-1);
+        fprintf(stderr, _("Out of memory\n"));
+        exit(-1);
     }
     t->cpu_name = "Unknown";
 
@@ -385,27 +385,27 @@ target_t *target_open (const char *port_name, int baud_rate)
         t->adapter = open_usb_adapter();
     }
     if (! t->adapter) {
-        fprintf (stderr, "\n");
-        fprintf (stderr, _("No target found.\n"));
-        exit (-1);
+        fprintf(stderr, "\n");
+        fprintf(stderr, _("No target found.\n"));
+        exit(-1);
     }
 
     /* Check CPU identifier. */
-    t->cpuid = t->adapter->get_idcode (t->adapter);
+    t->cpuid = t->adapter->get_idcode(t->adapter);
     if (t->cpuid == 0) {
         /* Device not responding. */
-        fprintf (stderr, _("Unknown CPUID=%08x.\n"), t->cpuid);
-        t->adapter->close (t->adapter, 0);
-        exit (1);
+        fprintf(stderr, _("Unknown CPUID=%08x.\n"), t->cpuid);
+        t->adapter->close(t->adapter, 0);
+        exit(1);
     }
 
     unsigned i;
     for (i=0; (t->cpuid ^ pic32_tab[i].devid) & 0x0fffffff; i++) {
         if (pic32_tab[i].devid == 0) {
             /* Device not detected. */
-            fprintf (stderr, _("Unknown CPUID=%08x.\n"), t->cpuid);
-            t->adapter->close (t->adapter, 0);
-            exit (1);
+            fprintf(stderr, _("Unknown CPUID=%08x.\n"), t->cpuid);
+            t->adapter->close(t->adapter, 0);
+            exit(1);
         }
     }
     t->family = pic32_tab[i].family;
@@ -424,37 +424,37 @@ target_t *target_open (const char *port_name, int baud_rate)
 /*
  * Close the device.
  */
-void target_close (target_t *t, int power_on)
+void target_close(target_t *t, int power_on)
 {
-    t->adapter->close (t->adapter, power_on);
+    t->adapter->close(t->adapter, power_on);
 }
 
-const char *target_cpu_name (target_t *t)
+const char *target_cpu_name(target_t *t)
 {
     return t->cpu_name;
 }
 
-unsigned target_idcode (target_t *t)
+unsigned target_idcode(target_t *t)
 {
     return t->cpuid;
 }
 
-unsigned target_flash_bytes (target_t *t)
+unsigned target_flash_bytes(target_t *t)
 {
     return t->flash_bytes;
 }
 
-unsigned target_boot_bytes (target_t *t)
+unsigned target_boot_bytes(target_t *t)
 {
     return t->family->boot_kbytes * 1024;
 }
 
-unsigned target_devcfg_offset (target_t *t)
+unsigned target_devcfg_offset(target_t *t)
 {
     return t->family->devcfg_offset;
 }
 
-unsigned target_block_size (target_t *t)
+unsigned target_block_size(target_t *t)
 {
     return t->family->bytes_per_row;
 }
@@ -482,7 +482,7 @@ void target_add_variant(char *name, unsigned id,
             else if (strcmp(family, "MZ") == 0)
                 pic32_tab[i].family = &family_mz;
             else {
-                fprintf (stderr, "%s: Unknown family=%s.\n", name, family);
+                fprintf(stderr, "%s: Unknown family=%s.\n", name, family);
             }
             break;
         }
@@ -492,26 +492,26 @@ void target_add_variant(char *name, unsigned id,
 /*
  * Use PE for reading/writing/erasing memory.
  */
-void target_use_executive (target_t *t)
+void target_use_executive(target_t *t)
 {
     if (t->adapter->load_executive != 0 && t->family->pe_nwords != 0)
-        t->adapter->load_executive (t->adapter, t->family->pe_code,
+        t->adapter->load_executive(t->adapter, t->family->pe_code,
             t->family->pe_nwords, t->family->pe_version);
 }
 
 /*
  * Print configuration registers of the target CPU.
  */
-void target_print_devcfg (target_t *t)
+void target_print_devcfg(target_t *t)
 {
     if (! t->family->devcfg_offset)
         return;
 
-    unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset (t);
-    unsigned devcfg3 = t->adapter->read_word (t->adapter, devcfg_addr);
-    unsigned devcfg2 = t->adapter->read_word (t->adapter, devcfg_addr + 4);
-    unsigned devcfg1 = t->adapter->read_word (t->adapter, devcfg_addr + 8);
-    unsigned devcfg0 = t->adapter->read_word (t->adapter, devcfg_addr + 12);
+    unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
+    unsigned devcfg3 = t->adapter->read_word(t->adapter, devcfg_addr);
+    unsigned devcfg2 = t->adapter->read_word(t->adapter, devcfg_addr + 4);
+    unsigned devcfg1 = t->adapter->read_word(t->adapter, devcfg_addr + 8);
+    unsigned devcfg0 = t->adapter->read_word(t->adapter, devcfg_addr + 12);
 
     if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
         devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
@@ -519,14 +519,14 @@ void target_print_devcfg (target_t *t)
     if (devcfg3 == 0 && devcfg2 == 0 && devcfg1 == 0 && devcfg0 == 0)
         return;
 
-    printf (_("Configuration:\n"));
-    t->family->print_devcfg (devcfg0, devcfg1, devcfg2, devcfg3);
+    printf(_("Configuration:\n"));
+    t->family->print_devcfg(devcfg0, devcfg1, devcfg2, devcfg3);
 }
 
 /*
  * Translate virtual to physical address.
  */
-static unsigned virt_to_phys (unsigned addr)
+static unsigned virt_to_phys(unsigned addr)
 {
     if (addr >= 0x80000000 && addr < 0xA0000000)
         return addr - 0x80000000;
@@ -538,50 +538,50 @@ static unsigned virt_to_phys (unsigned addr)
 /*
  * Read data from memory.
  */
-void target_read_block (target_t *t, unsigned addr,
+void target_read_block(target_t *t, unsigned addr,
     unsigned nwords, unsigned *data)
 {
     if (! t->adapter->read_data) {
-        printf (_("\nData reading not supported by the adapter.\n"));
-        exit (1);
+        printf(_("\nData reading not supported by the adapter.\n"));
+        exit(1);
     }
 
-    addr = virt_to_phys (addr);
-    //fprintf (stderr, "target_read_block (addr = %x, nwords = %d)\n", addr, nwords);
+    addr = virt_to_phys(addr);
+    //fprintf(stderr, "target_read_block(addr = %x, nwords = %d)\n", addr, nwords);
     while (nwords > 0) {
         unsigned n = nwords;
         if (n > 256)
             n = 256;
-        t->adapter->read_data (t->adapter, addr, n, data);
+        t->adapter->read_data(t->adapter, addr, n, data);
         addr += n<<2;
         data += n;
         nwords -= n;
     }
-    //fprintf (stderr, "    done (addr = %x)\n", addr);
+    //fprintf(stderr, "    done (addr = %x)\n", addr);
 }
 
 /*
  * Verify data.
  */
-void target_verify_block (target_t *t, unsigned addr,
+void target_verify_block(target_t *t, unsigned addr,
     unsigned nwords, unsigned *data)
 {
     unsigned i, word, expected, block[512];
 
-    //fprintf (stderr, "%s: addr=%08x, nwords=%u, data=%08x...\n", __func__, addr, nwords, data[0]);
+    //fprintf(stderr, "%s: addr=%08x, nwords=%u, data=%08x...\n", __func__, addr, nwords, data[0]);
     if (t->adapter->verify_data != 0) {
-        t->adapter->verify_data (t->adapter, virt_to_phys (addr), nwords, data);
+        t->adapter->verify_data(t->adapter, virt_to_phys(addr), nwords, data);
         return;
     }
 
-    t->adapter->read_data (t->adapter, addr, nwords, block);
+    t->adapter->read_data(t->adapter, addr, nwords, block);
     for (i=0; i<nwords; i++) {
         expected = data [i];
         word = block [i];
         if (word != expected) {
-            printf (_("\nerror at address %08X: file=%08X, mem=%08X\n"),
+            printf(_("\nerror at address %08X: file=%08X, mem=%08X\n"),
                 addr + i*4, expected, word);
-            exit (1);
+            exit(1);
         }
     }
 }
@@ -589,13 +589,13 @@ void target_verify_block (target_t *t, unsigned addr,
 /*
  * Erase all Flash memory.
  */
-int target_erase (target_t *t)
+int target_erase(target_t *t)
 {
     if (t->adapter->erase_chip) {
-        printf (_("        Erase: "));
-        fflush (stdout);
-        t->adapter->erase_chip (t->adapter);
-        printf (_("done\n"));
+        printf(_("        Erase: "));
+        fflush(stdout);
+        t->adapter->erase_chip(t->adapter);
+        printf(_("done\n"));
     }
     return 1;
 }
@@ -603,7 +603,7 @@ int target_erase (target_t *t)
 /*
  * Test block for non 0xFFFFFFFF value
  */
-static int target_test_empty_block (unsigned *data, unsigned nwords)
+static int target_test_empty_block(unsigned *data, unsigned nwords)
 {
     while (nwords--)
         if (*data++ != 0xFFFFFFFF)
@@ -614,11 +614,11 @@ static int target_test_empty_block (unsigned *data, unsigned nwords)
 /*
  * Write to flash memory.
  */
-void target_program_block (target_t *t, unsigned addr,
+void target_program_block(target_t *t, unsigned addr,
     unsigned nwords, unsigned *data)
 {
-    addr = virt_to_phys (addr);
-    //fprintf (stderr, "target_program_block (addr = %x, nwords = %d)\n", addr, nwords);
+    addr = virt_to_phys(addr);
+    //fprintf(stderr, "target_program_block(addr = %x, nwords = %d)\n", addr, nwords);
 
     if (! t->adapter->program_block) {
         unsigned words_per_row = t->family->bytes_per_row / 4;
@@ -626,8 +626,8 @@ void target_program_block (target_t *t, unsigned addr,
             unsigned n = nwords;
             if (n > words_per_row)
                 n = words_per_row;
-	    if (! target_test_empty_block (data, words_per_row))
-                t->adapter->program_row (t->adapter, addr, data, words_per_row);
+	    if (! target_test_empty_block(data, words_per_row))
+                t->adapter->program_row(t->adapter, addr, data, words_per_row);
             addr += n<<2;
             data += n;
             nwords -= n;
@@ -637,7 +637,7 @@ void target_program_block (target_t *t, unsigned addr,
         unsigned n = nwords;
         if (n > 256)
             n = 256;
-        t->adapter->program_block (t->adapter, addr, data);
+        t->adapter->program_block(t->adapter, addr, data);
         addr += n<<2;
         data += n;
         nwords -= n;
@@ -647,7 +647,7 @@ void target_program_block (target_t *t, unsigned addr,
 /*
  * Program the configuration registers.
  */
-void target_program_devcfg (target_t *t, unsigned devcfg0,
+void target_program_devcfg(target_t *t, unsigned devcfg0,
         unsigned devcfg1, unsigned devcfg2, unsigned devcfg3)
 {
     if (! t->family->devcfg_offset)
@@ -655,16 +655,16 @@ void target_program_devcfg (target_t *t, unsigned devcfg0,
 
     unsigned addr = 0x1fc00000 + t->family->devcfg_offset;
 
-    //fprintf (stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, devcfg0, devcfg1, devcfg2, devcfg3);
+    //fprintf(stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, devcfg0, devcfg1, devcfg2, devcfg3);
     if (t->family->pe_version >= 0x0500) {
         /* Since pic32mz, the programming executive */
-        t->adapter->program_quad_word (t->adapter, addr, devcfg3,
+        t->adapter->program_quad_word(t->adapter, addr, devcfg3,
             devcfg2, devcfg1, devcfg0);
         return;
     }
 
-    t->adapter->program_word (t->adapter, addr, devcfg3);
-    t->adapter->program_word (t->adapter, addr + 4, devcfg2);
-    t->adapter->program_word (t->adapter, addr + 8, devcfg1);
-    t->adapter->program_word (t->adapter, addr + 12, devcfg0);
+    t->adapter->program_word(t->adapter, addr, devcfg3);
+    t->adapter->program_word(t->adapter, addr + 4, devcfg2);
+    t->adapter->program_word(t->adapter, addr + 8, devcfg1);
+    t->adapter->program_word(t->adapter, addr + 12, devcfg0);
 }

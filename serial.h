@@ -16,41 +16,36 @@
  * receive timeout (in milliseconds).
  * Return -1 on error.
  */
-int serial_open (const char *devname, int baud_rate, int timeout);
+int serial_open(const char *devname, int baud_rate);
 
 /*
  * Change the serial baud rate
  * Return -1 on error.
  */
-int serial_baud (int baud_rate);
+int serial_baud(int baud_rate);
 
 /*
  * Close the serial port.
  */
-void serial_close (void);
+void serial_close(void);
 
 /*
  * Send data to device.
  * Return number of bytes, or -1 on error.
  */
-int serial_write (unsigned char *data, int len);
+int serial_write(unsigned char *data, int len);
 
 /*
  * Receive data from device.
  * Return number of bytes, or -1 on error.
  */
-int serial_read (unsigned char *data, int len);
+int serial_read(unsigned char *data, int len, int timeout_msec);
 
 /*
  * Check whether the given speed in bits per second
  * is supported by the system.
  * Return 0 when not supported.
  */
-int serial_speed_valid (int bps);
-
-/*
- * Sets a new RX timeout in milliseconds
- */
-void set_timeout (int new_timeout);
+int serial_speed_valid(int bps);
 
 #endif

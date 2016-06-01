@@ -19,7 +19,6 @@
 #include "pic32.h"
 #include "serial.h"
 
-
 typedef struct {
     adapter_t adapter;              /* Common part */
 
@@ -58,7 +57,7 @@ static int MAXW = 440;  // maximum continuous write before sync: 900 + 50 < 1024
 /*
  * Calculate checksum.
  */
-static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbytes)
+static unsigned calculate_crc(unsigned crc, unsigned char *data, unsigned nbytes)
 {
     static const unsigned short crc_table [16] = {
         0x0000, 0x1021, 0x2042, 0x3063, 0x4084, 0x50a5, 0x60c6, 0x70e7,
@@ -82,12 +81,12 @@ static unsigned calculate_crc (unsigned crc, unsigned char *data, unsigned nbyte
  * is the only reliable way to create a delay at the target.
  * (by RR)
  */
-static void bitbang_delay10mS (bitbang_adapter_t *a, int caller)
+static void bitbang_delay10mS(bitbang_adapter_t *a, int caller)
 {
     unsigned char ch;
 
     ch = '8';
-    serial_write (&ch, 1);
+    serial_write(&ch, 1);
     a->WriteCount++;
     a->DelayCount[caller]++;
 }
@@ -138,7 +137,7 @@ static void bitbang_delay10mS (bitbang_adapter_t *a, int caller)
  *
  * (by RR)
  */
-static void bitbang_send (bitbang_adapter_t *a,
+static void bitbang_send(bitbang_adapter_t *a,
     unsigned tms_nbits, unsigned tms,
     unsigned tdi_nbits, unsigned long long tdi, int read_flag)
 {
@@ -164,9 +163,9 @@ static void bitbang_send (bitbang_adapter_t *a,
     unsigned char ch;
 
     if (a->BitsToRead != 0)
-        fprintf (stderr, "WARNING - write while pending read (in send)\n");
+        fprintf(stderr, "WARNING - write while pending read (in send)\n");
     if (read_flag && (tdi_nbits == 0))
-        fprintf (stderr, "WARNING - request to read 0 bits (in send)\n");
+        fprintf(stderr, "WARNING - request to read 0 bits (in send)\n");
 
     for (i = tms_nbits; i > 0; i--) {           // for each of the n bits...
         ch = (tms & 1) + 'd';                   // d, e, f, g
@@ -257,11 +256,11 @@ static void bitbang_send (bitbang_adapter_t *a,
 
         a->PendingHandshake = 0;
 
-        n = serial_read (&ch, 1);
+        n = serial_read(&ch, 1, 250);
         a->Read2Count++;
 
         if (n != 1 || ch != '<')
-            fprintf (stderr, "WARNING - handshake read error (in send)\n");
+            fprintf(stderr, "WARNING - handshake read error (in send)\n");
     }
 
     //
@@ -300,18 +299,18 @@ static void bitbang_send (bitbang_adapter_t *a,
         unsigned L3 = (Xtdi >> 32) & 0xFFFF;
         unsigned L2 = (Xtdi >> 16) & 0xFFFF;
         unsigned L1 = Xtdi & 0xFFFF;
-        printf ("n=%i, <%s> read=%i TDI: %04x %04x %04x %04x\n",
+        printf("n=%i, <%s> read=%i TDI: %04x %04x %04x %04x\n",
                 index, buffer, read_flag, L4,  L3,  L2,  L1);
     }
 
-    serial_write (buffer, index);
+    serial_write(buffer, index);
     a->WriteCount++;
 }
 
 /*
  * (by RR)
  */
-static unsigned long long bitbang_recv (bitbang_adapter_t *a)
+static unsigned long long bitbang_recv(bitbang_adapter_t *a)
 {
     unsigned char buffer[70];
     unsigned long long word;
@@ -324,17 +323,17 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
     //////////////////////////////////////////////////////////////
 
     if (a->PendingHandshake)
-        fprintf (stderr, "WARNING - handshake pending error (in recv)\n");
+        fprintf(stderr, "WARNING - handshake pending error (in recv)\n");
 
     int expected = (CFG4 ? a->CharToRead : a->BitsToRead);
 
-    n = serial_read (buffer, expected);
+    n = serial_read(buffer, expected, 250);
     a->TotalCodeChrsRecv += n;
     a->Read1Count++;
     buffer[n] = 0;              // append trailing zero so can print as a string
 
     if (n != expected)
-        fprintf (stderr,
+        fprintf(stderr,
             "WARNING - fewer characters read (%i) than expected (%i) (in recv)\n",
                                               n,              expected);
 
@@ -348,12 +347,12 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
             switch (buffer[i]) {
                 case ('0'):
                     word = (word << 1) | 0;
-                break;
+                    break;
                 case ('1'):
                     word = (word << 1) | 1;
-                break;
-
-                default:fprintf (stderr,
+                    break;
+                default:
+                    fprintf(stderr,
                         "WARNING - unexpected character (0x%02x) returned (in recv)\n",
                                                        buffer[i]);
             }  // switch
@@ -365,8 +364,8 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
         unsigned L3 = (word >> 32) & 0xFFFF;
         unsigned L2 = (word >> 16) & 0xFFFF;
         unsigned L1 = word & 0xFFFF;
-        printf ("TDO = %04x %04x %04x %04x (%i bits) <%s>\n",
-                        L4,  L3,  L2,  L1, a->BitsToRead, buffer);
+        printf("TDO = %04x %04x %04x %04x (%i bits) <%s>\n",
+                       L4,  L3,  L2,  L1, a->BitsToRead, buffer);
     }
 
     a->TotalBitsReceived += a->BitsToRead;
@@ -380,7 +379,7 @@ static unsigned long long bitbang_recv (bitbang_adapter_t *a)
  * (0) power down the target in an orderly fashion.
  * (by RR)
  */
-static void bitbang_ICSP_enable (bitbang_adapter_t *a, int ICSP_EN)
+static void bitbang_ICSP_enable(bitbang_adapter_t *a, int ICSP_EN)
 {
     if (ICSP_EN)
     {
@@ -389,8 +388,8 @@ static void bitbang_ICSP_enable (bitbang_adapter_t *a, int ICSP_EN)
                                  // 0000000001111111111222222222233333333334444444444555555555566666
                                  // 1234567890123456789012345678901234567890123456789012345678901234
 
-        serial_write (buffer, 64);
-        usleep (150000);    // 150mS delay to allow the above to percolate through the system
+        serial_write(buffer, 64);
+        usleep(150000);    // 150mS delay to allow the above to percolate through the system
     }
     else
     {
@@ -399,22 +398,22 @@ static void bitbang_ICSP_enable (bitbang_adapter_t *a, int ICSP_EN)
                                  // 0000000001111111
                                  // 1234567890123456
 
-        serial_write (buffer, 16);
+        serial_write(buffer, 16);
 
         // 100mS delay to allow the above to percolate through the system
-        usleep (100000);
+        usleep(100000);
     }
 }
 
-static void bitbang_close (adapter_t *adapter, int power_on)
+static void bitbang_close(adapter_t *adapter, int power_on)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
-    usleep (100000);
+    usleep(100000);
 
     /* Clear EJTAGBOOT mode. */
-    bitbang_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
-    bitbang_send (a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
+    bitbang_send(a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */
+    bitbang_send(a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
     // (force the Chip TAP controller into Run Test/Idle state)
 
     //
@@ -422,48 +421,48 @@ static void bitbang_close (adapter_t *adapter, int power_on)
     // see pg 29 of microchip programming docs
     //
 
-    bitbang_ICSP_enable (a, 0);
-    gettimeofday (&a->T2, 0);
+    bitbang_ICSP_enable(a, 0);
+    gettimeofday(&a->T2, 0);
 
-    printf ("\n");
-    printf ("total TDI/TMS pairs sent = %i pairs\n", a->TotalBitPairsSent);
-    printf ("total TDO bits received  = %i bits\n",  a->TotalBitsReceived);
+    printf("\n");
+    printf("total TDI/TMS pairs sent = %i pairs\n", a->TotalBitPairsSent);
+    printf("total TDO bits received  = %i bits\n",  a->TotalBitsReceived);
 
-    printf ("total ascii codes sent   = %i\n", a->TotalCodeChrsSent);
-    printf ("total ascii codes recv   = %i\n", a->TotalCodeChrsRecv);
-    printf ("maximum continuous write = %i chars\n", a->MaxBufferedWrites);
+    printf("total ascii codes sent   = %i\n", a->TotalCodeChrsSent);
+    printf("total ascii codes recv   = %i\n", a->TotalCodeChrsRecv);
+    printf("maximum continuous write = %i chars\n", a->MaxBufferedWrites);
 
-    printf ("O/S serial writes        = %i\n", a->WriteCount);
-    printf ("O/S serial reads (data)  = %i\n", a->Read1Count);
-    printf ("O/S serial reads (sync)  = %i\n", a->Read2Count);
-    printf ("XferFastData count       = %i\n", a->FDataCount);
-    printf ("10mS delays (E/X/R)      = %i/%i/%i\n", a->DelayCount[0],
-                                                     a->DelayCount[1],
-                                                     a->DelayCount[2]);
-    printf ("elapsed programming time = %lum %02lus\n", (a->T2.tv_sec - a->T1.tv_sec) / 60,
-                                                        (a->T2.tv_sec - a->T1.tv_sec) % 60);
+    printf("O/S serial writes        = %i\n", a->WriteCount);
+    printf("O/S serial reads (data)  = %i\n", a->Read1Count);
+    printf("O/S serial reads (sync)  = %i\n", a->Read2Count);
+    printf("XferFastData count       = %i\n", a->FDataCount);
+    printf("10mS delays (E/X/R)      = %i/%i/%i\n", a->DelayCount[0],
+                                                    a->DelayCount[1],
+                                                    a->DelayCount[2]);
+    printf("elapsed programming time = %lum %02lus\n", (a->T2.tv_sec - a->T1.tv_sec) / 60,
+                                                       (a->T2.tv_sec - a->T1.tv_sec) % 60);
 
     serial_close();                    // at this point we are exiting application???
-//  free (a);                          // suspect this line was causing XP CRASHES
+//  free(a);                           // suspect this line was causing XP CRASHES
                                        // - shouldn't be needed anyway
 }
 
 /*
  * Read the Device Identification code
  */
-static unsigned bitbang_get_idcode (adapter_t *adapter)
+static unsigned bitbang_get_idcode(adapter_t *adapter)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
     unsigned idcode;
 
     if (DBG2)
-        fprintf (stderr, "get_idcode\n");
+        fprintf(stderr, "get_idcode\n");
 
     /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
      * After reset, the IDCODE register is always selected.
      * Read out 32 bits of data. */
-    bitbang_send (a, 6, 31, 32, 0, 1);
-    idcode = bitbang_recv (a);
+    bitbang_send(a, 6, 31, 32, 0, 1);
+    idcode = bitbang_recv(a);
     return idcode;
 }
 
@@ -475,10 +474,10 @@ static unsigned bitbang_get_idcode (adapter_t *adapter)
  * SEE: "PIC32 Flash Programming Specification 60001145N.pdf"
  * (by RR)
  */
-static void serial_execution (bitbang_adapter_t *a)
+static void serial_execution(bitbang_adapter_t *a)
 {
     if (DBG2)
-        fprintf (stderr, "serial_execution\n");
+        fprintf(stderr, "serial_execution\n");
 
     if (a->serial_execution_mode)
         return;
@@ -486,33 +485,33 @@ static void serial_execution (bitbang_adapter_t *a)
 
     /* Enter serial execution. */
     if (debug_level > 0)
-        fprintf (stderr, "enter serial execution\n");
+        fprintf(stderr, "enter serial execution\n");
 
-    bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */             // 1.
-    bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */             // 2.
-    bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */                // 3.
-    unsigned status = bitbang_recv (a);
+    bitbang_send(a, 1, 1, 5, TAP_SW_MTAP, 0);       /* Send command. */         // 1.
+    bitbang_send(a, 1, 1, 5, MTAP_COMMAND, 0);      /* Send command. */         // 2.
+    bitbang_send(a, 0, 0, 8, MCHP_STATUS, 1);       /* Xfer data. */            // 3.
+    unsigned status = bitbang_recv(a);
     if (debug_level > 0)
-        fprintf (stderr, "status %04x\n", status);
+        fprintf(stderr, "status %04x\n", status);
     if ((status & MCHP_STATUS_CPS) == 0) {
-        fprintf (stderr, "invalid status = %04x (code protection)\n", status);    // 4.
-        exit (-1);
+        fprintf(stderr, "invalid status = %04x (code protection)\n", status);   // 4.
+        exit(-1);
     }
 
-    bitbang_send (a, 0, 0, 8, MCHP_ASSERT_RST, 0);  /* Xfer data. */              // 5.
+    bitbang_send(a, 0, 0, 8, MCHP_ASSERT_RST, 0);   /* Xfer data. */            // 5.
 
-    bitbang_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */             // 6.
-    bitbang_send (a, 1, 1, 5, ETAP_EJTAGBOOT, 0); /* Send command. */             // 7.
+    bitbang_send(a, 1, 1, 5, TAP_SW_ETAP, 0);       /* Send command. */         // 6.
+    bitbang_send(a, 1, 1, 5, ETAP_EJTAGBOOT, 0);    /* Send command. */         // 7.
 
 
-    bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */             // 8.
-    bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */             // 9.
-    bitbang_send (a, 0, 0, 8, MCHP_DEASSERT_RST, 0);  /* Xfer data. */            // 10.
+    bitbang_send(a, 1, 1, 5, TAP_SW_MTAP, 0);       /* Send command. */         // 8.
+    bitbang_send(a, 1, 1, 5, MTAP_COMMAND, 0);      /* Send command. */         // 9.
+    bitbang_send(a, 0, 0, 8, MCHP_DEASSERT_RST, 0); /* Xfer data. */            // 10.
 
-    if (memcmp(a->adapter.family_name, "mz", 2) != 0)     // not needed for MZ processors
-        bitbang_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0);  /* Xfer data. */        // 11.
+    if (memcmp(a->adapter.family_name, "mz", 2) != 0)   // not needed for MZ processors
+        bitbang_send(a, 0, 0, 8, MCHP_FLASH_ENABLE, 0); /* Xfer data. */        // 11.
 
-    bitbang_send (a, 1, 1, 5, TAP_SW_ETAP, 0);    /* Send command. */             // 12.
+    bitbang_send(a, 1, 1, 5, TAP_SW_ETAP, 0);       /* Send command. */         // 12.
 }
 
 //
@@ -524,19 +523,19 @@ static void serial_execution (bitbang_adapter_t *a)
 // UPDATE2: We are operating at such a slow speed that the PrAcc
 // check is not really needed. To date, have never seen PrAcc != 1
 //
-static void xfer_fastdata (bitbang_adapter_t *a, unsigned word)
+static void xfer_fastdata(bitbang_adapter_t *a, unsigned word)
 {
     a->FDataCount++;
 
     if (CFG2 == 1)
-        bitbang_send (a, 0, 0, 33, (unsigned long long) word << 1, 0);
+        bitbang_send(a, 0, 0, 33, (unsigned long long) word << 1, 0);
 
     if (CFG2 == 2) {
-        bitbang_send (a, 0, 0, 33, (unsigned long long) word << 1, 2);
-        unsigned status = bitbang_recv (a);
+        bitbang_send(a, 0, 0, 33, (unsigned long long) word << 1, 2);
+        unsigned status = bitbang_recv(a);
         if (! (status & 1)) {
-            printf ("!");
-            fflush (stdout);
+            printf("!");
+            fflush(stdout);
         }
     }
     //
@@ -551,15 +550,15 @@ static void xfer_fastdata (bitbang_adapter_t *a, unsigned word)
     // programming adaptor.
 }
 
-static void xfer_instruction (bitbang_adapter_t *a, unsigned instruction)
+static void xfer_instruction(bitbang_adapter_t *a, unsigned instruction)
 {
     unsigned ctl;
 
     if (debug_level > 1)
-        fprintf (stderr, "xfer instruction %08x\n", instruction);
+        fprintf(stderr, "xfer instruction %08x\n", instruction);
 
     // Select Control Register
-    bitbang_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
+    bitbang_send(a, 1, 1, 5, ETAP_CONTROL, 0);        /* Send command. */
 
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
@@ -567,42 +566,42 @@ static void xfer_instruction (bitbang_adapter_t *a, unsigned instruction)
     int i = 0;
     do {
         if (i > 100)
-            bitbang_delay10mS (a, 1);
-        bitbang_send (a, 0, 0, 32, CONTROL_PRACC |    /* Xfer data. */
-                                  CONTROL_PROBEN |
-                                CONTROL_PROBTRAP |
-                             /* CONTROL_EJTAGBRK */ 0, 1);  // this bit should NOT be set
+            bitbang_delay10mS(a, 1);
+        bitbang_send(a, 0, 0, 32, CONTROL_PRACC |   /* Xfer data. */
+                                 CONTROL_PROBEN |
+                               CONTROL_PROBTRAP |
+                       /* CONTROL_EJTAGBRK */ 0, 1);  // this bit should NOT be set
 
         // Microchip document 60001145N, "PIC32 Flash Programming
         // Specification, DS60001145N page 18 stipulates 0x0004C000:
         // CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP
 
-        ctl = bitbang_recv (a);
+        ctl = bitbang_recv(a);
         i++;
     } while (! (ctl & CONTROL_PRACC) && i < 150);
 
     if (i == 150) {
-        fprintf (stderr, "PE response, PrAcc not set (in XferInstruction)\n");
-        exit (-1);
+        fprintf(stderr, "PE response, PrAcc not set (in XferInstruction)\n");
+        exit(-1);
     }
 
     // Select Data Register
     // Send the instruction
-    bitbang_send (a, 1, 1, 5, ETAP_DATA, 0);          /* Send command. */
-    bitbang_send (a, 0, 0, 32, instruction, 0);       /* Send data. */
+    bitbang_send(a, 1, 1, 5, ETAP_DATA, 0);           /* Send command. */
+    bitbang_send(a, 0, 0, 32, instruction, 0);        /* Send data. */
 
     // Tell CPU to execute instruction
-    bitbang_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
-    bitbang_send (a, 0, 0, 32, CONTROL_PROBEN |       /* Send data. */
-                               CONTROL_PROBTRAP, 0);
+    bitbang_send(a, 1, 1, 5, ETAP_CONTROL, 0);        /* Send command. */
+    bitbang_send(a, 0, 0, 32, CONTROL_PROBEN |        /* Send data. */
+                              CONTROL_PROBTRAP, 0);
 }
 
-static unsigned get_pe_response (bitbang_adapter_t *a)
+static unsigned get_pe_response(bitbang_adapter_t *a)
 {
     unsigned ctl, response;
 
     // Select Control Register
-    bitbang_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
+    bitbang_send(a, 1, 1, 5, ETAP_CONTROL, 0);        /* Send command. */
 
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
@@ -610,37 +609,37 @@ static unsigned get_pe_response (bitbang_adapter_t *a)
     int i = 0;
     do {
         if (i > 100)
-            bitbang_delay10mS (a, 2);
-        bitbang_send (a, 0, 0, 32, CONTROL_PRACC |    /* Xfer data. */
-                                  CONTROL_PROBEN |
-                                CONTROL_PROBTRAP |
-                             /* CONTROL_EJTAGBRK */ 0, 1);  // this bit should NOT be set
+            bitbang_delay10mS(a, 2);
+        bitbang_send(a, 0, 0, 32, CONTROL_PRACC |     /* Xfer data. */
+                                 CONTROL_PROBEN |
+                               CONTROL_PROBTRAP |
+                            /* CONTROL_EJTAGBRK */ 0, 1);  // this bit should NOT be set
 
         // Microchip document 60001145N, "PIC32 Flash Programming
         // Specification, DS60001145N page 30 stipulates 0x0004C000:
         // CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP
 
-        ctl = bitbang_recv (a);
+        ctl = bitbang_recv(a);
         i++;
     } while (! (ctl & CONTROL_PRACC) && i < 150);
 
     if (i == 150) {
-        fprintf (stderr, "PE response, PrAcc not set (in GetPEResponse)\n");
-        exit (-1);
+        fprintf(stderr, "PE response, PrAcc not set (in GetPEResponse)\n");
+        exit(-1);
     }
 
     // Select Data Register
     // Send the instruction
-    bitbang_send (a, 1, 1, 5, ETAP_DATA, 0);          /* Send command. */
-    bitbang_send (a, 0, 0, 32, 0, 1);                 /* Get data. */
-    response = bitbang_recv (a);
+    bitbang_send(a, 1, 1, 5, ETAP_DATA, 0);           /* Send command. */
+    bitbang_send(a, 0, 0, 32, 0, 1);                  /* Get data. */
+    response = bitbang_recv(a);
 
     // Tell CPU to execute NOP instruction
-    bitbang_send (a, 1, 1, 5, ETAP_CONTROL, 0);       /* Send command. */
-    bitbang_send (a, 0, 0, 32, CONTROL_PROBEN |       /* Send data. */
-                             CONTROL_PROBTRAP, 0);
+    bitbang_send(a, 1, 1, 5, ETAP_CONTROL, 0);        /* Send command. */
+    bitbang_send(a, 0, 0, 32, CONTROL_PROBEN |        /* Send data. */
+                              CONTROL_PROBTRAP, 0);
     if (debug_level > 1)
-        fprintf (stderr, "get PE response %08x\n", response);
+        fprintf(stderr, "get PE response %08x\n", response);
     return response;
 }
 
@@ -649,48 +648,48 @@ static unsigned get_pe_response (bitbang_adapter_t *a)
  *
  * Only used to read configuration words.
  */
-static unsigned bitbang_read_word (adapter_t *adapter, unsigned addr)
+static unsigned bitbang_read_word(adapter_t *adapter, unsigned addr)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
     unsigned addr_lo = addr & 0xFFFF;
     unsigned addr_hi = (addr >> 16) & 0xFFFF;
 
     if (DBG2)
-        fprintf (stderr, "read_word\n");
+        fprintf(stderr, "read_word\n");
 
-    serial_execution (a);
+    serial_execution(a);
 
-    xfer_instruction (a, 0x3c04bf80);           // lui s3, 0xFF20
-    xfer_instruction (a, 0x3c080000 | addr_hi); // lui t0, addr_hi
-    xfer_instruction (a, 0x35080000 | addr_lo); // ori t0, addr_lo
-    xfer_instruction (a, 0x8d090000);           // lw t1, 0(t0)
-    xfer_instruction (a, 0xae690000);           // sw t1, 0(s3)
+    xfer_instruction(a, 0x3c04bf80);            // lui s3, 0xFF20
+    xfer_instruction(a, 0x3c080000 | addr_hi);  // lui t0, addr_hi
+    xfer_instruction(a, 0x35080000 | addr_lo);  // ori t0, addr_lo
+    xfer_instruction(a, 0x8d090000);            // lw t1, 0(t0)
+    xfer_instruction(a, 0xae690000);            // sw t1, 0(s3)
 
-    bitbang_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    bitbang_send (a, 0, 0, 33, 0, 1);             /* Get fastdata. */
-    unsigned word = bitbang_recv (a) >> 1;
+    bitbang_send(a, 1, 1, 5, ETAP_FASTDATA, 0); /* Send command. */
+    bitbang_send(a, 0, 0, 33, 0, 1);            /* Get fastdata. */
+    unsigned word = bitbang_recv(a) >> 1;
 
     if (debug_level > 0)
-        fprintf (stderr, "read word at %08x -> %08x\n", addr, word);
+        fprintf(stderr, "read word at %08x -> %08x\n", addr, word);
     return word;
 }
 
 /*
  * Read a memory block.
  */
-static void bitbang_read_data (adapter_t *adapter,
+static void bitbang_read_data(adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
     unsigned words_read, i;
 
     if (DBG2)
-        fprintf (stderr, "read_data\n");
+        fprintf(stderr, "read_data\n");
 
     if (! a->use_executive) {
         /* Without PE. */
         for (i = nwords; i > 0; i--) {
-            *data++ = bitbang_read_word (adapter, addr);
+            *data++ = bitbang_read_word(adapter, addr);
             addr += 4;
         }
         return;
@@ -699,18 +698,18 @@ static void bitbang_read_data (adapter_t *adapter,
     /* Use PE to read memory. */
     for (words_read = 0; words_read < nwords; words_read += 32) {
 
-        bitbang_send (a, 1, 1, 5, ETAP_FASTDATA, 0);
-        xfer_fastdata (a, PE_READ << 16 | 32);      /* Read 32 words */
-        xfer_fastdata (a, addr);                    /* Address */
+        bitbang_send(a, 1, 1, 5, ETAP_FASTDATA, 0);
+        xfer_fastdata(a, PE_READ << 16 | 32);       /* Read 32 words */
+        xfer_fastdata(a, addr);                     /* Address */
 
-        unsigned response = get_pe_response (a);    /* Get response */
+        unsigned response = get_pe_response(a);     /* Get response */
         if (response != PE_READ << 16) {
-            fprintf (stderr, "bad READ response = %08x, expected %08x\n",
-                                                response,     PE_READ << 16);
-            exit (-1);
+            fprintf(stderr, "bad READ response = %08x, expected %08x\n",
+                                               response,     PE_READ << 16);
+            exit(-1);
         }
         for (i = 0; i < 32; i++) {
-            *data++ = get_pe_response (a);          /* Get data */
+            *data++ = get_pe_response(a);           /* Get data */
         }
         addr += 32 * 4;
     }
@@ -719,46 +718,46 @@ static void bitbang_read_data (adapter_t *adapter,
 /*
  * Download programming executive (PE).
  */
-static void bitbang_load_executive (adapter_t *adapter,
+static void bitbang_load_executive(adapter_t *adapter,
     const unsigned *pe, unsigned nwords, unsigned pe_version)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
     a->use_executive = 1;
-    serial_execution (a);
+    serial_execution(a);
 
-    printf ("   Loading PE: ");
-    fflush (stdout);
+    printf("   Loading PE: ");
+    fflush(stdout);
 
     if (memcmp(a->adapter.family_name, "mz", 2) != 0) {            // steps 1. to 3. not needed for MZ
         /* Step 1. */
-        xfer_instruction (a, 0x3c04bf88);   // lui a0, 0xbf88
-        xfer_instruction (a, 0x34842000);   // ori a0, 0x2000 - address of BMXCON
-        xfer_instruction (a, 0x3c05001f);   // lui a1, 0x1f
-        xfer_instruction (a, 0x34a50040);   // ori a1, 0x40   - a1 has 001f0040
-        xfer_instruction (a, 0xac850000);   // sw  a1, 0(a0)  - BMXCON initialized
-        printf ("1");
-        fflush (stdout);
+        xfer_instruction(a, 0x3c04bf88);   // lui a0, 0xbf88
+        xfer_instruction(a, 0x34842000);   // ori a0, 0x2000 - address of BMXCON
+        xfer_instruction(a, 0x3c05001f);   // lui a1, 0x1f
+        xfer_instruction(a, 0x34a50040);   // ori a1, 0x40   - a1 has 001f0040
+        xfer_instruction(a, 0xac850000);   // sw  a1, 0(a0)  - BMXCON initialized
+        printf("1");
+        fflush(stdout);
 
         /* Step 2. */
-        xfer_instruction (a, 0x34050800);   // li  a1, 0x800  - a1 has 00000800
-        xfer_instruction (a, 0xac850010);   // sw  a1, 16(a0) - BMXDKPBA initialized
-        printf (" 2");
-        fflush (stdout);
+        xfer_instruction(a, 0x34050800);   // li  a1, 0x800  - a1 has 00000800
+        xfer_instruction(a, 0xac850010);   // sw  a1, 16(a0) - BMXDKPBA initialized
+        printf(" 2");
+        fflush(stdout);
 
         /* Step 3. */
-        xfer_instruction (a, 0x8c850040);   // lw  a1, 64(a0) - load BMXDMSZ
-        xfer_instruction (a, 0xac850020);   // sw  a1, 32(a0) - BMXDUDBA initialized
-        xfer_instruction (a, 0xac850030);   // sw  a1, 48(a0) - BMXDUPBA initialized
-        printf (" 3");
-        fflush (stdout);
+        xfer_instruction(a, 0x8c850040);   // lw  a1, 64(a0) - load BMXDMSZ
+        xfer_instruction(a, 0xac850020);   // sw  a1, 32(a0) - BMXDUDBA initialized
+        xfer_instruction(a, 0xac850030);   // sw  a1, 48(a0) - BMXDUPBA initialized
+        printf(" 3");
+        fflush(stdout);
     }
 
     /* Step 4. */
-    xfer_instruction (a, 0x3c04a000);   // lui a0, 0xa000
-    xfer_instruction (a, 0x34840800);   // ori a0, 0x800  - a0 has a0000800
-    printf (" 4 (LDR)");
-    fflush (stdout);
+    xfer_instruction(a, 0x3c04a000);   // lui a0, 0xa000
+    xfer_instruction(a, 0x34840800);   // ori a0, 0x800  - a0 has a0000800
+    printf(" 4 (LDR)");
+    fflush(stdout);
 
     /* Download the PE loader. */
     int i;
@@ -767,25 +766,25 @@ static void bitbang_load_executive (adapter_t *adapter,
         unsigned opcode1 = 0x3c060000 | pic32_pe_loader[i];
         unsigned opcode2 = 0x34c60000 | pic32_pe_loader[i+1];
 
-        xfer_instruction (a, opcode1);      // lui a2, PE_loader_hi++
-        xfer_instruction (a, opcode2);      // ori a2, PE_loader_lo++
-        xfer_instruction (a, 0xac860000);   // sw  a2, 0(a0)
-        xfer_instruction (a, 0x24840004);   // addiu a0, 4
+        xfer_instruction(a, opcode1);      // lui a2, PE_loader_hi++
+        xfer_instruction(a, opcode2);      // ori a2, PE_loader_lo++
+        xfer_instruction(a, 0xac860000);   // sw  a2, 0(a0)
+        xfer_instruction(a, 0x24840004);   // addiu a0, 4
     }
-    printf (" 5");
-    fflush (stdout);
+    printf(" 5");
+    fflush(stdout);
 
     /* Jump to PE loader (step 6). */
-    xfer_instruction (a, 0x3c19a000);   // lui t9, 0xa000
-    xfer_instruction (a, 0x37390800);   // ori t9, 0x800  - t9 has a0000800
-    xfer_instruction (a, 0x03200008);   // jr  t9
-    xfer_instruction (a, 0x00000000);   // nop
-    printf (" 6");
-    fflush (stdout);
+    xfer_instruction(a, 0x3c19a000);   // lui t9, 0xa000
+    xfer_instruction(a, 0x37390800);   // ori t9, 0x800  - t9 has a0000800
+    xfer_instruction(a, 0x03200008);   // jr  t9
+    xfer_instruction(a, 0x00000000);   // nop
+    printf(" 6");
+    fflush(stdout);
 
     /* Switch from serial to fast execution mode. */
-    //bitbang_send (a, 1, 1, 5, TAP_SW_ETAP, 0);
-    //bitbang_send (a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
+    //bitbang_send(a, 1, 1, 5, TAP_SW_ETAP, 0);
+    //bitbang_send(a, 6, 31, 0, 0, 0);             /* TMS 1-1-1-1-1-0 */
 
     //
     // the above two lines are not present in the Microchip programming specs
@@ -794,75 +793,75 @@ static void bitbang_load_executive (adapter_t *adapter,
     /* Send parameters for the loader (step 7-A).
      * PE_ADDRESS = 0xA000_0900,
      * PE_SIZE */
-    bitbang_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, 0xa0000900);
-    xfer_fastdata (a, nwords);
-    printf (" 7a (PE)");
-    fflush (stdout);
+    bitbang_send(a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    xfer_fastdata(a, 0xa0000900);
+    xfer_fastdata(a, nwords);
+    printf(" 7a (PE)");
+    fflush(stdout);
 
     /* Download the PE itself (step 7-B). */
     for (i = 0; i < nwords; i++) {
-        xfer_fastdata (a, *pe++);
+        xfer_fastdata(a, *pe++);
     }
-    bitbang_delay10mS (a, 3);
-    printf (" 7b");
-    fflush (stdout);
+    bitbang_delay10mS(a, 3);
+    printf(" 7b");
+    fflush(stdout);
 
     /* Download the PE instructions. */
-    xfer_fastdata (a, 0);                       /* Step 8 - jump to PE. */
-    xfer_fastdata (a, 0xDEAD0000);
-    bitbang_delay10mS (a, 3);
-    printf (" 8");
-    fflush (stdout);
+    xfer_fastdata(a, 0);                       /* Step 8 - jump to PE. */
+    xfer_fastdata(a, 0xDEAD0000);
+    bitbang_delay10mS(a, 3);
+    printf(" 8");
+    fflush(stdout);
 
-    xfer_fastdata (a, PE_EXEC_VERSION << 16);
+    xfer_fastdata(a, PE_EXEC_VERSION << 16);
 
-    unsigned version = get_pe_response (a);
+    unsigned version = get_pe_response(a);
     if (version != (PE_EXEC_VERSION << 16 | pe_version)) {
-        fprintf (stderr, "\nbad PE version = %08x, expected %08x\n",
+        fprintf(stderr, "\nbad PE version = %08x, expected %08x\n",
                        version, PE_EXEC_VERSION << 16 | pe_version);
-        exit (-1);
+        exit(-1);
     }
 
-    printf (" v%04x\n", version & 0xFFFF);
+    printf(" v%04x\n", version & 0xFFFF);
 
     if (debug_level > 0)
-        fprintf (stderr, "PE version = %04x\n", version & 0xffff);
+        fprintf(stderr, "PE version = %04x\n", version & 0xffff);
 }
 
 /*
  * Erase all flash memory.
  */
-static void bitbang_erase_chip (adapter_t *adapter)
+static void bitbang_erase_chip(adapter_t *adapter)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
     if (DBG2)
-        fprintf (stderr, "erase_chip\n");
+        fprintf(stderr, "erase_chip\n");
 
-    bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
-    bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-    bitbang_send (a, 0, 0, 8, MCHP_ERASE, 0);     /* Xfer data. */
+    bitbang_send(a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
+    bitbang_send(a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
+    bitbang_send(a, 0, 0, 8, MCHP_ERASE, 0);     /* Xfer data. */
 
     if (memcmp(a->adapter.family_name, "mz", 2) == 0)
-        bitbang_send (a, 0, 0, 8, MCHP_DEASSERT_RST, 0);      // needed for PIC32MZ devices only.
+        bitbang_send(a, 0, 0, 8, MCHP_DEASSERT_RST, 0);      // needed for PIC32MZ devices only.
 
     int i = 0;
     unsigned status;
     do {
-        bitbang_delay10mS (a, 0);
-        bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
-        status = bitbang_recv (a);
+        bitbang_delay10mS(a, 0);
+        bitbang_send(a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
+        status = bitbang_recv(a);
         i++;
     } while ((status & (MCHP_STATUS_CFGRDY |
                         MCHP_STATUS_FCBUSY)) != MCHP_STATUS_CFGRDY && i < 100);
 
     if (i == 100) {
-        fprintf (stderr, "invalid status = %04x (in erase chip)\n", status);
-        exit (-1);
+        fprintf(stderr, "invalid status = %04x (in erase chip)\n", status);
+        exit(-1);
     }
-    printf ("(%imS) ", i * 10);
-    fflush (stdout);
+    printf("(%imS) ", i * 10);
+    fflush(stdout);
 }
 
 /*
@@ -873,67 +872,67 @@ static void bitbang_erase_chip (adapter_t *adapter)
  * instead should use QUAD_WORD_PGRM to program all four configuration words at once.
  * !!!!!!!!!! WARNING !!!!!!!!!!
  */
-static void bitbang_program_word (adapter_t *adapter,
+static void bitbang_program_word(adapter_t *adapter,
     unsigned addr, unsigned word)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
     if (DBG2)
-        fprintf (stderr, "program_word\n");
+        fprintf(stderr, "program_word\n");
 
     if (debug_level > 0)
-        fprintf (stderr, "program word at %08x: %08x\n", addr, word);
+        fprintf(stderr, "program word at %08x: %08x\n", addr, word);
     if (! a->use_executive) {
         /* Without PE. */
-        fprintf (stderr, "slow flash write not implemented yet\n");
-        exit (-1);
+        fprintf(stderr, "slow flash write not implemented yet\n");
+        exit(-1);
     }
 
     if (memcmp(a->adapter.family_name, "mz", 2) == 0) {
         printf("!ECC!");                        // warn if word-write to MZ processor
-        fflush (stdout);
+        fflush(stdout);
     }
 
     /* Use PE to write flash memory. */
-    bitbang_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, PE_WORD_PROGRAM << 16 | 2);
-    xfer_fastdata (a, addr);                    /* Send address. */
-    xfer_fastdata (a, word);                    /* Send word. */
+    bitbang_send(a, 1, 1, 5, ETAP_FASTDATA, 0); /* Send command. */
+    xfer_fastdata(a, PE_WORD_PROGRAM << 16 | 2);
+    xfer_fastdata(a, addr);                     /* Send address. */
+    xfer_fastdata(a, word);                     /* Send word. */
 
-    unsigned response = get_pe_response (a);
+    unsigned response = get_pe_response(a);
     if (response != (PE_WORD_PROGRAM << 16)) {
-        fprintf (stderr, "\nfailed to program word %08x at %08x, reply = %08x\n",
+        fprintf(stderr, "\nfailed to program word %08x at %08x, reply = %08x\n",
                                                    word,   addr,       response);
-        exit (-1);
+        exit(-1);
     }
 }
 
 /*
  * Flash write row of memory.
  */
-static void bitbang_program_row (adapter_t *adapter, unsigned addr,
+static void bitbang_program_row(adapter_t *adapter, unsigned addr,
     unsigned *data, unsigned words_per_row)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
 
     if (DBG2)
-        fprintf (stderr, "program_row\n");
+        fprintf(stderr, "program_row\n");
     if (DBG3)
-        fprintf (stderr, "\nprogramming %u words at %08x ",
+        fprintf(stderr, "\nprogramming %u words at %08x ",
                                    words_per_row,   addr);
 
     if (debug_level > 0)
-        fprintf (stderr, "row program %u words at %08x\n", words_per_row, addr);
+        fprintf(stderr, "row program %u words at %08x\n", words_per_row, addr);
     if (! a->use_executive) {
         /* Without PE. */
-        fprintf (stderr, "slow flash write not implemented yet\n");
-        exit (-1);
+        fprintf(stderr, "slow flash write not implemented yet\n");
+        exit(-1);
     }
 
     /* Use PE to write flash memory. */
-    bitbang_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, PE_ROW_PROGRAM << 16 | words_per_row);
-    xfer_fastdata (a, addr);                      /* Send address. */
+    bitbang_send(a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    xfer_fastdata(a, PE_ROW_PROGRAM << 16 | words_per_row);
+    xfer_fastdata(a, addr);                      /* Send address. */
 
     //
     // The below for loop seems to be where our biggest programming time bottleneck is.
@@ -942,57 +941,57 @@ static void bitbang_program_row (adapter_t *adapter, unsigned addr,
     /* Download data. */
     int i;
     for (i = 0; i < words_per_row; i++) {
-        xfer_fastdata (a, *data++);               /* Send word. */
+        xfer_fastdata(a, *data++);               /* Send word. */
     }
 
-    unsigned response = get_pe_response (a);
+    unsigned response = get_pe_response(a);
     if (response != (PE_ROW_PROGRAM << 16)) {
-        fprintf (stderr, "\nfailed to program row at %08x, reply = %08x\n",
+        fprintf(stderr, "\nfailed to program row at %08x, reply = %08x\n",
                                                      addr,         response);
-        exit (-1);
+        exit(-1);
     }
 }
 
 /*
  * Verify a block of memory.
  */
-static void bitbang_verify_data (adapter_t *adapter,
+static void bitbang_verify_data(adapter_t *adapter,
     unsigned addr, unsigned nwords, unsigned *data)
 {
     bitbang_adapter_t *a = (bitbang_adapter_t*) adapter;
     unsigned data_crc, flash_crc;
 
     if (DBG2)
-        fprintf (stderr, "verify_data\n");
+        fprintf(stderr, "verify_data\n");
     if (DBG3)
-        fprintf (stderr, "\nverifying %u words at %08x ", nwords, addr);
+        fprintf(stderr, "\nverifying %u words at %08x ", nwords, addr);
 
     if (! a->use_executive) {
         /* Without PE. */
-        fprintf (stderr, "slow verify not implemented yet\n");
-        exit (-1);
+        fprintf(stderr, "slow verify not implemented yet\n");
+        exit(-1);
     }
 
     /* Use PE to get CRC of flash memory. */
-    bitbang_send (a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
-    xfer_fastdata (a, PE_GET_CRC << 16);
-    xfer_fastdata (a, addr);                      /* Send address. */
-    xfer_fastdata (a, nwords * 4);                /* Send length. */
+    bitbang_send(a, 1, 1, 5, ETAP_FASTDATA, 0);  /* Send command. */
+    xfer_fastdata(a, PE_GET_CRC << 16);
+    xfer_fastdata(a, addr);                      /* Send address. */
+    xfer_fastdata(a, nwords * 4);                /* Send length. */
 
-    unsigned response = get_pe_response (a);
+    unsigned response = get_pe_response(a);
     if (response != (PE_GET_CRC << 16)) {
-        fprintf (stderr, "\nfailed to verify %d words at %08x, reply = %08x\n",
+        fprintf(stderr, "\nfailed to verify %d words at %08x, reply = %08x\n",
                                              nwords,     addr,       response);
-        exit (-1);
+        exit(-1);
     }
 
-    flash_crc = get_pe_response (a) & 0xffff;
+    flash_crc = get_pe_response(a) & 0xffff;
 
-    data_crc = calculate_crc (0xffff, (unsigned char*) data, nwords * 4);
+    data_crc = calculate_crc(0xffff, (unsigned char*) data, nwords * 4);
     if (flash_crc != data_crc) {
-        fprintf (stderr, "\nchecksum failed at %08x: returned %04x, expected %04x\n",
+        fprintf(stderr, "\nchecksum failed at %08x: returned %04x, expected %04x\n",
                                                addr,        flash_crc,     data_crc);
-        exit (-1);
+        exit(-1);
     }
 }
 
@@ -1001,11 +1000,11 @@ static void bitbang_verify_data (adapter_t *adapter,
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
+adapter_t *adapter_open_bitbang(const char *port, int baud_rate)
 {
     bitbang_adapter_t *a;
 
-    printf ("       (ascii ICSP coded by Robert Rozee)\n\n");
+    printf("       (ascii ICSP coded by Robert Rozee)\n\n");
 
 //
 // the following block of code is used to upload firmware to
@@ -1036,178 +1035,178 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
         unsigned char buffer [140];                     // 0x80 + 12d (max used is 133)
         int bps[] = {0, 9600, 19200, 57600, 115200 };   // known arduino bootloader baud rates
 
-        if (serial_open (port, bps[baud_rate], 100) < 0) {
-            fprintf (stderr, "Unable to configure serial port %s\n", port);
+        if (serial_open(port, bps[baud_rate]) < 0) {
+            fprintf(stderr, "Unable to configure serial port %s\n", port);
             serial_close();
-            exit (-1);
+            exit(-1);
         }
         printf("%i baud ", bps[baud_rate]);
-        fflush (stdout);
+        fflush(stdout);
 
         for (i = 0; i < 40; i++) {
 
             buffer[0] = STK_GET_SYNC;                   // get synchronization
             buffer[1] = CRC_EOP;
 
-            serial_write (buffer, 2);
-            printf (".");
-            fflush (stdout);
-            n = serial_read (buffer, 2);
+            serial_write(buffer, 2);
+            printf(".");
+            fflush(stdout);
+            n = serial_read(buffer, 2, 100);
             if ((n == 2) && (buffer[0] == STK_INSYNC) && (buffer[1] == STK_OK))
                 i = 100;
         }
 
         if (i < 100) {
-            fprintf (stderr, "\nFailed to find arduino/STK500 bootloader\n");
+            fprintf(stderr, "\nFailed to find arduino/STK500 bootloader\n");
             serial_close();
-            exit (-1);
+            exit(-1);
         }
-        printf (" synchronized\n");
+        printf(" synchronized\n");
 
         buffer[0] = STK_ENTER_PROGMODE;                 // enter program mode (not needed)
         buffer[1] = CRC_EOP;
-        serial_write (buffer, 2);
-        n = serial_read (buffer, 2);
+        serial_write(buffer, 2);
+        n = serial_read(buffer, 2, 100);
 
         if ((n != 2) || (buffer[0] != STK_INSYNC) || (buffer[1] != STK_OK)) {
-            fprintf (stderr, "Failed to enter program mode\n");
+            fprintf(stderr, "Failed to enter program mode\n");
             serial_close();
-            exit (-1);
+            exit(-1);
         }
 
         buffer[0] = STK_READ_SIGN;                      // read signature bytes (3)
         buffer[1] = CRC_EOP;
-        serial_write (buffer, 2);
-        n = serial_read (buffer, 5);
+        serial_write(buffer, 2);
+        n = serial_read(buffer, 5, 100);
 
         if ((n != 5) || (buffer[0] != STK_INSYNC) || (buffer[4] != STK_OK)) {
-            fprintf (stderr, "Failed to get signature\n");
+            fprintf(stderr, "Failed to get signature\n");
             serial_close();
-            exit (-1);
+            exit(-1);
         }
         unsigned ID = (buffer[1] << 16) + (buffer[2] << 8) + buffer[3];
-        printf ("Signature = %06x   Device = %s\n", ID, ID == 0x1e950f ? "ATmega328P" : "(wrong uP)");
+        printf("Signature = %06x   Device = %s\n", ID, ID == 0x1e950f ? "ATmega328P" : "(wrong uP)");
 
         for (i = 0; i < sizeof(ICSP); i += 0x80)
-            printf (".");
+            printf(".");
         for (i = 0; i < sizeof(ICSP); i += 0x80)
-            printf ("\b");
+            printf("\b");
 
         for (i = 0; i < sizeof(ICSP); i += 0x80) {
-            printf ("#");
-            fflush (stdout);
+            printf("#");
+            fflush(stdout);
 
             buffer[0] = STK_LOAD_ADDRESS;               // load address
             buffer[1] = (i >> 1) % 0x100;               // address low (word boundary)
             buffer[2] = (i >> 1) / 0x100;               // address high
             buffer[3] = CRC_EOP;
-            serial_write (buffer, 4);
-            n = serial_read (buffer, 2);
+            serial_write(buffer, 4);
+            n = serial_read(buffer, 2, 100);
 
             if ((n != 2) || (buffer[0] != STK_INSYNC) || (buffer[1] != STK_OK)) {
-                fprintf (stderr, "\nFailed to load address %04x\n", i);
+                fprintf(stderr, "\nFailed to load address %04x\n", i);
                 serial_close();
-                exit (-1);
+                exit(-1);
             }
 
             buffer[0] = STK_PROG_PAGE;                  // program page
             buffer[1] = 0x00;                           // length high (in bytes, NOT words)
             buffer[2] = 0x80;                           // length low (order reverse to address)
             buffer[3] = 'F';                            // memory type: 'E' = eeprom, 'F' = flash
-            memcpy (&buffer[4], &ICSP[i], 0x80);        // data (128 bytes)
+            memcpy(&buffer[4], &ICSP[i], 0x80);         // data (128 bytes)
             buffer[4 + 0x80] = CRC_EOP;
-            serial_write (buffer, 4 + 0x80 + 1);
-            n = serial_read (buffer, 2);
+            serial_write(buffer, 4 + 0x80 + 1);
+            n = serial_read(buffer, 2, 100);
 
             if ((n != 2) || (buffer[0] != STK_INSYNC) || (buffer[1] != STK_OK)) {
-                fprintf (stderr, "\nFailed to program page\n");
+                fprintf(stderr, "\nFailed to program page\n");
                 serial_close();
-                exit (-1);
+                exit(-1);
             }
         }
-        printf ("\n");
+        printf("\n");
 
         buffer[0] = STK_LEAVE_PROGMODE;                 // leave program mode
         buffer[1] = CRC_EOP;
-        serial_write (buffer, 2);
-        n = serial_read (buffer, 2);
+        serial_write(buffer, 2);
+        n = serial_read(buffer, 2, 100);
 
         if ((n != 2) || (buffer[0] != STK_INSYNC) || (buffer[1] != STK_OK)) {
-            fprintf (stderr, "Failed to exit program mode\n");
+            fprintf(stderr, "Failed to exit program mode\n");
             serial_close();
-            exit (-1);
+            exit(-1);
         }
-        printf ("Firmware uploaded to 'ascii ICSP' adapter OK\n");
+        printf("Firmware uploaded to 'ascii ICSP' adapter OK\n");
         serial_close();
 #else
-        printf ("Firmware upload to arduino/STK500 not included\n");
+        printf("Firmware upload to arduino/STK500 not included\n");
 #endif
-        exit (0);                                       // finished performing function, exit program
+        exit(0);                                       // finished performing function, exit program
     }
 
 //
 // carry on with normal startup
 //
 
-    a = calloc (1, sizeof (*a));
+    a = calloc(1, sizeof(*a));
     if (! a) {
-        fprintf (stderr, "Out of memory (in open)\n");
+        fprintf(stderr, "Out of memory (in open)\n");
         return 0;
     }
 
     /* Open serial port */
-    if (serial_open (port, 115200, 250) < 0) {
+    if (serial_open(port, 115200) < 0) {
         /* failed to open serial port */
-        fprintf (stderr, "Unable to configure serial port %s\n", port);
+        fprintf(stderr, "Unable to configure serial port %s\n", port);
         serial_close();
-        free (a);
+        free(a);
         return 0;
     }
-    usleep (200000);
+    usleep(200000);
 
     //
     // Serial port now open and configured.
     //
-    printf ("      Adapter: ");
-    fflush (stdout);
+    printf("      Adapter: ");
+    fflush(stdout);
 
     int i, n;
     unsigned char ch;
     for (i = 0; i < 40; i++) {
         ch = '>';
-        serial_write (&ch, 1);
+        serial_write(&ch, 1);
         ch = (i < 20 ? '.': ':');
         if (i == 20)
             for (n = 0; n < 20; n++ )
-                printf ("\b");
-        printf ("%c", ch);
-        fflush (stdout);
-        n = serial_read (&ch, 1);
+                printf("\b");
+        printf("%c", ch);
+        fflush(stdout);
+        n = serial_read(&ch, 1, 250);
         if (n == 1 && ch == '<')
             i = 100;
     }
 
     if (i < 100) {
-        fprintf (stderr, "\nNo response from 'ascii ICSP' adapter\n");
+        fprintf(stderr, "\nNo response from 'ascii ICSP' adapter\n");
         serial_close();
-        free (a);
+        free(a);
         return 0;
     }
     printf(" OK1");
-    fflush (stdout);
+    fflush(stdout);
 
     ch = '?';
     unsigned char buffer[15] = "..............\0";
                             // "ascii ICSP v1X"
-    serial_write (&ch, 1);
-    n = serial_read (buffer, 14);
+    serial_write(&ch, 1);
+    n = serial_read(buffer, 14, 250);
 
     if (n == 14 && memcmp(buffer, "ascii ICSP v1", 13) == 0)
-        printf (" OK2 - %s\n", buffer);
+        printf(" OK2 - %s\n", buffer);
     else {
-        fprintf (stderr, "\nBad response from 'ascii ICSP' adapter\n");
+        fprintf(stderr, "\nBad response from 'ascii ICSP' adapter\n");
         serial_close();
-        free (a);
+        free(a);
         return 0;
     }
 
@@ -1240,8 +1239,8 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     // It is at this point that we start talking to the target.
     //
 
-    bitbang_ICSP_enable (a, 1);
-    gettimeofday (&a->T1, 0);
+    bitbang_ICSP_enable(a, 1);
+    gettimeofday(&a->T1, 0);
 
     //
     // The below few lines enable a forced "emergency" erase,
@@ -1250,64 +1249,64 @@ adapter_t *adapter_open_bitbang (const char *port, int baud_rate)
     // once the erase is completed, exits from pic32prog
     //
 
-    if ((baud_rate >> 1) == 4) {                      // 8 (MX) or 9 (MZ)
-        printf ("\nAttempting blind erase of %s processor\n",
+    if ((baud_rate >> 1) == 4) {                        // 8 (MX) or 9 (MZ)
+        printf("\nAttempting blind erase of %s processor\n",
             (baud_rate & 1) ? "MZ" : "MX");
-        bitbang_send (a, 6, 31, 0, 0, 0);             // don't care about ID
-        bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);    /* Send command. */
-        bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);   /* Send command. */
-        bitbang_send (a, 0, 0, 8, MCHP_ERASE, 0);     /* Xfer data. */
+        bitbang_send(a, 6, 31, 0, 0, 0);                // don't care about ID
+        bitbang_send(a, 1, 1, 5, TAP_SW_MTAP, 0);       /* Send command. */
+        bitbang_send(a, 1, 1, 5, MTAP_COMMAND, 0);      /* Send command. */
+        bitbang_send(a, 0, 0, 8, MCHP_ERASE, 0);        /* Xfer data. */
         if (baud_rate & 1)
-            bitbang_send (a, 0, 0, 8, MCHP_DEASSERT_RST, 0);    // PIC32MZ devices only.
-        bitbang_delay10mS (a, 0);
-        bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);    /* Xfer data. */
-        usleep (1000000);                             // allow 1 second for erase to complete
-        bitbang_ICSP_enable (a, 0);                   // shut down target
+            bitbang_send(a, 0, 0, 8, MCHP_DEASSERT_RST, 0); // PIC32MZ devices only.
+        bitbang_delay10mS(a, 0);
+        bitbang_send(a, 0, 0, 8, MCHP_STATUS, 1);       /* Xfer data. */
+        usleep(1000000);                                // allow 1 second for erase to complete
+        bitbang_ICSP_enable(a, 0);                      // shut down target
         serial_close();
-        free (a);
-        exit (0);                                     // finished performing function, exit program
+        free(a);
+        exit(0);                                        // finished performing function, exit program
     }
 
     /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
      * After reset, the IDCODE register is always selected.
      * Read out 32 bits of data. */
     unsigned idcode;
-    bitbang_send (a, 6, 31, 32, 0, 1);                                       // 1. (pg 20)
-    idcode = bitbang_recv (a);
+    bitbang_send(a, 6, 31, 32, 0, 1);                                       // 1. (pg 20)
+    idcode = bitbang_recv(a);
     if ((idcode & 0xfff) != 0x053) {
         /* Microchip vendor ID is expected. */
         if (debug_level > 0 || (idcode != 0 && idcode != 0xffffffff))
-            fprintf (stderr, "incompatible CPU detected, IDCODE=%08x\n", idcode);
-        bitbang_ICSP_enable (a, 0);              // shut down target
+            fprintf(stderr, "incompatible CPU detected, IDCODE=%08x\n", idcode);
+        bitbang_ICSP_enable(a, 0);                      // shut down target
         serial_close();
-        free (a);
+        free(a);
         return 0;
     }
 
     /* Check status. */
-    bitbang_send (a, 1, 1, 5, TAP_SW_MTAP, 0);      /* Send command. */      // 2.
-    bitbang_send (a, 1, 1, 5, MTAP_COMMAND, 0);     /* Send command. */      // 3.
+    bitbang_send(a, 1, 1, 5, TAP_SW_MTAP, 0);       /* Send command. */     // 2.
+    bitbang_send(a, 1, 1, 5, MTAP_COMMAND, 0);      /* Send command. */     // 3.
 #ifdef OLDWAY
-    bitbang_send (a, 0, 0, 8, MCHP_FLASH_ENABLE, 0); /* Xfer data. */        // may be an issue for MZ
+    bitbang_send(a, 0, 0, 8, MCHP_FLASH_ENABLE, 0); /* Xfer data. */        // may be an issue for MZ
     // (above line) "This command requires a NOP to complete."
 #else
-    bitbang_send (a, 0, 0, 8, MCHP_STATUS, 0);      /* Xfer data. */         // 4a.
-    bitbang_delay10mS (a, 3);
+    bitbang_send(a, 0, 0, 8, MCHP_STATUS, 0);       /* Xfer data. */        // 4a.
+    bitbang_delay10mS(a, 3);
 #endif
-    bitbang_send (a, 0, 0, 8, MCHP_STATUS, 1);      /* Xfer data. */         // 4b.
-    unsigned status = bitbang_recv (a);
+    bitbang_send(a, 0, 0, 8, MCHP_STATUS, 1);       /* Xfer data. */        // 4b.
+    unsigned status = bitbang_recv(a);
     if (debug_level > 0)
-        fprintf (stderr, "status %04x\n", status);
+        fprintf(stderr, "status %04x\n", status);
 #ifdef OLDWAY
     if ((status & ~MCHP_STATUS_DEVRST) !=
         (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY | MCHP_STATUS_FAEN)) {
 #else
     if ((status & (MCHP_STATUS_CFGRDY | MCHP_STATUS_FCBUSY)) != MCHP_STATUS_CFGRDY) {
 #endif
-        fprintf (stderr, "invalid status = %04x (in open)\n", status);       // 5.
-        bitbang_ICSP_enable (a, 0);              // shut down target
+        fprintf(stderr, "invalid status = %04x (in open)\n", status);       // 5.
+        bitbang_ICSP_enable(a, 0);                  // shut down target
         serial_close();
-        free (a);
+        free(a);
         return 0;
     }
 //

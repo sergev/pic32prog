@@ -30,31 +30,31 @@ struct _adapter_t {
     unsigned flags;
     const char *family_name;            /* Name of pic32 family */
 
-    void (*close) (adapter_t *a, int power_on);
-    unsigned (*get_idcode) (adapter_t *a);
-    void (*load_executive) (adapter_t *a,
+    void (*close)(adapter_t *a, int power_on);
+    unsigned (*get_idcode)(adapter_t *a);
+    void (*load_executive)(adapter_t *a,
         const unsigned *pe, unsigned nwords, unsigned pe_version);
-    void (*read_data) (adapter_t *a, unsigned addr, unsigned nwords, unsigned *data);
-    void (*verify_data) (adapter_t *a, unsigned addr, unsigned nwords, unsigned *data);
-    void (*program_block) (adapter_t *a, unsigned addr, unsigned *data);
-    void (*program_quad_word) (adapter_t *a, unsigned addr, unsigned word0,
+    void (*read_data)(adapter_t *a, unsigned addr, unsigned nwords, unsigned *data);
+    void (*verify_data)(adapter_t *a, unsigned addr, unsigned nwords, unsigned *data);
+    void (*program_block)(adapter_t *a, unsigned addr, unsigned *data);
+    void (*program_quad_word)(adapter_t *a, unsigned addr, unsigned word0,
         unsigned word1, unsigned word2, unsigned word3);
-    void (*program_row) (adapter_t *a, unsigned addr, unsigned *data, unsigned words_per_row);
-    void (*program_word) (adapter_t *a, unsigned addr, unsigned word);
-    unsigned (*read_word) (adapter_t *a, unsigned addr);
-    void (*erase_chip) (adapter_t *a);
+    void (*program_row)(adapter_t *a, unsigned addr, unsigned *data, unsigned words_per_row);
+    void (*program_word)(adapter_t *a, unsigned addr, unsigned word);
+    unsigned (*read_word)(adapter_t *a, unsigned addr);
+    void (*erase_chip)(adapter_t *a);
 };
 
-adapter_t *adapter_open_pickit (void);
-adapter_t *adapter_open_an1388 (void);
-adapter_t *adapter_open_hidboot (void);
-adapter_t *adapter_open_mpsse (void);
-adapter_t *adapter_open_bitbang (const char *port, int baud_rate);
-adapter_t *adapter_open_an1388_uart (const char *port, int baud_rate);
-adapter_t *adapter_open_stk500v2 (const char *port, int baud_rate);
-adapter_t *adapter_open_uhb (void);
+adapter_t *adapter_open_pickit(void);
+adapter_t *adapter_open_an1388(void);
+adapter_t *adapter_open_hidboot(void);
+adapter_t *adapter_open_mpsse(void);
+adapter_t *adapter_open_bitbang(const char *port, int baud_rate);
+adapter_t *adapter_open_an1388_uart(const char *port, int baud_rate);
+adapter_t *adapter_open_stk500v2(const char *port, int baud_rate);
+adapter_t *adapter_open_uhb(void);
 
-void mdelay (unsigned msec);
+void mdelay(unsigned msec);
 extern int debug_level;
 
 #endif

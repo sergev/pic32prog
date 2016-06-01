@@ -19,9 +19,9 @@
 #else
     /* Use gettext(). */
     #include <libintl.h>
-    #define _(str)                      gettext (str)
+    #define _(str)                      gettext(str)
     #define gettext_noop(str)           str
-    #define N_(str)                     gettext_noop (str)
+    #define N_(str)                     gettext_noop(str)
 #endif
 
 #endif
