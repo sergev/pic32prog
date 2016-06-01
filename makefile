@@ -7,14 +7,15 @@ LDFLAGS         = -g
 
 # Linux
 ifeq ($(UNAME),Linux)
-    LIBS        += -Wl,-Bstatic -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
-    HIDSRC      = hidapi/hid-libusb.c
+    CFLAGS      += -I./hidapi/hidapi/
+    LDFLAGS     += -L./hidapi/libusb/.libs/
+    LIBS        += -Wl,-Bstatic -lhidapi-libusb -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
+    HIDLIB      =  hidapi/libusb/.libs/libhidapi-libusb.a
 endif
 
 # Mac OS X
 ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation
-    HIDSRC      = hidapi/hid-mac.c
     UNIV_ARCHS  = $(shell grep '^universal_archs' /opt/local/etc/macports/macports.conf)
     ifneq ($(findstring i386,$(UNIV_ARCHS)),)
         CC      += -arch i386
@@ -24,11 +25,11 @@ ifeq ($(UNAME),Darwin)
     endif
 endif
 
-PROG_OBJS       = pic32prog.o target.o executive.o hid.o serial.o \
+PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o \
                   adapter-bitbang.o adapter-stk500v2.o adapter-uhb.o \
                   adapter-an1388-uart.o configure.o \
-                  family-mx1.o family-mx3.o family-mz.o
+                  family-mx1.o family-mx3.o family-mz.o $(HIDLIB)
 
 # Olimex ARM-USB-Tiny JTAG adapter: requires libusb-0.1
 CFLAGS          += -DUSE_MPSSE
@@ -47,9 +48,6 @@ all:            pic32prog
 
 pic32prog:      $(PROG_OBJS)
 		$(CC) $(LDFLAGS) -o $@ $(PROG_OBJS) $(LIBS)
-
-hid.o:          $(HIDSRC)
-		$(CC) $(CFLAGS) -c -o $@ $<
 
 load:           demo1986ve91.srec
 		pic32prog $<
@@ -75,15 +73,15 @@ install:	pic32prog #pic32prog-ru.mo
 #		install -c -m 444 pic32prog-ru.mo /usr/local/share/locale/ru/LC_MESSAGES/pic32prog.mo
 ###
 adapter-an1388-uart.o: adapter-an1388-uart.c adapter.h pic32.h serial.h
-adapter-an1388.o: adapter-an1388.c adapter.h hidapi/hidapi.h pic32.h
+adapter-an1388.o: adapter-an1388.c adapter.h hidapi/hidapi/hidapi.h pic32.h
 adapter-bitbang.o: adapter-bitbang.c adapter.h pic32.h serial.h \
   bitbang/ICSP_v1E.inc
-adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi.h pic32.h
+adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi/hidapi.h pic32.h
 adapter-mpsse.o: adapter-mpsse.c adapter.h pic32.h
-adapter-pickit2.o: adapter-pickit2.c adapter.h hidapi/hidapi.h pickit2.h \
+adapter-pickit2.o: adapter-pickit2.c adapter.h hidapi/hidapi/hidapi.h pickit2.h \
   pic32.h
 adapter-stk500v2.o: adapter-stk500v2.c adapter.h pic32.h serial.h
-adapter-uhb.o: adapter-uhb.c adapter.h hidapi/hidapi.h pic32.h
+adapter-uhb.o: adapter-uhb.c adapter.h hidapi/hidapi/hidapi.h pic32.h
 configure.o: configure.c target.h adapter.h
 executive.o: executive.c pic32.h
 family-mx1.o: family-mx1.c pic32.h
@@ -92,3 +90,8 @@ family-mz.o: family-mz.c pic32.h
 pic32prog.o: pic32prog.c target.h adapter.h serial.h localize.h
 serial.o: serial.c adapter.h
 target.o: target.c target.h adapter.h localize.h pic32.h
+
+hidapi/libusb/.libs/libhidapi-libusb.a:
+	if [ ! -f hidapi/configure ]; then cd hidapi && ./bootstrap; fi
+	cd hidapi && ./configure --enable-shared=no
+	make -C hidapi
