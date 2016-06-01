@@ -267,20 +267,16 @@ static void prog_enable (stk_adapter_t *a)
     }
 }
 
+/* This function does actually do anything on the PIC32 side for any
+ * known STK500 bootloader on the PIC32. (I.e. chipKIT) In addition,
+ * a bug in an early bootloader version does not respond when this
+ * command is sent. Thus PIC32Prog will fail to erase (and thus fail
+ * to program) any board with this early bootloader version.
+ * By simply retruning, PIC32Prog can be made to work with the early
+ * bootloader. 
+ */
 static void chip_erase (stk_adapter_t *a)
 {
-    unsigned char cmd [7] = { CMD_CHIP_ERASE_ISP,
-        150,                    /* erase delay */
-        0,                      /* poll method */
-        0xAC, 0x80, 0x00, 0x00  /* command */
-    };
-    unsigned char response [2];
-
-    if (! send_receive (a, cmd, 7, response, 2) || response[0] != cmd[0] ||
-        response[1] != STATUS_CMD_OK) {
-        fprintf (stderr, "Cannot erase chip.\n");
-        exit (-1);
-    }
 }
 
 static void prog_disable (stk_adapter_t *a)
@@ -331,6 +327,8 @@ static void load_address (stk_adapter_t *a, unsigned addr)
 
 static void flush_write_buffer (stk_adapter_t *a)
 {
+    static int first_time = 1;
+    
     unsigned char cmd [10+PAGE_NBYTES] = { CMD_PROGRAM_FLASH_ISP,
         PAGE_NBYTES >> 8, PAGE_NBYTES & 0xff, 0, 0, 0, 0, 0, 0, 0 };
     unsigned char response [2];
@@ -340,6 +338,23 @@ static void flush_write_buffer (stk_adapter_t *a)
 
     load_address (a, a->page_addr >> 1);
 
+    /* 
+     * An early chipKIT bootloader version does a whole-chip erase
+     * after the first CMD_PROGRAM_FLASH_ISP command, which can 
+     * take up to 4 seconds to complete. Thus the timeout needs
+     * to be at least this long so that PIC32Prog will not timeout
+     * during the erase cycle on that version of bootloader. 
+     */
+    if (first_time)
+    {
+        set_timeout(5000);
+        first_time = 0;
+    }
+    else
+    {
+        set_timeout(1000);
+    }
+  
     if (debug_level > 1)
         printf ("Programming page: %#x\n", a->page_addr);
     memcpy (cmd+10, a->page, PAGE_NBYTES);

@@ -135,6 +135,15 @@ printf("Unknown baud\n");
 }
 
 /*
+ * Call to set a new timeout value (if desired)
+ * before a read call.
+ */
+void set_timeout (int new_timeout)
+{
+    timeout_msec = new_timeout;
+}
+ 
+/*
  * Check whether the given speed in bits per second
  * is supported by the system.
  * Return 0 when not supported.
@@ -169,7 +178,20 @@ int serial_read (unsigned char *data, int len)
 {
 #if defined(__WIN32__) || defined(WIN32)
     DWORD got;
-
+    COMMTIMEOUTS ctmo;
+   
+    /* Reset the Windows RX timeout to the current timeout_msec
+     * value, as it may have changed since the last read.
+     */
+    memset (&ctmo, 0, sizeof(ctmo));
+    ctmo.ReadIntervalTimeout = 0;
+    ctmo.ReadTotalTimeoutMultiplier = 0;
+    ctmo.ReadTotalTimeoutConstant = timeout_msec;
+    if (! SetCommTimeouts (fd, &ctmo)) {
+        fprintf (stderr, "Cannot set timeouts in serial_read()\n");
+        return -1;
+    }
+  
     if (! ReadFile (fd, data, len, &got, 0)) {
         fprintf (stderr, "serial_read: read error\n");
         exit (-1);
