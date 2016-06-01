@@ -20,10 +20,26 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#include <usb.h>
+#include <libusb-1.0/libusb.h>
 
 #include "adapter.h"
 #include "pic32.h"
+
+struct olimex_devices {
+    uint16_t vid;
+    uint16_t pid;
+    const char *name;
+    uint8_t mhz;
+    uint16_t dir_control;
+    uint16_t trst_control;
+    uint8_t trst_inverted;
+    uint16_t sysrst_control;
+    uint8_t sysrst_inverted;
+    uint16_t led_control;
+    uint8_t led_inverted;
+    const char *product;
+};
+
 
 typedef struct {
     /* Common part */
@@ -31,7 +47,8 @@ typedef struct {
     const char *name;
 
     /* Device handle for libusb. */
-    usb_dev_handle *usbdev;
+    libusb_device_handle *usbdev;
+    libusb_context *context;
 
     /* Transmit buffer for MPSSE packet. */
     unsigned char output [256*16];
@@ -101,6 +118,17 @@ typedef struct {
 #define RTDO                    0x20
 #define WTMS                    0x40
 
+const struct olimex_devices devlist[] = {
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL}, 
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL}, 
+    { OLIMEX_VID,           OLIMEX_ARM_USB_OCD_H,   "Olimex ARM-USB-OCD-H",             30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL}, 
+    { OLIMEX_VID,           OLIMEX_MIPS_USB_OCD_H,  "Olimex MIPS-USB-OCD-H",            30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0800,  0, NULL}, 
+    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "TinCanTools Flyswatter",            6,  0x0cf0, 0x0010, 1,  0x0020,  1,   0x0c00,  1, "Flyswatter"}, 
+    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "Dangerous Prototypes Bus Blaster", 30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0000,  0, NULL}, 
+
+    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+};
+
 /*
  * Calculate checksum.
  */
@@ -136,11 +164,13 @@ static void bulk_write(mpsse_adapter_t *a, unsigned char *output, int nbytes)
             fprintf(stderr, "%c%02x", i ? '-' : ' ', output[i]);
         fprintf(stderr, "\n");
     }
-    bytes_written = usb_bulk_write(a->usbdev, IN_EP, (char*) output,
-        nbytes, 1000);
-    if (bytes_written < 0) {
+    
+    int ret = libusb_bulk_transfer(a->usbdev, IN_EP, (unsigned char*) output,
+        nbytes, &bytes_written, 1000);
+
+    if (ret != 0) {
         fprintf(stderr, "usb bulk write failed: %d: %s\n",
-            bytes_written, usb_strerror());
+            ret, libusb_strerror(ret));
         exit(-1);
     }
     if (bytes_written != nbytes)
@@ -168,9 +198,9 @@ static void mpsse_flush_output(mpsse_adapter_t *a)
     /* Get reply. */
     bytes_read = 0;
     while (bytes_read < a->bytes_to_read) {
-        n = usb_bulk_read(a->usbdev, OUT_EP, (char*) reply,
-            a->bytes_to_read - bytes_read + 2, 2000);
-        if (n < 0) {
+        int ret = libusb_bulk_transfer(a->usbdev, OUT_EP, (unsigned char*) reply,
+            a->bytes_to_read - bytes_read + 2, &n, 2000);
+        if (ret != 0) {
             fprintf(stderr, "usb bulk read failed\n");
             exit(-1);
         }
@@ -430,8 +460,8 @@ static void mpsse_close(adapter_t *adapter, int power_on)
     mpsse_reset(a, 0, 1, 1);
     mpsse_reset(a, 0, 0, 0);
 
-    usb_release_interface(a->usbdev, 0);
-    usb_close(a->usbdev);
+    libusb_release_interface(a->usbdev, 0);
+    libusb_close(a->usbdev);
     free(a);
 }
 
@@ -866,143 +896,93 @@ static void mpsse_verify_data(adapter_t *adapter,
 adapter_t *adapter_open_mpsse(void)
 {
     mpsse_adapter_t *a;
-    struct usb_bus *bus;
-    struct usb_device *dev;
-    char product [256];
+//    struct libusb_bus *bus;
+    unsigned char product [256];
+    int i;
 
     a = calloc(1, sizeof(*a));
     if (! a) {
         fprintf(stderr, "adapter_open_mpsse: out of memory\n");
         return 0;
     }
-    usb_init();
-    usb_find_busses();
-    usb_find_devices();
-    for (bus = usb_get_busses(); bus; bus = bus->next) {
-        for (dev = bus->devices; dev; dev = dev->next) {
-            if (dev->descriptor.idVendor == OLIMEX_VID &&
-                dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY) {
-                a->name = "Olimex ARM-USB-Tiny";
-                a->mhz = 6;
-                a->dir_control    = 0x0f10;
-                a->trst_control   = 0x0100;
-                a->trst_inverted  = 1;
-                a->sysrst_control = 0x0200;
-                a->led_control    = 0x0800;
-                goto found;
+    a->context = NULL;
+    int ret = libusb_init(&a->context);
+
+    if (ret != 0) {
+        fprintf(stderr, "libusb init failed: %d: %s\n",
+            ret, libusb_strerror(ret));
+        exit(-1);
+    }
+        
+    for (i = 0; devlist[i].vid; i++) {
+        a->usbdev = libusb_open_device_with_vid_pid(a->context, devlist[i].vid, devlist[i].pid);
+        if (a->usbdev != NULL) {
+            int match = 1;
+            if (devlist[i].product != NULL) {
+
+                struct libusb_device_descriptor desc = {0};
+                int rc = libusb_get_device_descriptor(libusb_get_device(a->usbdev), &desc);
+                if (rc != 0) {
+                    match = 0;
+                } else {
+                    rc = libusb_get_string_descriptor_ascii(a->usbdev, desc.iProduct, product, 256);
+
+                    if (strcmp((const char *)product, devlist[i].product) != 0) {
+                        match = 0;
+                    }
+                }
             }
-            if (dev->descriptor.idVendor == OLIMEX_VID &&
-                dev->descriptor.idProduct == OLIMEX_ARM_USB_TINY_H) {
-                a->name = "Olimex ARM-USB-Tiny-H";
-                a->mhz = 30;
-                a->dir_control    = 0x0f10;
-                a->trst_control   = 0x0100;
-                a->trst_inverted  = 1;
-                a->sysrst_control = 0x0200;
-                a->led_control    = 0x0800;
-                goto found;
-            }
-            if (dev->descriptor.idVendor == OLIMEX_VID &&
-                dev->descriptor.idProduct == OLIMEX_ARM_USB_OCD_H) {
-                a->name = "Olimex ARM-USB-OCD-H";
-                a->mhz = 30;
-                a->dir_control     = 0x0f10;
-                a->trst_control    = 0x0100;
-                a->trst_inverted   = 1;
-                a->sysrst_control  = 0x0200;
-                a->led_control     = 0x0800;
-                goto found;
-            }
-            if (dev->descriptor.idVendor == OLIMEX_VID &&
-                dev->descriptor.idProduct == OLIMEX_MIPS_USB_OCD_H) {
-                a->name = "Olimex MIPS-USB-OCD-H";
-                a->mhz = 30;
-                a->dir_control     = 0x0f10;
-                a->trst_control    = 0x0100;
-                a->trst_inverted   = 1;
-                a->sysrst_control  = 0x0200;
-                a->led_control     = 0x0800;
-                a->sysrst_inverted = 1;
-                goto found;
-            }
-            if (dev->descriptor.idVendor == DP_BUSBLASTER_VID &&
-                dev->descriptor.idProduct == DP_BUSBLASTER_PID) {
-                a->name = "Dangerous Prototypes Bus Blaster";
-                a->mhz = 30;
-                a->dir_control     = 0x0f10;
-                a->trst_control    = 0x0100;
-                a->trst_inverted   = 1;
-                a->sysrst_control  = 0x0200;
-                a->sysrst_inverted = 1;
+
+            if (match == 1) {
+                a->name = devlist[i].name;
+                a->mhz = devlist[i].mhz;
+                a->dir_control      = devlist[i].dir_control;
+                a->trst_control     = devlist[i].trst_control;
+                a->trst_inverted    = devlist[i].trst_inverted;
+                a->sysrst_control   = devlist[i].sysrst_control;
+                a->sysrst_inverted  = devlist[i].sysrst_inverted;
+                a->led_control      = devlist[i].led_control;
+                a->led_inverted     = devlist[i].led_inverted;
                 goto found;
             }
         }
     }
-    /*fprintf(stderr, "USB adapter not found: vid=%04x, pid=%04x\n",
-        OLIMEX_VID, OLIMEX_PID);*/
+
     free(a);
     return 0;
+
 found:
     /*fprintf(stderr, "found USB adapter: vid %04x, pid %04x, type %03x\n",
         dev->descriptor.idVendor, dev->descriptor.idProduct,
         dev->descriptor.bcdDevice);*/
-    a->usbdev = usb_open(dev);
-    if (! a->usbdev) {
-        fprintf(stderr, "%s: usb_open() failed\n", a->name);
-        free(a);
-        return 0;
-    }
-    if (dev->descriptor.iProduct) {
-        if (usb_get_string_simple(a->usbdev, dev->descriptor.iProduct,
-                                   product, sizeof(product)) > 0)
-        {
-            if (strcmp("Flyswatter", product) == 0) {
-                /* TinCanTools Flyswatter.
-                 * PID/VID the same as Dangerous Prototypes Bus Blaster. */
-                a->name = "TinCanTools Flyswatter";
-                a->mhz = 6;
-                a->dir_control     = 0x0cf0;
-                a->trst_control    = 0x0010;
-                a->trst_inverted   = 1;
-                a->sysrst_control  = 0x0020;
-                a->sysrst_inverted = 0;
-                a->led_control     = 0x0c00;
-                a->led_inverted    = 1;
-            }
-        }
+
+    ret = libusb_detach_kernel_driver(a->usbdev, 0);
+    if (ret != 0) {
+        fprintf(stderr, "Error detaching kernel driver: %d: %s\n",
+            ret, libusb_strerror(ret));
+        libusb_close(a->usbdev);
+        exit(-1);
     }
 
-#if ! defined(__CYGWIN32__) && ! defined(MINGW32) && ! defined(__APPLE__)
-    char driver_name [100];
-    if (usb_get_driver_np(a->usbdev, 0, driver_name, sizeof(driver_name)) == 0) {
-	if (usb_detach_kernel_driver_np(a->usbdev, 0) < 0) {
-            printf("%s: failed to detach the %s kernel driver.\n",
-                a->name, driver_name);
-            usb_close(a->usbdev);
-            free(a);
-            return 0;
-	}
-    }
-#endif
-    usb_claim_interface(a->usbdev, 0);
+    libusb_claim_interface(a->usbdev, 0);
 
     /* Reset the ftdi device. */
-    if (usb_control_msg(a->usbdev,
-        USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
+    if (libusb_control_transfer(a->usbdev,
+        LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT,
         SIO_RESET, 0, 1, 0, 0, 1000) != 0) {
         if (errno == EPERM)
             fprintf(stderr, "%s: superuser privileges needed.\n", a->name);
         else
             fprintf(stderr, "%s: FTDI reset failed\n", a->name);
-failed: usb_release_interface(a->usbdev, 0);
-        usb_close(a->usbdev);
+failed: libusb_release_interface(a->usbdev, 0);
+        libusb_close(a->usbdev);
         free(a);
         return 0;
     }
 
     /* MPSSE mode. */
-    if (usb_control_msg(a->usbdev,
-        USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
+    if (libusb_control_transfer(a->usbdev,
+        LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT,
         SIO_SET_BITMODE, 0x20b, 1, 0, 0, 1000) != 0) {
         fprintf(stderr, "%s: can't set sync mpsse mode\n", a->name);
         goto failed;
@@ -1010,15 +990,15 @@ failed: usb_release_interface(a->usbdev, 0);
 
     /* Optimal latency timer is 1 for slow mode and 0 for fast mode. */
     unsigned latency_timer = (a->mhz > 6) ? 0 : 1;
-    if (usb_control_msg(a->usbdev,
-        USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_OUT,
+    if (libusb_control_transfer(a->usbdev,
+        LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_OUT,
         SIO_SET_LATENCY_TIMER, latency_timer, 1, 0, 0, 1000) != 0) {
         fprintf(stderr, "%s: unable to set latency timer\n", a->name);
         goto failed;
     }
-    if (usb_control_msg(a->usbdev,
-        USB_TYPE_VENDOR | USB_RECIP_DEVICE | USB_ENDPOINT_IN,
-        SIO_GET_LATENCY_TIMER, 0, 1, (char*) &latency_timer, 1, 1000) != 1) {
+    if (libusb_control_transfer(a->usbdev,
+        LIBUSB_REQUEST_TYPE_VENDOR | LIBUSB_RECIPIENT_DEVICE | LIBUSB_ENDPOINT_IN,
+        SIO_GET_LATENCY_TIMER, 0, 1, (unsigned char*) &latency_timer, 1, 1000) != 1) {
         fprintf(stderr, "%s: unable to get latency timer\n", a->name);
         goto failed;
     }

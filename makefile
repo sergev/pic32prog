@@ -33,15 +33,15 @@ PROG_OBJS       = pic32prog.o target.o executive.o hid.o serial.o \
 # Olimex ARM-USB-Tiny JTAG adapter: requires libusb-0.1
 CFLAGS          += -DUSE_MPSSE
 PROG_OBJS       += adapter-mpsse.o
-ifeq ($(UNAME),Linux)
-    # Use 'sudo port install libusb-0.1-dev'
-    LIBS        += -Wl,-Bstatic -lusb -Wl,-Bdynamic
-endif
-ifeq ($(UNAME),Darwin)
-    # Use 'sudo port install libusb-legacy'
-    CFLAGS      += -I/opt/local/include/libusb-legacy
-    LIBS        += /opt/local/lib/libusb-legacy/libusb-legacy.a
-endif
+#ifeq ($(UNAME),Linux)
+#    # Use 'sudo port install libusb-0.1-dev'
+#    LIBS        += -Wl,-Bstatic -lusb -Wl,-Bdynamic
+#endif
+#ifeq ($(UNAME),Darwin)
+#    # Use 'sudo port install libusb-legacy'
+#    CFLAGS      += -I/opt/local/include/libusb-legacy
+#    LIBS        += /opt/local/lib/libusb-legacy/libusb-legacy.a
+#endif
 
 all:            pic32prog
 
