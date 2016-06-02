@@ -1,7 +1,6 @@
-
 CC		= gcc
 GITCOUNT        = $(shell git rev-list HEAD --count)
-CFLAGS          = -Wall -g -O -Ilibusb-win32 -Ihidapi -DGITCOUNT='"$(GITCOUNT)"'
+CFLAGS          = -Wall -g -O -Ihidapi -DGITCOUNT='"$(GITCOUNT)"'
 LDFLAGS         = -s
 
 # Windows
@@ -13,8 +12,11 @@ PROG_OBJS       = pic32prog.o target.o executive.o hid.o serial.o \
 		  adapter-bitbang.o adapter-stk500v2.o adapter-uhb.o \
                   adapter-an1388-uart.o configure.o \
                   family-mx1.o family-mx3.o family-mz.o
-#PROG_OBJS      += adapter-mpsse.o
-#LIBS           += -Llibusb-win32/x86 -lusb0_x86
+
+# JTAG adapters based on FT2232 chip
+CFLAGS         += -Ilibusb-win32 -DUSE_MPSSE
+PROG_OBJS      += adapter-mpsse.o
+LIBS           += -Llibusb-win32 -lusb-1.0
 
 all:		pic32prog.exe
 
@@ -27,12 +29,10 @@ hid.o:          $(HIDSRC)
 ###
 adapter-an1388.o: adapter-an1388.c adapter.h hidapi/hidapi.h pic32.h
 adapter-an1388-uart.o: adapter-an1388-uart.c adapter.h pic32.h serial.h
-adapter-bitbang.o: adapter-bitbang.c adapter.h pic32.h serial.h \
- bitbang/ICSP_v1E.inc
+adapter-bitbang.o: adapter-bitbang.c adapter.h pic32.h serial.h bitbang/ICSP_v1E.inc
 adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi.h pic32.h
-adapter-mpsse.o: adapter-mpsse.c libusb-win32/usb.h adapter.h pic32.h
-adapter-pickit2.o: adapter-pickit2.c adapter.h hidapi/hidapi.h pickit2.h \
- pic32.h
+adapter-mpsse.o: adapter-mpsse.c libusb-win32/libusb-1.0/libusb.h adapter.h pic32.h
+adapter-pickit2.o: adapter-pickit2.c adapter.h hidapi/hidapi.h pickit2.h pic32.h
 adapter-stk500v2.o: adapter-stk500v2.c adapter.h pic32.h serial.h
 adapter-uhb.o: adapter-uhb.c adapter.h hidapi/hidapi.h pic32.h
 configure.o: configure.c target.h adapter.h

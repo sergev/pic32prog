@@ -25,7 +25,7 @@
 #include "adapter.h"
 #include "pic32.h"
 
-struct olimex_devices {
+typedef struct {
     uint16_t vid;
     uint16_t pid;
     const char *name;
@@ -38,8 +38,7 @@ struct olimex_devices {
     uint16_t led_control;
     uint8_t led_inverted;
     const char *product;
-};
-
+} device_t;
 
 typedef struct {
     /* Common part */
@@ -118,15 +117,14 @@ typedef struct {
 #define RTDO                    0x20
 #define WTMS                    0x40
 
-const struct olimex_devices devlist[] = {
-    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL}, 
-    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL}, 
-    { OLIMEX_VID,           OLIMEX_ARM_USB_OCD_H,   "Olimex ARM-USB-OCD-H",             30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL}, 
-    { OLIMEX_VID,           OLIMEX_MIPS_USB_OCD_H,  "Olimex MIPS-USB-OCD-H",            30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0800,  0, NULL}, 
-    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "TinCanTools Flyswatter",            6,  0x0cf0, 0x0010, 1,  0x0020,  1,   0x0c00,  1, "Flyswatter"}, 
-    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "Dangerous Prototypes Bus Blaster", 30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0000,  0, NULL}, 
-
-    { 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
+static const device_t devlist[] = {
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_OCD_H,   "Olimex ARM-USB-OCD-H",             30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL},
+    { OLIMEX_VID,           OLIMEX_MIPS_USB_OCD_H,  "Olimex MIPS-USB-OCD-H",            30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0800,  0, NULL},
+    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "TinCanTools Flyswatter",            6,  0x0cf0, 0x0010, 1,  0x0020,  1,   0x0c00,  1, "Flyswatter"},
+    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "Dangerous Prototypes Bus Blaster", 30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0000,  0, NULL},
+    { 0 }
 };
 
 /*
@@ -164,7 +162,7 @@ static void bulk_write(mpsse_adapter_t *a, unsigned char *output, int nbytes)
             fprintf(stderr, "%c%02x", i ? '-' : ' ', output[i]);
         fprintf(stderr, "\n");
     }
-    
+
     int ret = libusb_bulk_transfer(a->usbdev, IN_EP, (unsigned char*) output,
         nbytes, &bytes_written, 1000);
 
@@ -913,7 +911,7 @@ adapter_t *adapter_open_mpsse(void)
             ret, libusb_strerror(ret));
         exit(-1);
     }
-        
+
     for (i = 0; devlist[i].vid; i++) {
         a->usbdev = libusb_open_device_with_vid_pid(a->context, devlist[i].vid, devlist[i].pid);
         if (a->usbdev != NULL) {

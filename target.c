@@ -297,6 +297,12 @@ void mdelay(unsigned msec)
 {
     Sleep(msec);
 }
+
+int __ms_vsnprintf(char *str, size_t size, const char *format, va_list ap)
+{
+    // Needed to link the libusb-win32/libusb-1.0.a library.
+    return 0;
+}
 #else
 /*
  * Delay in milliseconds: Unix.
