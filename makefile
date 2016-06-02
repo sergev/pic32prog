@@ -33,6 +33,11 @@ PROG_OBJS       = pic32prog.o target.o executive.o hid.o serial.o \
 # JTAG adapters based on FT2232 chip
 CFLAGS          += -DUSE_MPSSE
 PROG_OBJS       += adapter-mpsse.o
+ifeq ($(UNAME),Darwin)
+    # Use 'sudo port install libusb'
+    CFLAGS      += -I/opt/local/include
+    LIBS        += /opt/local/lib/libusb-1.0.a -lobjc
+endif
 
 all:            pic32prog
 
