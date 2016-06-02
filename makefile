@@ -2,20 +2,19 @@ CC              = gcc
 
 GITCOUNT        = $(shell git rev-list HEAD --count)
 UNAME           = $(shell uname)
-CFLAGS          = -Wall -g -O -Ihidapi -DGITCOUNT='"$(GITCOUNT)"'
+CFLAGS          = -Wall -g -O -Ihidapi/hidapi -DGITCOUNT='"$(GITCOUNT)"'
 LDFLAGS         = -g
 
 # Linux
 ifeq ($(UNAME),Linux)
-    CFLAGS      += -I./hidapi/hidapi/
-    LDFLAGS     += -L./hidapi/libusb/.libs/
-    LIBS        += -Wl,-Bstatic -lhidapi-libusb -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
-    HIDLIB      =  hidapi/libusb/.libs/libhidapi-libusb.a
+    LIBS        += -Wl,-Bstatic -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
+    HIDLIB      = hidapi/libusb/.libs/libhidapi-libusb.a
 endif
 
 # Mac OS X
 ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation
+    HIDLIB      = hidapi/mac/.libs/libhidapi.a
     UNIV_ARCHS  = $(shell grep '^universal_archs' /opt/local/etc/macports/macports.conf)
     ifneq ($(findstring i386,$(UNIV_ARCHS)),)
         CC      += -arch i386
@@ -68,6 +67,12 @@ clean:
 install:	pic32prog #pic32prog-ru.mo
 		install -c -s pic32prog /usr/local/bin/pic32prog
 #		install -c -m 444 pic32prog-ru.mo /usr/local/share/locale/ru/LC_MESSAGES/pic32prog.mo
+
+$(HIDLIB):
+		if [ ! -f hidapi/configure ]; then cd hidapi && ./bootstrap; fi
+		cd hidapi && ./configure --enable-shared=no CFLAGS='-arch i386 -arch x86_64'
+		make -C hidapi
+
 ###
 adapter-an1388-uart.o: adapter-an1388-uart.c adapter.h pic32.h serial.h
 adapter-an1388.o: adapter-an1388.c adapter.h hidapi/hidapi/hidapi.h pic32.h
@@ -87,8 +92,3 @@ family-mz.o: family-mz.c pic32.h
 pic32prog.o: pic32prog.c target.h adapter.h serial.h localize.h
 serial.o: serial.c adapter.h
 target.o: target.c target.h adapter.h localize.h pic32.h
-
-hidapi/libusb/.libs/libhidapi-libusb.a:
-	if [ ! -f hidapi/configure ]; then cd hidapi && ./bootstrap; fi
-	cd hidapi && ./configure --enable-shared=no
-	make -C hidapi
