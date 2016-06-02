@@ -4,6 +4,7 @@ GITCOUNT        = $(shell git rev-list HEAD --count)
 UNAME           = $(shell uname)
 CFLAGS          = -Wall -g -O -Ihidapi/hidapi -DGITCOUNT='"$(GITCOUNT)"'
 LDFLAGS         = -g
+CCARCH          =
 
 # Linux
 ifeq ($(UNAME),Linux)
@@ -17,11 +18,12 @@ ifeq ($(UNAME),Darwin)
     HIDLIB      = hidapi/mac/.libs/libhidapi.a
     UNIV_ARCHS  = $(shell grep '^universal_archs' /opt/local/etc/macports/macports.conf)
     ifneq ($(findstring i386,$(UNIV_ARCHS)),)
-        CC      += -arch i386
+        CCARCH  += -arch i386
     endif
     ifneq ($(findstring x86_64,$(UNIV_ARCHS)),)
-        CC      += -arch x86_64
+        CCARCH  += -arch x86_64
     endif
+    CC          += $(CCARCH)
 endif
 
 PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
@@ -68,9 +70,12 @@ install:	pic32prog #pic32prog-ru.mo
 		install -c -s pic32prog /usr/local/bin/pic32prog
 #		install -c -m 444 pic32prog-ru.mo /usr/local/share/locale/ru/LC_MESSAGES/pic32prog.mo
 
-$(HIDLIB):
+hidapi/hidapi/hidapi.h:
+		git submodule update --init
+
+$(HIDLIB):      hidapi/hidapi/hidapi.h
 		if [ ! -f hidapi/configure ]; then cd hidapi && ./bootstrap; fi
-		cd hidapi && ./configure --enable-shared=no CFLAGS='-arch i386 -arch x86_64'
+		cd hidapi && ./configure --enable-shared=no CFLAGS='$(CCARCH)'
 		make -C hidapi
 
 ###
