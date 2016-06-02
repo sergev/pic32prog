@@ -1,10 +1,10 @@
 CC              = gcc
 GITCOUNT        = $(shell git rev-list HEAD --count)
 CFLAGS          = -Wall -g -O -DMINGW32 -Ihidapi/hidapi -DGITCOUNT='"$(GITCOUNT)"'
-LDFLAGS         = -s -Lhidapi/windows/.libs
+LDFLAGS         = -s
 
 # Windows
-LIBS            += -lhidapi -lsetupapi
+LIBS            += -Lhidapi/windows/.libs -lhidapi -lsetupapi
 
 PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o\
@@ -32,17 +32,17 @@ pic32prog.exe:  $(PROG_OBJS)
 		$(CC) $(LDFLAGS) -o $@ $(PROG_OBJS) $(LIBS)
 
 hidapi/windows/.libs/libhidapi.a:
-		cd hidapi && ./bootstrap && ./configure --host=i686-w64-mingw32 && make
+		cd hidapi && ./bootstrap && ./configure --host=i586-mingw32msvc && make
 
 ###
-adapter-an1388.o: adapter-an1388.c adapter.h pic32.h
+adapter-an1388.o: adapter-an1388.c adapter.h hidapi/hidapi/hidapi.h pic32.h
 adapter-an1388-uart.o: adapter-an1388-uart.c adapter.h pic32.h serial.h
 adapter-bitbang.o: adapter-bitbang.c adapter.h pic32.h serial.h bitbang/ICSP_v1E.inc
-adapter-hidboot.o: adapter-hidboot.c adapter.h pic32.h
+adapter-hidboot.o: adapter-hidboot.c adapter.h hidapi/hidapi/hidapi.h pic32.h
 adapter-mpsse.o: adapter-mpsse.c libusb-win32/libusb-1.0/libusb.h adapter.h pic32.h
-adapter-pickit2.o: adapter-pickit2.c adapter.h pickit2.h pic32.h
+adapter-pickit2.o: adapter-pickit2.c adapter.h hidapi/hidapi/hidapi.h pickit2.h pic32.h
 adapter-stk500v2.o: adapter-stk500v2.c adapter.h pic32.h serial.h
-adapter-uhb.o: adapter-uhb.c adapter.h pic32.h
+adapter-uhb.o: adapter-uhb.c adapter.h hidapi/hidapi/hidapi.h pic32.h
 configure.o: configure.c target.h adapter.h
 executive.o: executive.c pic32.h
 family-mx1.o: family-mx1.c pic32.h
