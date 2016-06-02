@@ -287,6 +287,21 @@ static const struct {
     { 0 },
 };
 
+/*
+ * Table of supported USB protocols.
+ */
+static const struct {
+    const char *prefix;
+    adapter_t *(*func)(int vid, int pid, const char *serial);
+} usb_tab[] = {
+    { "pickit2",    adapter_open_pickit2        },
+    { "pickit3",    adapter_open_pickit3        },
+    { "hidboot",    adapter_open_hidboot        },
+    { "an1388",     adapter_open_an1388         },
+    { "uhb",        adapter_open_uhb            },
+    { 0 },
+};
+
 #if defined(__CYGWIN32__) || defined(MINGW32)
 /*
  * Delay in milliseconds: Windows.
@@ -317,22 +332,58 @@ void mdelay(unsigned msec)
  * Open USB adapter, detected by vendor/product ID.
  * Return a pointer to adapter structure, or 0 when not found.
  */
-static adapter_t *open_usb_adapter()
+static adapter_t *open_usb_adapter(const char *port_name)
 {
-    adapter_t *a;
+    char *delimiter;
+    const char *serial = 0;
+    int prefix_len, i, vid, pid;
 
-    a = adapter_open_pickit();
+    if (!port_name) {
+        /* Autodetect the device from a list of known adapters. */
+        adapter_t *a = adapter_open_pickit2(0, 0, 0);
+        if (! a)
+            a = adapter_open_pickit3(0, 0, 0);
 #ifdef USE_MPSSE
-    if (! a)
-        a = adapter_open_mpsse();
+        if (! a)
+            a = adapter_open_mpsse(0, 0, 0);
 #endif
-    if (! a)
-        a = adapter_open_hidboot();
-    if (! a)
-        a = adapter_open_an1388();
-    if (! a)
-        a = adapter_open_uhb();
-    return a;
+        if (! a)
+            a = adapter_open_hidboot(0, 0, 0);
+        if (! a)
+            a = adapter_open_an1388(0, 0, 0);
+        if (! a)
+            a = adapter_open_uhb(0, 0, 0);
+        return a;
+    }
+
+    /* Get protocol prefix. */
+    delimiter = strchr(port_name, ':');
+    if (! delimiter)
+        return 0;
+    prefix_len = delimiter - port_name;
+
+    /* Find prefix in the protocol table. */
+    for (i=0; usb_tab[i].prefix; i++) {
+        int len = strlen(usb_tab[i].prefix);
+        if (prefix_len == len &&
+            strncasecmp(port_name, usb_tab[i].prefix, len) == 0) {
+            goto found;
+        }
+    }
+    fprintf(stderr, "%s: Unknown USB protocol\n", port_name);
+    return 0;
+
+found:
+    vid = strtoul(delimiter+1, &delimiter, 16);
+    if (*delimiter != ':') {
+        fprintf(stderr, "%s: Incorrect VID:PID value\n", port_name);
+        return 0;
+    }
+    pid = strtoul(delimiter+1, &delimiter, 16);
+    if (*delimiter == ':')
+        serial = delimiter+1;
+
+    return usb_tab[i].func(vid, pid, serial);
 }
 
 /*
@@ -368,6 +419,36 @@ static adapter_t *open_serial_adapter(const char *port_name, int baud_rate)
 }
 
 /*
+ * Parse the name of the device.
+ * Return 1 in case of USB device (0 for serial).
+ */
+static int is_usb_device(const char *port_name)
+{
+    const char *delimiter;
+
+    /* No device name specified - search for a known USB device. */
+    if (!port_name)
+        return 1;
+
+    /* Get protocol prefix. */
+    delimiter = strchr(port_name, ':');
+    if (!delimiter) {
+        /* No protocol prefix - use serial protocol. */
+        return 0;
+    }
+
+    /* Get VID. */
+    delimiter = strchr(delimiter + 1, ':');
+    if (!delimiter) {
+        /* No VID - assume serial protocol. */
+        return 0;
+    }
+
+    /* Protocol prefix, VID and PID are present - use USB protocol. */
+    return 1;
+}
+
+/*
  * Connect to JTAG adapter.
  */
 target_t *target_open(const char *port_name, int baud_rate)
@@ -385,10 +466,10 @@ target_t *target_open(const char *port_name, int baud_rate)
     target_configure();
 
     /* Find adapter. */
-    if (port_name) {
-        t->adapter = open_serial_adapter(port_name, baud_rate);
+    if (is_usb_device(port_name)) {
+        t->adapter = open_usb_adapter(port_name);
     } else {
-        t->adapter = open_usb_adapter();
+        t->adapter = open_serial_adapter(port_name, baud_rate);
     }
     if (! t->adapter) {
         fprintf(stderr, "\n");

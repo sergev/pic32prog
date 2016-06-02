@@ -65,7 +65,7 @@ int skip_verify = 0;
 int debug_level;
 int power_on;
 target_t *target;
-const char *target_port;        /* Optional name of target serial port */
+const char *target_port;        /* Optional name of target serial or USB port */
 int target_speed = 115200;      /* Baud rate for serial port */
 int alternate_speed = 115200;   /* Alternate speed for serial port */
 char *progname;
@@ -795,7 +795,7 @@ usage:
         printf("       file.bin            Code file in binary format\n");
         printf("       -v                  Verify only\n");
         printf("       -r                  Read mode\n");
-        printf("       -d device           Use serial device\n");
+        printf("       -d device           Use specified serial or USB device\n");
         printf("       -b baudrate         Serial speed, default 115200\n");
         printf("       -B alt_baud         Request an alternative baud rate\n");
         printf("       -e                  Erase chip\n");

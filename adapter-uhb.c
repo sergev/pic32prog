@@ -251,14 +251,23 @@ static void uhb_erase_chip(adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_uhb(void)
+adapter_t *adapter_open_uhb(int vid, int pid, const char *serial)
 {
     uhb_adapter_t *a;
     hid_device *hiddev;
 
-    hiddev = hid_open(MIKROE_VID, MIKROEBOOT_PID, 0);
+    if (vid) {
+        wchar_t buf[256];
+        if (serial)
+            mbstowcs(buf, serial, 256);
+        hiddev = hid_open(vid, pid, serial ? buf : 0);
+    } else
+        hiddev = hid_open(MIKROE_VID, MIKROEBOOT_PID, 0);
+
     if (! hiddev) {
-        /*fprintf(stderr, "HID bootloader not found\n");*/
+        if (vid)
+            fprintf(stderr, "UHB bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
+                vid, pid, serial ? : "(none)");
         return 0;
     }
     a = calloc(1, sizeof(*a));

@@ -63,7 +63,7 @@ pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo: pic32prog-ru.po
 		cp pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo
 
 clean:
-		rm -f *~ *.o core pic32prog adapter-mpsse pic32prog.po
+		rm -f *~ *.o core pic32prog adapter-mpsse pic32prog.po hidapi/ar-lib hidapi/compile
 		if [ -f hidapi/Makefile ]; then make -C hidapi clean; fi
 
 install:	pic32prog #pic32prog-ru.mo

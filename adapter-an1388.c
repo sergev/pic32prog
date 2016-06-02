@@ -364,15 +364,23 @@ static void an1388_erase_chip(adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_an1388(void)
+adapter_t *adapter_open_an1388(int vid, int pid, const char *serial)
 {
     an1388_adapter_t *a;
     hid_device *hiddev;
 
-    hiddev = hid_open(MICROCHIP_VID, BOOTLOADER_PID, 0);
+    if (vid) {
+        wchar_t buf[256];
+        if (serial)
+            mbstowcs(buf, serial, 256);
+        hiddev = hid_open(vid, pid, serial ? buf : 0);
+    } else
+        hiddev = hid_open(MICROCHIP_VID, BOOTLOADER_PID, 0);
+
     if (! hiddev) {
-        /*fprintf(stderr, "AN1388 bootloader not found: vid=%04x, pid=%04x\n",
-            MICROCHIP_VID, BOOTLOADER_PID);*/
+        if (vid)
+            fprintf(stderr, "AN1388 bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
+                vid, pid, serial ? : "(none)");
         return 0;
     }
     a = calloc(1, sizeof(*a));

@@ -890,11 +890,11 @@ static void mpsse_verify_data(adapter_t *adapter,
  * Initialize adapter F2232.
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
+ * Parameters vid, pid and serial are not used.
  */
-adapter_t *adapter_open_mpsse(void)
+adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial)
 {
     mpsse_adapter_t *a;
-//    struct libusb_bus *bus;
     unsigned char product [256];
     int i;
 

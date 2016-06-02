@@ -818,24 +818,10 @@ static void pickit_erase_chip(adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_pickit(void)
+static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
 {
     pickit_adapter_t *a;
-    hid_device *hiddev;
-    int is_pk3 = 0;
 
-    hiddev = hid_open(MICROCHIP_VID, PICKIT2_PID, 0);
-    if (! hiddev) {
-        hiddev = hid_open(MICROCHIP_VID, PICKIT3_PID, 0);
-        if (! hiddev)
-            hiddev = hid_open(MICROCHIP_VID, CHIPKIT_PID, 0);
-        if (! hiddev) {
-            /*fprintf(stderr, "HID bootloader not found: vid=%04x, pid=%04x\n",
-                MICROCHIP_VID, BOOTLOADER_PID);*/
-            return 0;
-        }
-        is_pk3 = 1;
-    }
     a = calloc(1, sizeof(*a));
     if (! a) {
         fprintf(stderr, "Out of memory\n");
@@ -1015,4 +1001,58 @@ adapter_t *adapter_open_pickit(void)
     a->adapter.program_row = pickit_program_row;
     a->adapter.program_quad_word = pickit_program_quad_word;
     return &a->adapter;
+}
+
+/*
+ * Initialize PICkit2 adapter.
+ * Return a pointer to a data structure, allocated dynamically.
+ * When adapter not found, return 0.
+ */
+adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial)
+{
+    hid_device *hiddev;
+
+    if (vid) {
+        wchar_t buf[256];
+        if (serial)
+            mbstowcs(buf, serial, 256);
+        hiddev = hid_open(vid, pid, serial ? buf : 0);
+    } else {
+        hiddev = hid_open(MICROCHIP_VID, PICKIT2_PID, 0);
+    }
+    if (! hiddev) {
+        if (vid)
+            fprintf(stderr, "PICkit2 not found: vid=%04x, pid=%04x, serial=%s\n",
+                vid, pid, serial ? : "(none)");
+        return 0;
+    }
+    return open_pickit(hiddev, 0);
+}
+
+/*
+ * Initialize PICkit3 adapter.
+ * Return a pointer to a data structure, allocated dynamically.
+ * When adapter not found, return 0.
+ */
+adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial)
+{
+    hid_device *hiddev;
+
+    if (vid) {
+        wchar_t buf[256];
+        if (serial)
+            mbstowcs(buf, serial, 256);
+        hiddev = hid_open(vid, pid, serial ? buf : 0);
+    } else {
+        hiddev = hid_open(MICROCHIP_VID, PICKIT3_PID, 0);
+        if (! hiddev)
+            hiddev = hid_open(MICROCHIP_VID, CHIPKIT_PID, 0);
+    }
+    if (! hiddev) {
+        if (vid)
+            fprintf(stderr, "PICkit3 not found: vid=%04x, pid=%04x, serial=%s\n",
+                vid, pid, serial ? : "(none)");
+        return 0;
+    }
+    return open_pickit(hiddev, 1);
 }
