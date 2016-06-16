@@ -53,6 +53,8 @@ unsigned flash_bytes;
 unsigned devcfg_offset;         /* Offset of devcfg registers in boot data */
 int total_bytes;
 
+unsigned long open_retries = 1;
+
 #define devcfg3 (*(unsigned*) &boot_data [devcfg_offset])
 #define devcfg2 (*(unsigned*) &boot_data [devcfg_offset + 4])
 #define devcfg1 (*(unsigned*) &boot_data [devcfg_offset + 8])
@@ -722,7 +724,7 @@ int main(int argc, char **argv)
 #endif
     signal(SIGTERM, interrupted);
 
-    while ((ch = getopt_long(argc, argv, "vDhrpeCVWSd:b:B:",
+    while ((ch = getopt_long(argc, argv, "vDhrpeCVWSd:b:B:R:",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -775,6 +777,9 @@ int main(int argc, char **argv)
         case 'S':
             ++skip_verify;
             continue;
+        case 'R':
+            open_retries = strtoul(optarg, 0, 0);
+            continue;
         }
 usage:
         printf("%s.\n\n", copyright);
@@ -806,6 +811,7 @@ usage:
         printf("       -C, --copying       Print copying information\n");
         printf("       -W, --warranty      Print warranty information\n");
         printf("       -S, --skip-verify   Skip the write verification step\n");
+        printf("       -R,                 Retry opening the port this number of times\n");
         printf("\n");
         return 0;
     }

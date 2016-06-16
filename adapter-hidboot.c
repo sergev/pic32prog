@@ -234,7 +234,7 @@ static void hidboot_erase_chip(adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_hidboot(int vid, int pid, const char *serial)
+adapter_t *adapter_open_hidboot(int vid, int pid, const char *serial, int report)
 {
     hidboot_adapter_t *a;
     hid_device *hiddev;
@@ -253,7 +253,7 @@ adapter_t *adapter_open_hidboot(int vid, int pid, const char *serial)
     }
     if (! hiddev) {
         if (vid)
-            fprintf(stderr, "HID bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
+            if (report) fprintf(stderr, "HID bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
         return 0;
     }

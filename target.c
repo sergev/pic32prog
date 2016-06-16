@@ -24,6 +24,8 @@ extern print_func_t print_mx1;
 extern print_func_t print_mx3;
 extern print_func_t print_mz;
 
+extern unsigned long open_retries;
+
 /*
  * PIC32 families.
  */
@@ -292,7 +294,7 @@ static const struct {
  */
 static const struct {
     const char *prefix;
-    adapter_t *(*func)(int vid, int pid, const char *serial);
+    adapter_t *(*func)(int vid, int pid, const char *serial, int report);
 } usb_tab[] = {
     { "pickit2",    adapter_open_pickit2        },
     { "pickit3",    adapter_open_pickit3        },
@@ -332,7 +334,7 @@ void mdelay(unsigned msec)
  * Open USB adapter, detected by vendor/product ID.
  * Return a pointer to adapter structure, or 0 when not found.
  */
-static adapter_t *open_usb_adapter(const char *port_name)
+static adapter_t *open_usb_adapter(const char *port_name, int report)
 {
     char *delimiter;
     const char *serial = 0;
@@ -340,19 +342,19 @@ static adapter_t *open_usb_adapter(const char *port_name)
 
     if (!port_name) {
         /* Autodetect the device from a list of known adapters. */
-        adapter_t *a = adapter_open_pickit2(0, 0, 0);
+        adapter_t *a = adapter_open_pickit2(0, 0, 0, report);
         if (! a)
-            a = adapter_open_pickit3(0, 0, 0);
+            a = adapter_open_pickit3(0, 0, 0, report);
 #ifdef USE_MPSSE
         if (! a)
-            a = adapter_open_mpsse(0, 0, 0);
+            a = adapter_open_mpsse(0, 0, 0, report);
 #endif
         if (! a)
-            a = adapter_open_hidboot(0, 0, 0);
+            a = adapter_open_hidboot(0, 0, 0, report);
         if (! a)
-            a = adapter_open_an1388(0, 0, 0);
+            a = adapter_open_an1388(0, 0, 0, report);
         if (! a)
-            a = adapter_open_uhb(0, 0, 0);
+            a = adapter_open_uhb(0, 0, 0, report);
         return a;
     }
 
@@ -383,7 +385,7 @@ found:
     if (*delimiter == ':')
         serial = delimiter+1;
 
-    return usb_tab[i].func(vid, pid, serial);
+    return usb_tab[i].func(vid, pid, serial, report);
 }
 
 /*
@@ -466,10 +468,25 @@ target_t *target_open(const char *port_name, int baud_rate)
     target_configure();
 
     /* Find adapter. */
-    if (is_usb_device(port_name)) {
-        t->adapter = open_usb_adapter(port_name);
-    } else {
-        t->adapter = open_serial_adapter(port_name, baud_rate);
+    if (open_retries == 0) open_retries = 1;
+
+    if (open_retries > 1) {
+        fprintf(stdout, "\n*** Enter programming mode now. ***\n\n");
+    }
+
+    while(open_retries > 0) {
+        if (is_usb_device(port_name)) {
+            t->adapter = open_usb_adapter(port_name, open_retries == 1);
+        } else {
+            t->adapter = open_serial_adapter(port_name, baud_rate);
+        }
+
+        if (t->adapter) break;
+
+        open_retries--;
+        if (open_retries > 0) {
+            usleep(500000);
+        }
     }
     if (! t->adapter) {
         fprintf(stderr, "\n");

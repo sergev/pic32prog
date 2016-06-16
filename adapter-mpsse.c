@@ -892,7 +892,7 @@ static void mpsse_verify_data(adapter_t *adapter,
  * When adapter not found, return 0.
  * Parameters vid, pid and serial are not used.
  */
-adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial)
+adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial, int report)
 {
     mpsse_adapter_t *a;
     unsigned char product [256];

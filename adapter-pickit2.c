@@ -1008,7 +1008,7 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial)
+adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial, int report)
 {
     hid_device *hiddev;
 
@@ -1022,7 +1022,7 @@ adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial)
     }
     if (! hiddev) {
         if (vid)
-            fprintf(stderr, "PICkit2 not found: vid=%04x, pid=%04x, serial=%s\n",
+            if (report) fprintf(stderr, "PICkit2 not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
         return 0;
     }
@@ -1034,7 +1034,7 @@ adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial)
+adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial, int report)
 {
     hid_device *hiddev;
 
@@ -1050,7 +1050,7 @@ adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial)
     }
     if (! hiddev) {
         if (vid)
-            fprintf(stderr, "PICkit3 not found: vid=%04x, pid=%04x, serial=%s\n",
+            if (report) fprintf(stderr, "PICkit3 not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
         return 0;
     }

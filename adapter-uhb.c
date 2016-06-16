@@ -251,7 +251,7 @@ static void uhb_erase_chip(adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-adapter_t *adapter_open_uhb(int vid, int pid, const char *serial)
+adapter_t *adapter_open_uhb(int vid, int pid, const char *serial, int report)
 {
     uhb_adapter_t *a;
     hid_device *hiddev;
@@ -266,7 +266,7 @@ adapter_t *adapter_open_uhb(int vid, int pid, const char *serial)
 
     if (! hiddev) {
         if (vid)
-            fprintf(stderr, "UHB bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
+            if (report) fprintf(stderr, "UHB bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
         return 0;
     }
