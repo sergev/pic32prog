@@ -54,6 +54,8 @@ unsigned devcfg_offset;         /* Offset of devcfg registers in boot data */
 int total_bytes;
 
 unsigned long open_retries = 1;
+unsigned force;
+
 
 #define devcfg3 (*(unsigned*) &boot_data [devcfg_offset])
 #define devcfg2 (*(unsigned*) &boot_data [devcfg_offset + 4])
@@ -463,7 +465,7 @@ void do_program(char *filename)
     printf(_("         Data: %d bytes\n"), total_bytes);
 
     /* Verify DEVCFGx values. */
-    if (boot_used) {
+    if (boot_used && !force) {
         if (devcfg0 == 0xffffffff) {
             fprintf(stderr, _("DEVCFG values are missing -- check your HEX file!\n"));
             exit(1);
@@ -724,9 +726,12 @@ int main(int argc, char **argv)
 #endif
     signal(SIGTERM, interrupted);
 
-    while ((ch = getopt_long(argc, argv, "vDhrpeCVWSd:b:B:R:",
+    while ((ch = getopt_long(argc, argv, "fvDhrpeCVWSd:b:B:R:",
       long_options, 0)) != -1) {
         switch (ch) {
+        case 'f':
+            ++force;
+            continue;
         case 'v':
             ++verify_only;
             continue;
@@ -798,6 +803,7 @@ usage:
         printf("       file.srec           Code file in SREC format\n");
         printf("       file.hex            Code file in Intel HEX format\n");
         printf("       file.bin            Code file in binary format\n");
+        printf("       -f                  Force program (bypass DEVCFG check)\n");
         printf("       -v                  Verify only\n");
         printf("       -r                  Read mode\n");
         printf("       -d device           Use specified serial or USB device\n");

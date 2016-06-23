@@ -2,20 +2,21 @@ CC              = gcc
 
 GITCOUNT        = $(shell git rev-list HEAD --count)
 UNAME           = $(shell uname)
-CFLAGS          = -Wall -g -O -Ihidapi/hidapi -DGITCOUNT='"$(GITCOUNT)"'
+CFLAGS          = -Wall -g -O -Ihid/include -DGITCOUNT='"$(GITCOUNT)"'
 LDFLAGS         = -g
 CCARCH          =
 
 # Linux
 ifeq ($(UNAME),Linux)
-    LIBS        += -Wl,-Bstatic -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
-    HIDLIB      = hidapi/libusb/.libs/libhidapi-libusb.a
+    LIBS        += -Wl,-Bstatic `pkg-config libusb-1.0 --libs` -Wl,-Bdynamic -lpthread -ludev
+    CFLAGS      += $(shell pkg-config libusb-1.0 --cflags)
+    HIDLIB      = hid/linux/hid.o
 endif
 
 # Mac OS X
 ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation
-    HIDLIB      = hidapi/mac/.libs/libhidapi.a
+    HIDLIB      = hid/mac/hid.o
     UNIV_ARCHS  = $(shell grep '^universal_archs' /opt/local/etc/macports/macports.conf)
     ifneq ($(findstring i386,$(UNIV_ARCHS)),)
         CCARCH  += -arch i386
@@ -63,20 +64,11 @@ pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo: pic32prog-ru.po
 		cp pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo
 
 clean:
-		rm -f *~ *.o core pic32prog adapter-mpsse pic32prog.po hidapi/ar-lib hidapi/compile
-		if [ -f hidapi/Makefile ]; then make -C hidapi clean; fi
+		rm -f *~ *.o core pic32prog adapter-mpsse pic32prog.po hidapi/ar-lib hidapi/compile hid/linux/hid.o hid/mac/hid.o hid/windows/hid.o
 
 install:	pic32prog #pic32prog-ru.mo
 		install -c -s pic32prog /usr/local/bin/pic32prog
 #		install -c -m 444 pic32prog-ru.mo /usr/local/share/locale/ru/LC_MESSAGES/pic32prog.mo
-
-hidapi/hidapi/hidapi.h:
-		git submodule update --init
-
-$(HIDLIB):      hidapi/hidapi/hidapi.h
-		if [ ! -f hidapi/configure ]; then cd hidapi && ./bootstrap; fi
-		cd hidapi && ./configure --enable-shared=no CFLAGS='$(CCARCH)'
-		make -C hidapi
 
 ###
 adapter-an1388-uart.o: adapter-an1388-uart.c adapter.h pic32.h serial.h
