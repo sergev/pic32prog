@@ -11,7 +11,7 @@ PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
                   adapter-bitbang.o adapter-stk500v2.o adapter-uhb.o \
                   adapter-an1388-uart.o configure.o \
                   family-mx1.o family-mx3.o family-mz.o \
-                  hidapi/windows/.libs/libhidapi.a
+                  hid/windows/hid.o
 
 # JTAG adapters based on FT2232 chip
 CFLAGS         += -Ilibusb-win32 -DUSE_MPSSE

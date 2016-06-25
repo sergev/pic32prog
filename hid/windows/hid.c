@@ -622,9 +622,10 @@ int HID_API_EXPORT HID_API_CALL hid_write(hid_device *dev, const unsigned char *
 	} else {
 		/* Create a temporary buffer and copy the user's data
 		   into it, padding the rest with zeros. */
-		buf = (unsigned char *) malloc(dev->output_report_length);
+		buf = (unsigned char *) malloc(dev->output_report_length + 1);
 		memcpy(buf, data, length);
-		memset(buf + length, 0, dev->output_report_length - length);
+		memcpy(buf + 1, data, length);
+		memset(buf + length + 1, 0, dev->output_report_length - length);
 		length = dev->output_report_length;
 	}
 
