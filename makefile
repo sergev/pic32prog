@@ -12,6 +12,11 @@ ifeq ($(UNAME),Linux)
     HIDLIB      = hidapi/libusb/.libs/libhidapi-libusb.a
 endif
 
+# DragonFly BSD
+ifeq ($(UNAME),DragonFly)
+    LIBS        += -Wl,-Bstatic -lusb -Wl,-Bdynamic -lpthread -L/usr/local/lib -lhidapi
+endif
+
 # Mac OS X
 ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation

@@ -20,7 +20,11 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#if defined(__DragonFly__)
+#include <libusb.h>
+#else
 #include <libusb-1.0/libusb.h>
+#endif
 
 #include "adapter.h"
 #include "pic32.h"
