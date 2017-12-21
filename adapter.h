@@ -32,7 +32,7 @@ struct _adapter_t {
 
     void (*close)(adapter_t *a, int power_on);
     unsigned (*get_idcode)(adapter_t *a);
-    void (*load_executive)(adapter_t *a,
+    void (*load_executive)(adapter_t *a, const char *name,
         const unsigned *pe, unsigned nwords, unsigned pe_version);
     void (*read_data)(adapter_t *a, unsigned addr, unsigned nwords, unsigned *data);
     void (*verify_data)(adapter_t *a, unsigned addr, unsigned nwords, unsigned *data);

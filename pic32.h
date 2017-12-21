@@ -14,12 +14,15 @@
  * Programing executive.
  * Described in PIC32MX Flash Programming Specification.
  */
-#define	PIC32_PE_LOADER_LEN 42
+#define PIC32_PE_LOADER_LEN    42
+#define PIC32_PEMM_LOADER_LEN  22
 
 extern const unsigned short pic32_pe_loader[];
+extern const unsigned short pic32_pemm_loader[];
 extern const unsigned pic32_pemx1[];
 extern const unsigned pic32_pemx3[];
 extern const unsigned pic32_pemz[];
+extern const unsigned pic32_pemm[];
 
 /*
  * TAP instructions (5-bit).

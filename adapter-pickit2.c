@@ -51,6 +51,7 @@ typedef struct {
 #define MICROCHIP_VID           0x04d8
 #define PICKIT2_PID             0x0033  /* Microchip PICkit 2 */
 #define PICKIT3_PID             0x900a  /* Microchip PICkit 3 */
+#define ONBOARD_PID             0x8107  /* Onboard Programmer */
 #define CHIPKIT_PID             0x8108  /* chipKIT Programmer */
 
 /*
@@ -61,6 +62,11 @@ typedef struct {
 
 #define IFACE                   0
 #define TIMO_MSEC               1000
+
+#define WORD_AS_BYTES(w)  (unsigned char) (w), \
+                          (unsigned char) ((w) >> 8), \
+                          (unsigned char) ((w) >> 16), \
+                          (unsigned char) ((w) >> 24)
 
 static void pickit_send_buf(pickit_adapter_t *a, unsigned char *buf, unsigned nbytes)
 {
@@ -151,22 +157,69 @@ static void serial_execution(pickit_adapter_t *a)
         SCRIPT_JT2_XFERDATA8_LIT, MCHP_FLASH_ENABLE);
 }
 
-/*
- * Download programming executive (PE).
- */
-static void pickit_load_executive(adapter_t *adapter,
-    const unsigned *pe, unsigned nwords, unsigned pe_version)
+static void
+step1_6_mm(pickit_adapter_t *a, unsigned nwords)
 {
-    pickit_adapter_t *a = (pickit_adapter_t*) adapter;
 
-    //fprintf(stderr, "%s: load_executive\n", a->name);
-    a->use_executive = 1;
-    serial_execution(a);
+    if (debug_level > 0)
+        fprintf(stderr, "%s: download PE loader\n", a->name);
+    pickit_send(a, 20, CMD_CLEAR_DOWNLOAD_BUFFER,
+        CMD_DOWNLOAD_DATA, 8,          //----------------- step 1
+            WORD_AS_BYTES(0xa00041a4),
+            WORD_AS_BYTES(0x02005084),
+        CMD_EXECUTE_SCRIPT, 7,         //----------------- execute
+            SCRIPT_JT2_SENDCMD, TAP_SW_ETAP,
+            SCRIPT_JT2_SETMODE, 6, 0x1F,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF);
+    check_timeout(a, "step1");
 
-#define WORD_AS_BYTES(w)  (unsigned char) (w), \
-                          (unsigned char) ((w) >> 8), \
-                          (unsigned char) ((w) >> 16), \
-                          (unsigned char) ((w) >> 24)
+    // Download the PE loader
+    int i;
+    for (i=0; i<PIC32_PEMM_LOADER_LEN; i+=2) {
+        pickit_send(a, 20, CMD_CLEAR_DOWNLOAD_BUFFER,
+            CMD_DOWNLOAD_DATA, 12,          //------------- step 5
+                WORD_AS_BYTES((0x41A6
+                    | pic32_pemm_loader[i+1] << 16)),
+                WORD_AS_BYTES((0x50c6
+                    | pic32_pemm_loader[i] << 16)),
+                WORD_AS_BYTES(0x6e42eb40),
+            CMD_EXECUTE_SCRIPT, 3,          //------------- execute
+                SCRIPT_JT2_XFERINST_BUF,
+                SCRIPT_JT2_XFERINST_BUF,
+                SCRIPT_JT2_XFERINST_BUF);
+        check_timeout(a, "step5");
+    }
+
+    // Jump to PE loader
+    pickit_send(a, 47, CMD_CLEAR_DOWNLOAD_BUFFER,
+        CMD_DOWNLOAD_DATA, 20,          //----------------- step 6
+            WORD_AS_BYTES(0xa00041b9),
+            WORD_AS_BYTES(0x02015339),
+            WORD_AS_BYTES(0x0c004599),
+            WORD_AS_BYTES(0x0c000c00),
+            WORD_AS_BYTES(0x0c000c00),
+        CMD_EXECUTE_SCRIPT, 22,         //----------------- execute
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_XFERINST_BUF,
+            SCRIPT_JT2_SENDCMD, TAP_SW_ETAP,
+            SCRIPT_JT2_SETMODE, 6, 0x1F,
+            SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                0, 3, 0, 0xA0,                  // PE_ADDRESS = 0xA000_0300
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                (unsigned char) nwords,         // PE_SIZE
+                (unsigned char) (nwords >> 8),
+                0, 0);
+    check_timeout(a, "step6");
+}
+
+static void
+step1_6_mz(pickit_adapter_t *a, unsigned nwords)
+{
 
     if (debug_level > 0)
         fprintf(stderr, "%s: download PE loader\n", a->name);
@@ -249,6 +302,26 @@ static void pickit_load_executive(adapter_t *adapter,
                 (unsigned char) (nwords >> 8),
                 0, 0);
     check_timeout(a, "step6");
+}
+
+/*
+ * Download programming executive (PE).
+ */
+static void pickit_load_executive(adapter_t *adapter,
+    const char *name, const unsigned *pe, unsigned nwords,
+    unsigned pe_version)
+{
+    pickit_adapter_t *a = (pickit_adapter_t*) adapter;
+    int i;
+
+    //fprintf(stderr, "%s: load_executive\n", a->name);
+    a->use_executive = 1;
+    serial_execution(a);
+
+    if (strcmp(name, "mm") == 0)
+	step1_6_mm(a, nwords);
+    else
+	step1_6_mz(a, nwords);
 
     // Download the PE itself (step 7-B)
     if (debug_level > 0)
@@ -840,6 +913,7 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
             a->reply[31] != 'k' ||
             a->reply[32] != '3')
         {
+            fprintf(stderr, "Reply %d%d%d\n", a->reply[30], a->reply[31], a->reply[32]);
             free(a);
             fprintf(stderr, "Incompatible PICkit3 firmware detected.\n");
             fprintf(stderr, "Please, upgrade the firmware using PICkit 3 Scripting Tool.\n");
@@ -1047,6 +1121,8 @@ adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial)
         hiddev = hid_open(MICROCHIP_VID, PICKIT3_PID, 0);
         if (! hiddev)
             hiddev = hid_open(MICROCHIP_VID, CHIPKIT_PID, 0);
+        if (! hiddev)
+            hiddev = hid_open(MICROCHIP_VID, ONBOARD_PID, 0);
     }
     if (! hiddev) {
         if (vid)
