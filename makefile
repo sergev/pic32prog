@@ -1,4 +1,4 @@
-CC              = gcc48
+CC              = gcc
 
 GITCOUNT        = $(shell git rev-list HEAD --count)
 UNAME           = $(shell uname)
