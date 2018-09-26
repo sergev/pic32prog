@@ -279,6 +279,7 @@ static variant_t pic32_tab[TABSZ] = {
 
     /* MM family */
     {0x46b12053, "MM0064GPL028",  64,   &family_mm},
+    {0x66b04053, "MM0016GPL028",  16,   &family_mm},
 
     /* USB bootloader */
     {0xEAFB00B, "Bootloader",   0,      &family_bl},
