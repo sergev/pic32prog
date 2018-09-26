@@ -107,6 +107,7 @@ extern const unsigned pic32_pemm[];
 #define PE_PROGRAM_CLUSTER      0x9     /* Program N bytes */
 #define PE_GET_DEVICEID         0xA     /* Return the hardware ID of device */
 #define PE_CHANGE_CFG           0xB     /* Change PE settings */
+#define PE_DOUBLE_WORD_PGRM     0xE     /* Programs two words of Flash memory at the specified address */
 
 /*-------------------------------------------------------------------
  * MX3/4/5/6/7 family.

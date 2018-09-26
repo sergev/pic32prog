@@ -41,6 +41,7 @@ struct _adapter_t {
         unsigned word1, unsigned word2, unsigned word3);
     void (*program_row)(adapter_t *a, unsigned addr, unsigned *data, unsigned words_per_row);
     void (*program_word)(adapter_t *a, unsigned addr, unsigned word);
+    void (*program_double_word)(adapter_t *a, unsigned addr, unsigned word0, unsigned word1);
     unsigned (*read_word)(adapter_t *a, unsigned addr);
     void (*erase_chip)(adapter_t *a);
 };
