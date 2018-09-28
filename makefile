@@ -5,10 +5,16 @@ UNAME           = $(shell uname)
 CFLAGS          = -Wall -g -O -Ihidapi/hidapi -DGITCOUNT='"$(GITCOUNT)"'
 LDFLAGS         = -g
 CCARCH          =
+LIBUSB_LIBS     = $(shell pkg-config libusb-1.0 --libs)
 
 # Linux
 ifeq ($(UNAME),Linux)
-    LIBS        += -Wl,-Bstatic -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
+ifeq (,$(LIBUSB_LIBS))
+    LIBS        += -Wl,-Bstatic -lusb-1.0 -Wl,-Bdynamic
+else
+    LIBS        += $(LIBUSB_LIBS)
+endif
+    LIBS        += -lpthread -ludev
     HIDLIB      = hidapi/libusb/.libs/libhidapi-libusb.a
 endif
 
