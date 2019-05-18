@@ -28,9 +28,11 @@
 #ifndef VERSION
 #define VERSION         "2.0."GITCOUNT
 #endif
-#define MINBLOCKSZ      128
-#define FLASHV_BASE     0x9d000000
-#define BOOTV_BASE      0x9fc00000
+#define MINBLOCKSZ          128
+#define FLASHV_KSEG0_BASE   0x9d000000
+#define BOOTV_KSEG0_BASE    0x9fc00000
+#define FLASHV_KSEG1_BASE   0xBD000000
+#define BOOTV_KSEG1_BASE    0xBFC00000
 #define FLASHP_BASE     0x1d000000
 #define BOOTP_BASE      0x1fc00000
 #define FLASH_BYTES     (2048 * 1024)
@@ -47,6 +49,8 @@ unsigned char boot_dirty [BOOT_BYTES / MINBLOCKSZ];
 unsigned char flash_dirty [FLASH_BYTES / MINBLOCKSZ];
 unsigned blocksz;               /* Size of flash memory block */
 unsigned boot_used;
+unsigned char bootv_kseg = 1;    // Default to 1, same as before. Set in store_data.
+unsigned char flashv_kseg = 1;   // Default to 1, same as before. Set in store_data.
 unsigned flash_used;
 unsigned boot_bytes;
 unsigned flash_bytes;
@@ -96,24 +100,36 @@ void store_data(unsigned address, unsigned byte)
 {
     unsigned offset;
 
-    if (address >= BOOTV_BASE && address < BOOTV_BASE + BOOT_BYTES) {
-        /* Boot code, virtual. */
-        offset = address - BOOTV_BASE;
+    if (address >= BOOTV_KSEG0_BASE && address < BOOTV_KSEG0_BASE + BOOT_BYTES) {
+        /* Boot code, virtual. KSEG0! */
+        offset = address - BOOTV_KSEG0_BASE;
         boot_data [offset] = byte;
         boot_used = 1;
-
+        bootv_kseg = 0;
+    } else if (address >= BOOTV_KSEG1_BASE && address < BOOTV_KSEG1_BASE + BOOT_BYTES) {
+        /* Boot code, virtual. KSEG1! */
+        offset = address - BOOTV_KSEG1_BASE;
+        boot_data [offset] = byte;
+        boot_used = 1;
+        bootv_kseg = 1;
     } else if (address >= BOOTP_BASE && address < BOOTP_BASE + BOOT_BYTES) {
         /* Boot code, physical. */
         offset = address - BOOTP_BASE;
         boot_data [offset] = byte;
         boot_used = 1;
-
-    } else if (address >= FLASHV_BASE && address < FLASHV_BASE + FLASH_BYTES) {
+    } else if (address >= FLASHV_KSEG1_BASE && address < FLASHV_KSEG1_BASE + FLASH_BYTES) {
         /* Main flash memory, virtual. */
-        offset = address - FLASHV_BASE;
+        offset = address - FLASHV_KSEG1_BASE;
         flash_data [offset] = byte;
         flash_used = 1;
-
+        flashv_kseg = 1;
+    }
+    else if (address >= FLASHV_KSEG0_BASE && address < FLASHV_KSEG0_BASE + FLASH_BYTES) {
+        /* Main flash memory, virtual. */
+        offset = address - FLASHV_KSEG0_BASE;
+        flash_data [offset] = byte;
+        flash_used = 1;
+        flashv_kseg = 0;
     } else if (address >= FLASHP_BASE && address < FLASHP_BASE + FLASH_BYTES) {
         /* Main flash memory, physical. */
         offset = address - FLASHP_BASE;
@@ -372,15 +388,21 @@ void program_block(target_t *mc, unsigned addr)
     unsigned char *data;
     unsigned offset;
 
-    if (addr >= BOOTV_BASE && addr < BOOTV_BASE + boot_bytes) {
+    if (addr >= BOOTV_KSEG0_BASE && addr < BOOTV_KSEG0_BASE + boot_bytes) {
         data = boot_data;
-        offset = addr - BOOTV_BASE;
+        offset = addr - BOOTV_KSEG0_BASE;
+    } else if (addr >= BOOTV_KSEG1_BASE && addr < BOOTV_KSEG1_BASE + boot_bytes) {
+        data = boot_data;
+        offset = addr - BOOTV_KSEG1_BASE;
     } else if (addr >= BOOTP_BASE && addr < BOOTP_BASE + boot_bytes) {
         data = boot_data;
         offset = addr - BOOTP_BASE;
-    } else if (addr >= FLASHV_BASE && addr < FLASHV_BASE + flash_bytes) {
+    } else if (addr >= FLASHV_KSEG0_BASE && addr < FLASHV_KSEG0_BASE + flash_bytes) {
         data = flash_data;
-        offset = addr - FLASHV_BASE;
+        offset = addr - FLASHV_KSEG0_BASE;
+    } else if (addr >= FLASHV_KSEG1_BASE && addr < FLASHV_KSEG1_BASE + flash_bytes) {
+        data = flash_data;
+        offset = addr - FLASHV_KSEG1_BASE;
     } else {
         data = flash_data;
         offset = addr - FLASHP_BASE;
@@ -393,15 +415,21 @@ int verify_block(target_t *mc, unsigned addr)
     unsigned char *data;
     unsigned offset;
 
-    if (addr >= BOOTV_BASE && addr < BOOTV_BASE + boot_bytes) {
+    if (addr >= BOOTV_KSEG0_BASE && addr < BOOTV_KSEG0_BASE + boot_bytes) {
         data = boot_data;
-        offset = addr - BOOTV_BASE;
+        offset = addr - BOOTV_KSEG0_BASE;
+    } if (addr >= BOOTV_KSEG1_BASE && addr < BOOTV_KSEG1_BASE + boot_bytes) {
+        data = boot_data;
+        offset = addr - BOOTV_KSEG1_BASE;
     } else if (addr >= BOOTP_BASE && addr < BOOTP_BASE + boot_bytes) {
         data = boot_data;
         offset = addr - BOOTP_BASE;
-    } else if (addr >= FLASHV_BASE && addr < FLASHV_BASE + flash_bytes) {
+    } else if (addr >= FLASHV_KSEG0_BASE && addr < FLASHV_KSEG0_BASE + flash_bytes) {
         data = flash_data;
-        offset = addr - FLASHV_BASE;
+        offset = addr - FLASHV_KSEG0_BASE;
+    } else if (addr >= FLASHV_KSEG1_BASE && addr < FLASHV_KSEG1_BASE + flash_bytes) {
+        data = flash_data;
+        offset = addr - FLASHV_KSEG1_BASE;
     } else {
         data = flash_data;
         offset = addr - FLASHP_BASE;
@@ -523,7 +551,7 @@ void do_program(char *filename)
             fflush(stdout);
             for (addr=0; addr<flash_bytes; addr+=blocksz) {
                 if (flash_dirty [addr / blocksz]) {
-                    program_block(target, addr + FLASHV_BASE);
+                    program_block(target, addr + (flashv_kseg ? FLASHV_KSEG1_BASE : FLASHV_KSEG0_BASE));
                     progress(progress_step);
                 }
             }
@@ -536,7 +564,7 @@ void do_program(char *filename)
             fflush(stdout);
             for (addr=0; addr<boot_bytes; addr+=blocksz) {
                 if (boot_dirty [addr / blocksz]) {
-                    program_block(target, addr + BOOTV_BASE);
+                    program_block(target, addr + (bootv_kseg ? BOOTV_KSEG1_BASE : BOOTV_KSEG0_BASE));
                     progress(1);
                 }
             }
@@ -557,7 +585,7 @@ void do_program(char *filename)
         for (addr=0; addr<flash_bytes; addr+=blocksz) {
             if (flash_dirty [addr / blocksz]) {
                 progress(progress_step);
-                if (! verify_block(target, addr + FLASHV_BASE))
+                if (! verify_block(target, addr + (flashv_kseg ? FLASHV_KSEG1_BASE : FLASHV_KSEG0_BASE)))
                     exit(0);
             }
         }
@@ -571,7 +599,7 @@ void do_program(char *filename)
         for (addr=0; addr<boot_bytes; addr+=blocksz) {
             if (boot_dirty [addr / blocksz]) {
                 progress(1);
-                if (! verify_block(target, addr + BOOTV_BASE))
+                if (! verify_block(target, addr + (bootv_kseg ? BOOTV_KSEG1_BASE : BOOTV_KSEG0_BASE)))
                     exit(0);
             }
         }
