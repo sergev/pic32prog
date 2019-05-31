@@ -594,8 +594,8 @@ void target_add_variant(char *name, unsigned id,
 void target_use_executive(target_t *t)
 {
     if (t->adapter->load_executive != 0 && t->family->pe_nwords != 0)
-        t->adapter->load_executive(t->adapter, t->family->name,
-	    t->family->pe_code, t->family->pe_nwords, t->family->pe_version);
+        t->adapter->load_executive(t->adapter,
+            t->family->pe_code, t->family->pe_nwords, t->family->pe_version);
 }
 
 /*
@@ -725,7 +725,7 @@ void target_program_block(target_t *t, unsigned addr,
             unsigned n = nwords;
             if (n > words_per_row)
                 n = words_per_row;
-	    if (! target_test_empty_block(data, words_per_row))
+            if (! target_test_empty_block(data, words_per_row))
                 t->adapter->program_row(t->adapter, addr, data, words_per_row);
             addr += n<<2;
             data += n;

@@ -59,14 +59,14 @@ unsigned target_devcfg_offset(target_t *t);
 void target_print_devcfg(target_t *t);
 
 void target_read_block(target_t *t, unsigned addr,
-	unsigned nwords, unsigned *data);
+    unsigned nwords, unsigned *data);
 void target_verify_block(target_t *t, unsigned addr,
-	unsigned nwords, unsigned *data);
+    unsigned nwords, unsigned *data);
 
 int target_erase(target_t *t);
 void target_program_block(target_t *t, unsigned addr,
-	unsigned nwords, unsigned *data);
+    unsigned nwords, unsigned *data);
 void target_program_devcfg(target_t *t, unsigned devcfg0,
-        unsigned devcfg1, unsigned devcfg2, unsigned devcfg3);
+    unsigned devcfg1, unsigned devcfg2, unsigned devcfg3);
 
 #endif

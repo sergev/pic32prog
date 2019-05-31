@@ -308,20 +308,21 @@ step1_6_mz(pickit_adapter_t *a, unsigned nwords)
  * Download programming executive (PE).
  */
 static void pickit_load_executive(adapter_t *adapter,
-    const char *name, const unsigned *pe, unsigned nwords,
+    const unsigned *pe, unsigned nwords,
     unsigned pe_version)
 {
     pickit_adapter_t *a = (pickit_adapter_t*) adapter;
     int i;
 
+    a->name = a->adapter.family_name;
     //fprintf(stderr, "%s: load_executive\n", a->name);
     a->use_executive = 1;
     serial_execution(a);
 
-    if (strcmp(name, "mm") == 0)
-	step1_6_mm(a, nwords);
+    if (strcmp(a->name, "mm") == 0)
+        step1_6_mm(a, nwords);
     else
-	step1_6_mz(a, nwords);
+        step1_6_mz(a, nwords);
 
     // Download the PE itself (step 7-B)
     if (debug_level > 0)
@@ -754,15 +755,15 @@ static void pickit_program_double_word(adapter_t *adapter,
                 (unsigned char) (addr >> 16),
                 (unsigned char) (addr >> 24),
             SCRIPT_JT2_XFRFASTDAT_LIT,
-               	(unsigned char) word0,
-               	(unsigned char) (word0 >> 8),
-               	(unsigned char) (word0 >> 16),
-               	(unsigned char) (word0 >> 24),
+                (unsigned char) word0,
+                (unsigned char) (word0 >> 8),
+                (unsigned char) (word0 >> 16),
+                (unsigned char) (word0 >> 24),
             SCRIPT_JT2_XFRFASTDAT_LIT,
-               	(unsigned char) word1,
-               	(unsigned char) (word1 >> 8),
-               	(unsigned char) (word1 >> 16),
-               	(unsigned char) (word1 >> 24),
+                (unsigned char) word1,
+                (unsigned char) (word1 >> 8),
+                (unsigned char) (word1 >> 16),
+                (unsigned char) (word1 >> 24),
            SCRIPT_JT2_GET_PE_RESP,
         CMD_UPLOAD_DATA);
     pickit_recv(a);
@@ -858,12 +859,12 @@ static void pickit_program_row(adapter_t *adapter, unsigned addr,
         CMD_EXECUTE_SCRIPT, 12,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
             SCRIPT_JT2_XFRFASTDAT_LIT,
-		words_per_row, 0, 0, 0,         // PROGRAM ROW
-	    SCRIPT_JT2_XFRFASTDAT_LIT,
-		(unsigned char) addr,
-		(unsigned char) (addr >> 8),
-		(unsigned char) (addr >> 16),
-		(unsigned char) (addr >> 24));
+                words_per_row, 0, 0, 0,         // PROGRAM ROW
+            SCRIPT_JT2_XFRFASTDAT_LIT,
+                (unsigned char) addr,
+                (unsigned char) (addr >> 8),
+                (unsigned char) (addr >> 16),
+                (unsigned char) (addr >> 24));
 
     /* Download data. */
     if (words_per_row == 32) {

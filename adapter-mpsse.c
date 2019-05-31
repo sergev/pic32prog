@@ -82,9 +82,9 @@ typedef struct {
  */
 #define OLIMEX_VID              0x15ba
 #define OLIMEX_ARM_USB_TINY     0x0004  /* ARM-USB-Tiny */
-#define OLIMEX_ARM_USB_TINY_H   0x002a	/* ARM-USB-Tiny-H */
-#define OLIMEX_ARM_USB_OCD_H    0x002b	/* ARM-USB-OCD-H */
-#define OLIMEX_MIPS_USB_OCD_H   0x0036	/* MIPS-USB-OCD-H */
+#define OLIMEX_ARM_USB_TINY_H   0x002a  /* ARM-USB-Tiny-H */
+#define OLIMEX_ARM_USB_OCD_H    0x002b  /* ARM-USB-OCD-H */
+#define OLIMEX_MIPS_USB_OCD_H   0x0036  /* MIPS-USB-OCD-H */
 
 #define DP_BUSBLASTER_VID       0x0403
 #define DP_BUSBLASTER_PID       0x6010  /* Bus Blaster v2 */
@@ -423,7 +423,7 @@ static void mpsse_speed(mpsse_adapter_t *a, int khz)
     if (divisor < 0)
         divisor = 0;
     if (debug_level)
-    	fprintf(stderr, "%s: divisor: %u\n", a->name, divisor);
+        fprintf(stderr, "%s: divisor: %u\n", a->name, divisor);
 
     if (a->mhz > 6) {
         /* Use 60MHz master clock (disable divide by 5). */
@@ -1005,7 +1005,7 @@ failed: libusb_release_interface(a->usbdev, 0);
         goto failed;
     }
     if (debug_level)
-    	fprintf(stderr, "%s: latency timer: %u usec\n", a->name, latency_timer);
+        fprintf(stderr, "%s: latency timer: %u usec\n", a->name, latency_timer);
 
     /* By default, use 500 kHz speed. */
     int khz = 500;

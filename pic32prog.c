@@ -240,45 +240,45 @@ int read_hex(char *filename)
             fprintf(stderr, _("%s: bad HEX record: %s\n"), filename, buf);
             exit(1);
         }
-	record_type = HEX(buf+7);
-	if (record_type == 1) {
-	    /* End of file. */
+        record_type = HEX(buf+7);
+        if (record_type == 1) {
+            /* End of file. */
             break;
         }
-	if (record_type == 5) {
-	    /* Start address, ignore. */
-	    continue;
-	}
+        if (record_type == 5) {
+            /* Start address, ignore. */
+            continue;
+        }
 
-	bytes = HEX(buf+1);
-	if (strlen((char*) buf) < bytes * 2 + 11) {
+        bytes = HEX(buf+1);
+        if (strlen((char*) buf) < bytes * 2 + 11) {
             fprintf(stderr, _("%s: too short hex line\n"), filename);
             exit(1);
         }
-	address = high << 16 | HEX(buf+3) << 8 | HEX(buf+5);
+        address = high << 16 | HEX(buf+3) << 8 | HEX(buf+5);
 
-	sum = 0;
-	for (i=0; i<bytes; ++i) {
+        sum = 0;
+        for (i=0; i<bytes; ++i) {
             data [i] = HEX(buf+9 + i + i);
-	    sum += data [i];
-	}
-	sum += record_type + bytes + (address & 0xff) + (address >> 8 & 0xff);
-	if (sum != (unsigned char) - HEX(buf+9 + bytes + bytes)) {
+            sum += data [i];
+        }
+        sum += record_type + bytes + (address & 0xff) + (address >> 8 & 0xff);
+        if (sum != (unsigned char) - HEX(buf+9 + bytes + bytes)) {
             fprintf(stderr, _("%s: bad HEX checksum\n"), filename);
             exit(1);
         }
 
-	if (record_type == 4) {
-	    /* Extended address. */
+        if (record_type == 4) {
+            /* Extended address. */
             if (bytes != 2) {
                 fprintf(stderr, _("%s: invalid HEX linear address record length\n"),
                     filename);
                 exit(1);
             }
-	    high = data[0] << 8 | data[1];
-	    continue;
-	}
-	if (record_type != 0) {
+            high = data[0] << 8 | data[1];
+            continue;
+        }
+        if (record_type != 0) {
             fprintf(stderr, _("%s: unknown HEX record type: %d\n"),
                 filename, record_type);
             exit(1);
