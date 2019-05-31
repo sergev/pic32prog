@@ -23,11 +23,15 @@
 extern print_func_t print_mx1;
 extern print_func_t print_mx3;
 extern print_func_t print_mz;
+extern print_func_t print_mm;
 
 /*
  * PIC32 families.
  */
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
+static const
+family_t family_mm  = { "mm",
+                        4, 0x1780,  256, print_mz,  pic32_pemm,  2000, 0x0510 };
 static const
 family_t family_mx1 = { "mx1",
                         3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
@@ -268,6 +272,14 @@ static variant_t pic32_tab[TABSZ] = {
     {0x7222053, "MZ2048EFG144", 2048,   &family_mz},
     {0x7227053, "MZ2048EFH144", 2048,   &family_mz},
     {0x724F053, "MZ2048EFM144", 2048,   &family_mz},
+
+    /* MZ DA family */
+    {0x5f4f053, "MZ2048XXXXXX", 2048,   &family_mz},
+    {0x5fb7053, "MZ2048XXXXXX", 2048,   &family_mz},
+
+    /* MM family */
+    {0x46b12053, "MM0064GPL028",  64,   &family_mm},
+    {0x66b04053, "MM0016GPL028",  16,   &family_mm},
 
     /* USB bootloader */
     {0xEAFB00B, "Bootloader",   0,      &family_bl},
@@ -582,8 +594,8 @@ void target_add_variant(char *name, unsigned id,
 void target_use_executive(target_t *t)
 {
     if (t->adapter->load_executive != 0 && t->family->pe_nwords != 0)
-        t->adapter->load_executive(t->adapter, t->family->pe_code,
-            t->family->pe_nwords, t->family->pe_version);
+        t->adapter->load_executive(t->adapter, t->family->name,
+	    t->family->pe_code, t->family->pe_nwords, t->family->pe_version);
 }
 
 /*
@@ -742,9 +754,14 @@ void target_program_devcfg(target_t *t, unsigned devcfg0,
 
     unsigned addr = 0x1fc00000 + t->family->devcfg_offset;
 
-    //fprintf(stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, devcfg0, devcfg1, devcfg2, devcfg3);
+    fprintf(stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, devcfg0, devcfg1, devcfg2, devcfg3);
     if (t->family->pe_version >= 0x0500) {
         /* Since pic32mz, the programming executive */
+
+        /* Disable JTAG on MM series. */
+        if (memcmp(t->family->name, "mm", 2) == 0)
+            t->adapter->program_double_word(t->adapter, 0x1FC017C8, 0xfffffff3, 0xffffffff);
+
         t->adapter->program_quad_word(t->adapter, addr, devcfg3,
             devcfg2, devcfg1, devcfg0);
         return;
