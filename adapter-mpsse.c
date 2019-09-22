@@ -42,6 +42,7 @@ typedef struct {
     uint16_t led_control;
     uint8_t led_inverted;
     const char *product;
+    uint16_t extra_output;
 } device_t;
 
 typedef struct {
@@ -71,6 +72,7 @@ typedef struct {
     unsigned sysrst_control, sysrst_inverted;
     unsigned led_control, led_inverted;
     unsigned dir_control;
+    unsigned extra_output;
 
     unsigned mhz;
     unsigned use_executive;
@@ -86,8 +88,8 @@ typedef struct {
 #define OLIMEX_ARM_USB_OCD_H    0x002b  /* ARM-USB-OCD-H */
 #define OLIMEX_MIPS_USB_OCD_H   0x0036  /* MIPS-USB-OCD-H */
 
-#define DP_BUSBLASTER_VID       0x0403
-#define DP_BUSBLASTER_PID       0x6010  /* Bus Blaster v2 */
+#define FTDI_DEFAULT_VID        0x0403  /* Neofoxx JTAG/SWD debug probe, Bus Blaster v2, Flyswatter, ...*/
+#define FTDI_DEFAULT_PID        0x6010
 
 /*
  * USB endpoints.
@@ -139,12 +141,13 @@ typedef struct {
 #define TMS_FOOTER_XFERDATAFAST_VAL     0b01
 
 static const device_t devlist[] = {
-    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL},
-    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL},
-    { OLIMEX_VID,           OLIMEX_ARM_USB_OCD_H,   "Olimex ARM-USB-OCD-H",             30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL},
-    { OLIMEX_VID,           OLIMEX_MIPS_USB_OCD_H,  "Olimex MIPS-USB-OCD-H",            30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0800,  0, NULL},
-    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "TinCanTools Flyswatter",            6,  0x0cf0, 0x0010, 1,  0x0020,  1,   0x0c00,  1, "Flyswatter"},
-    { DP_BUSBLASTER_VID,    DP_BUSBLASTER_PID,      "Dangerous Prototypes Bus Blaster", 30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0000,  0, NULL},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_OCD_H,   "Olimex ARM-USB-OCD-H",             30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000},
+    { OLIMEX_VID,           OLIMEX_MIPS_USB_OCD_H,  "Olimex MIPS-USB-OCD-H",            30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0800,  0, NULL, 0x0000},
+    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "TinCanTools Flyswatter",            6,  0x0cf0, 0x0010, 1,  0x0020,  1,   0x0c00,  1, "Flyswatter", 0x0000},
+    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "Neofoxx JTAG/SWD adapter",         30,  0xff3b, 0x0100, 1,  0x0200,  1,   0x8000,  1, "Neofoxx JTAG/SWD adapter", 0x0020},
+    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "Dangerous Prototypes Bus Blaster", 30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0000,  0, NULL, 0x0000},
     { 0 }
 };
 
@@ -389,7 +392,7 @@ static unsigned long long mpsse_recv(mpsse_adapter_t *a)
 static void mpsse_reset(mpsse_adapter_t *a, int trst, int sysrst, int led)
 {
     unsigned char buf [3];
-    unsigned output    = 0x0008;                    /* TCK idle high */
+    unsigned output    = 0x0008 | a->extra_output;  /* TCK idle high, OE pins etc. */
     unsigned direction = 0x000b | a->dir_control;
 
     if (trst)
@@ -1098,6 +1101,7 @@ adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial)
                 a->sysrst_inverted  = devlist[i].sysrst_inverted;
                 a->led_control      = devlist[i].led_control;
                 a->led_inverted     = devlist[i].led_inverted;
+                a->extra_output     = devlist[i].extra_output;
                 goto found;
             }
         }
