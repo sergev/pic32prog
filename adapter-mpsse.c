@@ -958,12 +958,16 @@ found:
         dev->descriptor.idVendor, dev->descriptor.idProduct,
         dev->descriptor.bcdDevice);*/
 
-    ret = libusb_detach_kernel_driver(a->usbdev, 0);
-    if (ret != 0) {
-        fprintf(stderr, "Error detaching kernel driver: %d: %s\n",
-            ret, libusb_strerror(ret));
-        libusb_close(a->usbdev);
-        exit(-1);
+    /* Check if driver is already detached */
+    ret = libusb_kernel_driver_active(a->usbdev, 0);
+	if (ret != 0){
+        ret = libusb_detach_kernel_driver(a->usbdev, 0);
+        if (ret != 0) {
+            fprintf(stderr, "Error detaching kernel driver: %d: %s\n",
+                ret, libusb_strerror(ret));
+            libusb_close(a->usbdev);
+            exit(-1);
+        }
     }
 
     libusb_claim_interface(a->usbdev, 0);
