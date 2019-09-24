@@ -18,6 +18,12 @@ ifeq ($(UNAME),FreeBSD)
     HIDLIB      = hidapi/libusb/.libs/libhidapi.a
 endif
 
+# DragonFly BSD
+ifeq ($(UNAME),DragonFly)
+    LIBS        += -Wl,-Bstatic -lusb -Wl,-Bdynamic -lpthread
+    HIDLIB      = hidapi/libusb/.libs/libhidapi.a
+endif
+
 # Mac OS X
 ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation
