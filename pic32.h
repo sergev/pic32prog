@@ -50,6 +50,14 @@ extern const unsigned pic32_pemm[];
 #define ETAP_FASTDATA   14      // Select FastData register
 
 /*
+ * Length of TAP/MTAP and ETAP commands
+ */
+#define ETAP_COMMAND_NBITS		5
+#define MTAP_COMMAND_NBITS		5
+#define MTAP_COMMAND_DR_NBITS	8
+
+
+/*
  * Microchip DR commands (32-bit).
  */
 #define MCHP_STATUS        0x00 // Return Status
