@@ -22,6 +22,7 @@
     static DCB saved_mode;
 #else
     #include <termios.h>
+    #include <sys/ioctl.h>
     static int fd = -1;
     static struct termios saved_mode;
 #endif
@@ -248,6 +249,8 @@ int serial_open(const char *devname, int baud_rate)
     DCB new_mode;
 #else
     struct termios new_mode;
+    unsigned ctl;
+    int rv;
 #endif
 
 #if defined(__WIN32__) || defined(WIN32)
@@ -301,6 +304,13 @@ int serial_open(const char *devname, int baud_rate)
         fprintf(stderr, "%s: Cannot set state\n", devname);
         return -1;
     }
+
+    EscapeCommFunction(fd, CLRDTR);
+    EscapeCommFunction(fd, CLRRTS);
+    usleep(250*1000);
+    EscapeCommFunction(fd, SETDTR);
+    EscapeCommFunction(fd, SETRTS);
+    usleep(50*1000);
 #else
     /* Encode baud rate. */
     int baud_code = baud_encode(baud_rate);
@@ -337,6 +347,29 @@ int serial_open(const char *devname, int baud_rate)
     int flags = fcntl(fd, F_GETFL, 0);
     if (flags >= 0)
         fcntl(fd, F_SETFL, flags & ~O_NONBLOCK);
+
+    rv = ioctl(fd, TIOCMGET, &ctl);
+    if (rv < 0) {
+        perror("ioctl(\"TIOCMGET\")");
+        return -1;
+    }
+    ctl &= ~(TIOCM_DTR | TIOCM_RTS);
+    rv = ioctl(fd, TIOCMSET, &ctl);
+    if (rv < 0) {
+        perror("ioctl(\"TIOCMSET\")");
+        return -1;
+    }
+
+    usleep(250*1000);
+
+    ctl |= (TIOCM_DTR | TIOCM_RTS);
+    rv = ioctl(fd, TIOCMSET, &ctl);
+    if (rv < 0) {
+        perror("ioctl(\"TIOCMSET\")");
+        return -1;
+    }
+
+    usleep(50*1000);
 #endif
     return 0;
 }
