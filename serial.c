@@ -354,13 +354,6 @@ int serial_baud(int baud_rate)
 #endif
 
 #if defined(__WIN32__) || defined(WIN32)
-    /* Set serial attributes */
-    memset(&saved_mode, 0, sizeof(saved_mode));
-    if (! GetCommState(fd, &saved_mode)) {
-        fprintf(stderr, "Cannot get state\n");
-        return -1;
-    }
-
     new_mode = saved_mode;
 
     new_mode.BaudRate = baud_rate;
@@ -387,10 +380,6 @@ int serial_baud(int baud_rate)
         fprintf(stderr, "Bad baud rate %d\n", baud_rate);
         return -1;
     }
-
-    /* Set serial attributes */
-    memset(&saved_mode, 0, sizeof(saved_mode));
-    tcgetattr(fd, &saved_mode);
 
     /* 8n1, ignore parity */
     memset(&new_mode, 0, sizeof(new_mode));
