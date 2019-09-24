@@ -9,11 +9,12 @@
  */
 #include <stdio.h>
 #include "pic32.h"
+#include "target.h"
 
 /*
  * Print configuration for MX3/4/5/6/7 family.
  */
-void print_mx3(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
+void print_mx3(target_t *t, unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
 {
     /*--------------------------------------
      * Configuration register 0

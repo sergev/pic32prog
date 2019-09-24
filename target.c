@@ -31,7 +31,7 @@ extern print_func_t print_mm;
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
 static const
 family_t family_mm  = { "mm",
-                        4, 0x1780,  256, print_mz,  pic32_pemm,  2000, 0x0510 };
+                        4, 0x1780,  256, print_mm,  pic32_pemm,  2000, 0x0510 };
 static const
 family_t family_mx1 = { "mx1",
                         3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
@@ -603,23 +603,26 @@ void target_use_executive(target_t *t)
  */
 void target_print_devcfg(target_t *t)
 {
+    unsigned devcfg0 = 0, devcfg1 = 0, devcfg2 = 0, devcfg3 = 0;
+
     if (! t->family->devcfg_offset)
         return;
 
-    unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
-    unsigned devcfg3 = t->adapter->read_word(t->adapter, devcfg_addr);
-    unsigned devcfg2 = t->adapter->read_word(t->adapter, devcfg_addr + 4);
-    unsigned devcfg1 = t->adapter->read_word(t->adapter, devcfg_addr + 8);
-    unsigned devcfg0 = t->adapter->read_word(t->adapter, devcfg_addr + 12);
+    if (memcmp(t->family->name, "mm", 2) != 0) {
+        unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
+        devcfg3 = t->adapter->read_word(t->adapter, devcfg_addr);
+        devcfg2 = t->adapter->read_word(t->adapter, devcfg_addr + 4);
+        devcfg1 = t->adapter->read_word(t->adapter, devcfg_addr + 8);
+        devcfg0 = t->adapter->read_word(t->adapter, devcfg_addr + 12);
 
-    if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
-        devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
-        return;
-    if (devcfg3 == 0 && devcfg2 == 0 && devcfg1 == 0 && devcfg0 == 0)
-        return;
-
+        if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
+            devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
+            return;
+        if (devcfg3 == 0 && devcfg2 == 0 && devcfg1 == 0 && devcfg0 == 0)
+            return;
+    }
     printf(_("Configuration:\n"));
-    t->family->print_devcfg(devcfg0, devcfg1, devcfg2, devcfg3);
+    t->family->print_devcfg(t, devcfg0, devcfg1, devcfg2, devcfg3);
 }
 
 /*

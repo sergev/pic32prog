@@ -9,11 +9,12 @@
  */
 #include <stdio.h>
 #include "pic32.h"
+#include "target.h"
 
 /*
  * Print configuration for MZ family.
  */
-void print_mz(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
+void print_mz(target_t *t, unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
 {
     /*--------------------------------------
      * Configuration register 0

@@ -13,7 +13,8 @@
 
 #include "adapter.h"
 
-typedef void print_func_t(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3);
+typedef struct _target_t target_t;
+typedef void print_func_t(target_t *t, unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3);
 
 typedef struct {
     const char      *name;
@@ -33,7 +34,7 @@ typedef struct {
     const family_t  *family;
 } variant_t;
 
-typedef struct {
+struct _target_t {
     adapter_t       *adapter;
     const char      *cpu_name;
     const family_t  *family;
@@ -41,7 +42,7 @@ typedef struct {
     unsigned        flash_addr;
     unsigned        flash_bytes;
     unsigned        boot_bytes;
-} target_t;
+};
 
 target_t *target_open(const char *port, int baud_rate);
 void target_close(target_t *t, int power_on);
