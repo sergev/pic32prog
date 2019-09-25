@@ -15,7 +15,7 @@
 #include <errno.h>
 
 #include "adapter.h"
-#include "hidapi.h"
+#include "hidlib.h"
 #include "pic32.h"
 
 /* Bootloader commands */
@@ -32,9 +32,6 @@
 typedef struct {
     /* Common part */
     adapter_t adapter;
-
-    /* Device handle for libusb. */
-    hid_device *hiddev;
 
     unsigned flash_size;
     unsigned erase_size;
@@ -63,7 +60,6 @@ static void uhb_command(uhb_adapter_t *a, unsigned char cmd,
 {
     unsigned char buf [64];
     unsigned k, nbytes = 2;
-    int reply_len;
 
     /* Send command packet. */
     memset(buf, 0, sizeof(buf));
@@ -94,13 +90,15 @@ static void uhb_command(uhb_adapter_t *a, unsigned char cmd,
         }
         fprintf(stderr, "\n");
     }
-    hid_write(a->hiddev, buf, 64);
 
     if (cmd == CMD_REBOOT) {
         /* No reply expected. */
+        hid_send_recv(buf, 64, 0, 0);
         return;
     }
 
+    /* Get reply. */
+    memset(a->reply, 0, sizeof(a->reply));
     if (cmd == CMD_WRITE) {
         /* Send data. */
         for (; data_bytes>0; data_bytes-=64) {
@@ -113,30 +111,14 @@ static void uhb_command(uhb_adapter_t *a, unsigned char cmd,
                 }
                 fprintf(stderr, "\n");
             }
-            hid_write(a->hiddev, data, 64);
+            if (data_bytes > 64)
+                hid_send_recv(data, 64, 0, 0);
+            else
+                hid_send_recv(data, 64, a->reply, 64);
             data += 64;
         }
-    }
-
-    /* Get reply. */
-    memset(a->reply, 0, sizeof(a->reply));
-    reply_len = hid_read_timeout(a->hiddev, a->reply, 64, 500);
-    if (reply_len == 0) {
-        fprintf(stderr, "Timed out.\n");
-        exit(-1);
-    }
-    if (reply_len != 64) {
-        fprintf(stderr, "uhb: error %d receiving packet\n", reply_len);
-        exit(-1);
-    }
-    if (debug_level > 0) {
-        fprintf(stderr, "---Recv");
-        for (k=0; k<2; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf(stderr, "\n       ");
-            fprintf(stderr, " %02x", a->reply[k]);
-        }
-        fprintf(stderr, "\n");
+    } else {
+        hid_send_recv(buf, 64, a->reply, 64);
     }
 }
 
@@ -254,17 +236,24 @@ static void uhb_erase_chip(adapter_t *adapter)
 adapter_t *adapter_open_uhb(int vid, int pid, const char *serial)
 {
     uhb_adapter_t *a;
-    hid_device *hiddev;
+    int status;
+
+#if 0
+    //TODO: Use serial number to select a HID device.
+    wchar_t *serialp = 0;
+    if (serial) {
+        wchar_t buf[256];
+        mbstowcs(buf, serial, 256);
+        serialp = buf;
+    }
+#endif
 
     if (vid) {
-        wchar_t buf[256];
-        if (serial)
-            mbstowcs(buf, serial, 256);
-        hiddev = hid_open(vid, pid, serial ? buf : 0);
-    } else
-        hiddev = hid_open(MIKROE_VID, MIKROEBOOT_PID, 0);
-
-    if (! hiddev) {
+        status = hid_init(vid, pid);
+    } else {
+        status = hid_init(MIKROE_VID, MIKROEBOOT_PID);
+    }
+    if (status < 0) {
         if (vid)
             fprintf(stderr, "UHB bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
@@ -275,7 +264,6 @@ adapter_t *adapter_open_uhb(int vid, int pid, const char *serial)
         fprintf(stderr, "Out of memory\n");
         return 0;
     }
-    a->hiddev = hiddev;
 
     /* Read version of adapter. */
     uhb_command(a, CMD_INFO, 0, 0, 0, 0);

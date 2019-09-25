@@ -18,7 +18,7 @@
 #include <errno.h>
 
 #include "adapter.h"
-#include "hidapi.h"
+#include "hidlib.h"
 #include "pickit2.h"
 #include "pic32.h"
 
@@ -27,9 +27,6 @@ typedef struct {
     adapter_t adapter;
     int is_pk3;
     const char *name;
-
-    /* Device handle for libusb. */
-    hid_device *hiddev;
 
     unsigned char reply [64];
     unsigned use_executive;
@@ -68,21 +65,6 @@ typedef struct {
                           (unsigned char) ((w) >> 16), \
                           (unsigned char) ((w) >> 24)
 
-static void pickit_send_buf(pickit_adapter_t *a, unsigned char *buf, unsigned nbytes)
-{
-    if (debug_level > 1) {
-        int k;
-        fprintf(stderr, "---Send");
-        for (k=0; k<nbytes; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf(stderr, "\n       ");
-            fprintf(stderr, " %02x", buf[k]);
-        }
-        fprintf(stderr, "\n");
-    }
-    hid_write(a->hiddev, buf, 64);
-}
-
 static void pickit_send(pickit_adapter_t *a, unsigned argc, ...)
 {
     va_list ap;
@@ -94,33 +76,30 @@ static void pickit_send(pickit_adapter_t *a, unsigned argc, ...)
     for (i=0; i<argc; ++i)
         buf[i] = va_arg(ap, int);
     va_end(ap);
-    pickit_send_buf(a, buf, i);
+
+    hid_send_recv(buf, 64, 0, 0);
 }
 
-static void pickit_recv(pickit_adapter_t *a)
+static void pickit_send_recv(pickit_adapter_t *a, unsigned argc, ...)
 {
-    if (hid_read(a->hiddev, a->reply, 64) != 64) {
-        fprintf(stderr, "%s: error receiving packet\n", a->name);
-        exit(-1);
-    }
-    if (debug_level > 1) {
-        int k;
-        fprintf(stderr, "--->>>>");
-        for (k=0; k<64; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf(stderr, "\n       ");
-            fprintf(stderr, " %02x", a->reply[k]);
-        }
-        fprintf(stderr, "\n");
-    }
+    va_list ap;
+    unsigned i;
+    unsigned char buf [64];
+
+    memset(buf, CMD_END_OF_BUFFER, 64);
+    va_start(ap, argc);
+    for (i=0; i<argc; ++i)
+        buf[i] = va_arg(ap, int);
+    va_end(ap);
+
+    hid_send_recv(buf, 64, a->reply, 64);
 }
 
 static void check_timeout(pickit_adapter_t *a, const char *message)
 {
     unsigned status;
 
-    pickit_send(a, 1, CMD_READ_STATUS);
-    pickit_recv(a);
+    pickit_send_recv(a, 1, CMD_READ_STATUS);
     status = a->reply[0] | a->reply[1] << 8;
     if (status & STATUS_ICD_TIMEOUT) {
         fprintf(stderr, "%s: timed out at %s, status = %04x\n",
@@ -375,8 +354,7 @@ static void pickit_load_executive(adapter_t *adapter,
                 0x07, 0x00,                     // EXEC_VERSION
             SCRIPT_JT2_GET_PE_RESP);
     check_timeout(a, "EXEC_VERSION");
-    pickit_send(a, 1, CMD_UPLOAD_DATA);
-    pickit_recv(a);
+    pickit_send_recv(a, 1, CMD_UPLOAD_DATA);
 
     unsigned version = a->reply[3] | (a->reply[4] << 8);
     if (version != 0x0007) {                    // command echo
@@ -414,8 +392,7 @@ int pe_blank_check(pickit_adapter_t *a,
             (unsigned char) (nbytes >> 24),
         SCRIPT_JT2_GET_PE_RESP);
     check_timeout(a, "BLANK_CHECK");
-    pickit_send(a, 1, CMD_UPLOAD_DATA);
-    pickit_recv(a);
+    pickit_send_recv(a, 1, CMD_UPLOAD_DATA);
     if (a->reply[3] != 6 || a->reply[1] != 0) { // response code 0 = success
         return 0;
     }
@@ -443,8 +420,7 @@ int pe_get_crc(pickit_adapter_t *a,
         SCRIPT_JT2_GET_PE_RESP,
         SCRIPT_JT2_GET_PE_RESP);
     check_timeout(a, "GET_CRC");
-    pickit_send(a, 1, CMD_UPLOAD_DATA);
-    pickit_recv(a);
+    pickit_send_recv(a, 1, CMD_UPLOAD_DATA);
     if (a->reply[3] != 8 || a->reply[1] != 0) { // response code 0 = success
         return 0;
     }
@@ -505,8 +481,7 @@ static unsigned pickit_get_idcode(adapter_t *adapter)
         SCRIPT_JT2_SENDCMD, TAP_SW_MTAP,
         SCRIPT_JT2_SENDCMD, MTAP_IDCODE,
         SCRIPT_JT2_XFERDATA32_LIT, 0, 0, 0, 0);
-    pickit_send(a, 1, CMD_UPLOAD_DATA);
-    pickit_recv(a);
+    pickit_send_recv(a, 1, CMD_UPLOAD_DATA);
     //fprintf(stderr, "%s: read id, %d bytes: %02x %02x %02x %02x\n", a->name,
     //  a->reply[0], a->reply[1], a->reply[2], a->reply[3], a->reply[4]);
     if (a->reply[0] != 4)
@@ -546,7 +521,6 @@ static unsigned pickit_read_word(adapter_t *adapter, unsigned addr)
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,      // read FastData
             SCRIPT_JT2_XFERDATA32_LIT, 0, 0, 0, 0,
         CMD_UPLOAD_DATA);
-    pickit_recv(a);
     if (a->reply[0] != 4) {
         fprintf(stderr, "%s: read word %08x: bad reply length=%u\n",
             a->name, addr, a->reply[0]);
@@ -578,7 +552,6 @@ static unsigned pickit_read_word(adapter_t *adapter, unsigned addr)
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,      // read FastData
             SCRIPT_JT2_XFERDATA32_LIT, 0, 0, 0, 0,
         CMD_UPLOAD_DATA);
-    pickit_recv(a);
     if (a->reply[0] != 4) {
         fprintf(stderr, "%s: read word %08x: bad reply length=%u\n",
             a->name, addr, a->reply[0]);
@@ -630,11 +603,12 @@ static void pickit_read_data(adapter_t *adapter,
             buf[k++] = address >> 16;
             buf[k++] = address >> 24;
         }
-        pickit_send_buf(a, buf, k);
+
+        hid_send_recv(buf, k, 0, 0);
 
         for (k = 0; k < 8; k++) {
             /* Read progmem. */
-            pickit_send(a, 17, CMD_CLEAR_UPLOAD_BUFFER,
+            pickit_send_recv(a, 17, CMD_CLEAR_UPLOAD_BUFFER,
                 CMD_EXECUTE_SCRIPT, 13,
                     SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
                     SCRIPT_JT2_XFRFASTDAT_LIT,
@@ -644,15 +618,13 @@ static void pickit_read_data(adapter_t *adapter,
                     SCRIPT_JT2_GET_PE_RESP,
                     SCRIPT_LOOP, 1, 31,
                 CMD_UPLOAD_DATA_NOLEN);
-            pickit_recv(a);
             memcpy(data, a->reply, 64);
 //fprintf(stderr, "   ...%08x...\n", data[0]);
             data += 64/4;
             words_read += 64/4;
 
             /* Get second half of upload buffer. */
-            pickit_send(a, 1, CMD_UPLOAD_DATA_NOLEN);
-            pickit_recv(a);
+            pickit_send_recv(a, 1, CMD_UPLOAD_DATA_NOLEN);
             memcpy(data, a->reply, 64);
             data += 64/4;
             words_read += 64/4;
@@ -682,7 +654,8 @@ static void download_data(pickit_adapter_t *a,
         buf[k++] = word >> 16;
         buf[k++] = word >> 24;
     }
-    pickit_send_buf(a, buf, k);
+
+    hid_send_recv(buf, k, 0, 0);
 }
 
 /*
@@ -701,7 +674,7 @@ static void pickit_program_word(adapter_t *adapter,
         exit(-1);
     }
     /* Use PE to write flash memory. */
-    pickit_send(a, 22, CMD_CLEAR_UPLOAD_BUFFER,
+    pickit_send_recv(a, 22, CMD_CLEAR_UPLOAD_BUFFER,
         CMD_EXECUTE_SCRIPT, 18,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
             SCRIPT_JT2_XFRFASTDAT_LIT,
@@ -718,7 +691,6 @@ static void pickit_program_word(adapter_t *adapter,
                 (unsigned char) (word >> 24),
             SCRIPT_JT2_GET_PE_RESP,
         CMD_UPLOAD_DATA);
-    pickit_recv(a);
     //fprintf(stderr, "%s: word program PE response %u bytes: %02x...\n",
     //  a->name, a->reply[0], a->reply[1]);
     if (a->reply[0] != 4 || a->reply[1] != 0) { // response code 0 = success
@@ -744,7 +716,7 @@ static void pickit_program_double_word(adapter_t *adapter,
         exit(-1);
     }
     /* Use PE to write flash memory. */
-    pickit_send(a, 27, CMD_CLEAR_UPLOAD_BUFFER,
+    pickit_send_recv(a, 27, CMD_CLEAR_UPLOAD_BUFFER,
         CMD_EXECUTE_SCRIPT, 23,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
             SCRIPT_JT2_XFRFASTDAT_LIT,
@@ -766,7 +738,6 @@ static void pickit_program_double_word(adapter_t *adapter,
                 (unsigned char) (word1 >> 24),
            SCRIPT_JT2_GET_PE_RESP,
         CMD_UPLOAD_DATA);
-    pickit_recv(a);
     //fprintf(stderr, "%s: word program PE response %u bytes: %02x...\n",
     //  a->name, a->reply[0], a->reply[1]);
     if (a->reply[0] != 4 || a->reply[1] != 0) { // response code 0 = success
@@ -794,7 +765,7 @@ static void pickit_program_quad_word(adapter_t *adapter, unsigned addr,
     }
 
     /* Use PE to write flash memory. */
-    pickit_send(a, 37, CMD_CLEAR_UPLOAD_BUFFER,
+    pickit_send_recv(a, 37, CMD_CLEAR_UPLOAD_BUFFER,
         CMD_EXECUTE_SCRIPT, 33,
             SCRIPT_JT2_SENDCMD, ETAP_FASTDATA,
             SCRIPT_JT2_XFRFASTDAT_LIT,
@@ -826,7 +797,6 @@ static void pickit_program_quad_word(adapter_t *adapter, unsigned addr,
                 (unsigned char) (word3 >> 24),
             SCRIPT_JT2_GET_PE_RESP,
         CMD_UPLOAD_DATA);
-    pickit_recv(a);
     //fprintf(stderr, "%s: word program PE response %u bytes: %02x...\n",
     //  a->name, a->reply[0], a->reply[1]);
     if (a->reply[0] != 4 || a->reply[1] != 0) { // response code 0 = success
@@ -904,12 +874,11 @@ static void pickit_program_row(adapter_t *adapter, unsigned addr,
         }
     }
 
-    pickit_send(a, 5, CMD_CLEAR_UPLOAD_BUFFER,
+    pickit_send_recv(a, 5, CMD_CLEAR_UPLOAD_BUFFER,
         CMD_EXECUTE_SCRIPT, 1,
             SCRIPT_JT2_GET_PE_RESP,
         CMD_UPLOAD_DATA);
 
-    pickit_recv(a);
     //fprintf(stderr, "%s: program PE response %u bytes: %02x...\n",
     //  a->name, a->reply[0], a->reply[1]);
     if (a->reply[0] != 4 || a->reply[1] != 0) { // response code 0 = success
@@ -940,7 +909,7 @@ static void pickit_erase_chip(adapter_t *adapter)
  * Return a pointer to a data structure, allocated dynamically.
  * When adapter not found, return 0.
  */
-static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
+static adapter_t *open_pickit(int is_pk3)
 {
     pickit_adapter_t *a;
 
@@ -949,15 +918,13 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
         fprintf(stderr, "Out of memory\n");
         return 0;
     }
-    a->hiddev = hiddev;
     a->is_pk3 = is_pk3;
     a->name = is_pk3 ? "PICkit3" : "PICkit2";
 
     /* Read version of adapter. */
     unsigned vers_major, vers_minor, vers_rev;
     if (a->is_pk3) {
-        pickit_send(a, 2, CMD_GETVERSIONS_MPLAB, 0);
-        pickit_recv(a);
+        pickit_send_recv(a, 2, CMD_GETVERSIONS_MPLAB, 0);
         if (a->reply[30] != 'P' ||
             a->reply[31] != 'k' ||
             a->reply[32] != '3')
@@ -972,8 +939,7 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
         vers_minor = a->reply[34];
         vers_rev = a->reply[35];
     } else {
-        pickit_send(a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_GET_VERSION);
-        pickit_recv(a);
+        pickit_send_recv(a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_GET_VERSION);
         vers_major = a->reply[0];
         vers_minor = a->reply[1];
         vers_rev = a->reply[2];
@@ -1020,8 +986,7 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
         SCRIPT_MCLR_GND_ON);
 
     /* Read board status. */
-    pickit_send(a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_READ_STATUS);
-    pickit_recv(a);
+    pickit_send_recv(a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_READ_STATUS);
     unsigned status = a->reply[0] | a->reply[1] << 8;
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
@@ -1046,8 +1011,7 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
             SCRIPT_VDD_ON);
 
         /* Read board status. */
-        pickit_send(a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_READ_STATUS);
-        pickit_recv(a);
+        pickit_send_recv(a, 2, CMD_CLEAR_UPLOAD_BUFFER, CMD_READ_STATUS);
         status = a->reply[0] | a->reply[1] << 8;
         if (debug_level > 0)
             fprintf(stderr, "%s: status %04x\n", a->name, status);
@@ -1090,8 +1054,7 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
         SCRIPT_JT2_SENDCMD, TAP_SW_MTAP,
         SCRIPT_JT2_SENDCMD, MTAP_COMMAND,
         SCRIPT_JT2_XFERDATA8_LIT, MCHP_STATUS);
-    pickit_send(a, 1, CMD_UPLOAD_DATA);
-    pickit_recv(a);
+    pickit_send_recv(a, 1, CMD_UPLOAD_DATA);
     if (debug_level > 1)
         fprintf(stderr, "%s: got %02x-%02x\n", a->name, a->reply[0], a->reply[1]);
     if (a->reply[0] != 1) {
@@ -1134,23 +1097,29 @@ static adapter_t *open_pickit(hid_device *hiddev, int is_pk3)
  */
 adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial)
 {
-    hid_device *hiddev;
+    int status;
 
-    if (vid) {
+#if 0
+    //TODO: Use serial number to select a HID device.
+    wchar_t *serialp = 0;
+    if (serial) {
         wchar_t buf[256];
-        if (serial)
-            mbstowcs(buf, serial, 256);
-        hiddev = hid_open(vid, pid, serial ? buf : 0);
-    } else {
-        hiddev = hid_open(MICROCHIP_VID, PICKIT2_PID, 0);
+        mbstowcs(buf, serial, 256);
+        serialp = buf;
     }
-    if (! hiddev) {
+#endif
+    if (vid) {
+        status = hid_init(vid, pid);
+    } else {
+        status = hid_init(MICROCHIP_VID, PICKIT2_PID);
+    }
+    if (status < 0) {
         if (vid)
             fprintf(stderr, "PICkit2 not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
         return 0;
     }
-    return open_pickit(hiddev, 0);
+    return open_pickit(0);
 }
 
 /*
@@ -1160,25 +1129,31 @@ adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial)
  */
 adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial)
 {
-    hid_device *hiddev;
+    int status;
 
-    if (vid) {
+#if 0
+    //TODO: Use serial number to select a HID device.
+    wchar_t *serialp = 0;
+    if (serial) {
         wchar_t buf[256];
-        if (serial)
-            mbstowcs(buf, serial, 256);
-        hiddev = hid_open(vid, pid, serial ? buf : 0);
-    } else {
-        hiddev = hid_open(MICROCHIP_VID, PICKIT3_PID, 0);
-        if (! hiddev)
-            hiddev = hid_open(MICROCHIP_VID, CHIPKIT_PID, 0);
-        if (! hiddev)
-            hiddev = hid_open(MICROCHIP_VID, ONBOARD_PID, 0);
+        mbstowcs(buf, serial, 256);
+        serialp = buf;
     }
-    if (! hiddev) {
+#endif
+    if (vid) {
+        status = hid_init(vid, pid);
+    } else {
+        status = hid_init(MICROCHIP_VID, PICKIT3_PID);
+        if (status < 0)
+            status = hid_init(MICROCHIP_VID, CHIPKIT_PID);
+        if (status < 0)
+            status = hid_init(MICROCHIP_VID, ONBOARD_PID);
+    }
+    if (status < 0) {
         if (vid)
             fprintf(stderr, "PICkit3 not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
         return 0;
     }
-    return open_pickit(hiddev, 1);
+    return open_pickit(1);
 }

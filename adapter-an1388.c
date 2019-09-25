@@ -15,7 +15,7 @@
 #include <errno.h>
 
 #include "adapter.h"
-#include "hidapi.h"
+#include "hidlib.h"
 #include "pic32.h"
 
 #define FRAME_SOH           0x01
@@ -31,9 +31,6 @@
 typedef struct {
     /* Common part */
     adapter_t adapter;
-
-    /* Device handle for libusb. */
-    hid_device *hiddev;
 
     unsigned char reply [64];
     int reply_len;
@@ -65,43 +62,6 @@ static unsigned calculate_crc(unsigned crc, unsigned char *data, unsigned nbytes
         data++;
     }
     return crc & 0xffff;
-}
-
-static void an1388_send(hid_device *hiddev, unsigned char *buf, unsigned nbytes)
-{
-    if (debug_level > 0) {
-        int k;
-        fprintf(stderr, "---Send");
-        for (k=0; k<nbytes; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf(stderr, "\n       ");
-            fprintf(stderr, " %02x", buf[k]);
-        }
-        fprintf(stderr, "\n");
-    }
-    hid_write(hiddev, buf, 64);
-}
-
-static int an1388_recv(hid_device *hiddev, unsigned char *buf)
-{
-    int n;
-
-    n = hid_read(hiddev, buf, 64);
-    if (n <= 0) {
-        fprintf(stderr, "hidboot: error %d receiving packet\n", n);
-        exit(-1);
-    }
-    if (debug_level > 0) {
-        int k;
-        fprintf(stderr, "---Recv");
-        for (k=0; k<n; ++k) {
-            if (k != 0 && (k & 15) == 0)
-                fprintf(stderr, "\n       ");
-            fprintf(stderr, " %02x", buf[k]);
-        }
-        fprintf(stderr, "\n");
-    }
-    return n;
 }
 
 static inline unsigned add_byte(unsigned char c,
@@ -149,13 +109,13 @@ static void an1388_command(an1388_adapter_t *a, unsigned char cmd,
     n = add_byte(crc >> 8, buf, n);
 
     buf[n++] = FRAME_EOT;
-    an1388_send(a->hiddev, buf, n);
-
     if (cmd == CMD_JUMP_APP) {
         /* No reply expected. */
+        hid_send_recv(buf, 64, 0, 0);
         return;
     }
-    n = an1388_recv(a->hiddev, buf);
+    hid_send_recv(buf, 64, a->reply, 64);
+    n = 64;
     c = 0;
     for (i=0; i<n; ++i) {
         switch (buf[i]) {
@@ -367,17 +327,24 @@ static void an1388_erase_chip(adapter_t *adapter)
 adapter_t *adapter_open_an1388(int vid, int pid, const char *serial)
 {
     an1388_adapter_t *a;
-    hid_device *hiddev;
+    int status;
+
+#if 0
+    //TODO: Use serial number to select a HID device.
+    wchar_t *serialp = 0;
+    if (serial) {
+        wchar_t buf[256];
+        mbstowcs(buf, serial, 256);
+        serialp = buf;
+    }
+#endif
 
     if (vid) {
-        wchar_t buf[256];
-        if (serial)
-            mbstowcs(buf, serial, 256);
-        hiddev = hid_open(vid, pid, serial ? buf : 0);
-    } else
-        hiddev = hid_open(MICROCHIP_VID, BOOTLOADER_PID, 0);
-
-    if (! hiddev) {
+        status = hid_init(vid, pid);
+    } else {
+        status = hid_init(MICROCHIP_VID, BOOTLOADER_PID);
+    }
+    if (status < 0) {
         if (vid)
             fprintf(stderr, "AN1388 bootloader not found: vid=%04x, pid=%04x, serial=%s\n",
                 vid, pid, serial ? : "(none)");
@@ -388,7 +355,6 @@ adapter_t *adapter_open_an1388(int vid, int pid, const char *serial)
         fprintf(stderr, "Out of memory\n");
         return 0;
     }
-    a->hiddev = hiddev;
 
     /* Read version of adapter. */
     an1388_command(a, CMD_READ_VERSION, 0, 0);

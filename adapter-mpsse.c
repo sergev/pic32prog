@@ -20,11 +20,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#if defined(__FreeBSD__) || defined(__DragonFly__)
-#   include <libusb.h>
-#else
-#   include <libusb-1.0/libusb.h>
-#endif
+#include <libusb.h>
 
 #include "adapter.h"
 #include "pic32.h"
@@ -543,17 +539,17 @@ static void serial_execution(mpsse_adapter_t *a)
                     0);
     /* Xfer data. */
     mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST, 
+                    MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST,
                     TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0); 
+                    0);
     /* Xfer data. */
     mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 
+                    MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE,
                     TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0);  
+                    0);
     /* Xfer data. */
     mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 
+                    MTAP_COMMAND_DR_NBITS, MCHP_STATUS,
                     TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
                     1);
     unsigned status = mpsse_recv(a);
@@ -582,9 +578,9 @@ static void serial_execution(mpsse_adapter_t *a)
                     0);
     /* Xfer data. */
     mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 
+                    MTAP_COMMAND_DR_NBITS, MCHP_STATUS,
                     TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1);  
+                    1);
     status = mpsse_recv(a);
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
@@ -732,9 +728,9 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
 
     /* Send command. */
     mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
+                    ETAP_COMMAND_NBITS, ETAP_FASTDATA,
                     TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0); 
+                    0);
     /* Get fastdata. */
     mpsse_send(a, TMS_HEADER_XFERDATAFAST_NBITS, TMS_HEADER_XFERDATAFAST_VAL,
                     33, 0,
@@ -770,9 +766,9 @@ static void mpsse_read_data(adapter_t *adapter,
     for (words_read = 0; words_read < nwords; words_read += 32) {
 
         mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
+                    ETAP_COMMAND_NBITS, ETAP_FASTDATA,
                     TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0); 
+                    0);
         xfer_fastdata(a, PE_READ << 16 | 32);       /* Read 32 words */
         xfer_fastdata(a, addr);                     /* Address */
 
@@ -856,9 +852,9 @@ static void mpsse_load_executive(adapter_t *adapter,
      * PE_SIZE */
     /* Send command. */
     mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
+                    ETAP_COMMAND_NBITS, ETAP_FASTDATA,
                     TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);  
+                    0);
     xfer_fastdata(a, 0xa0000900);
     xfer_fastdata(a, nwords);
 
@@ -941,9 +937,9 @@ static void mpsse_program_word(adapter_t *adapter,
     /* Use PE to write flash memory. */
     /* Send command. */
     mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
+                    ETAP_COMMAND_NBITS, ETAP_FASTDATA,
                     TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);  
+                    0);
     xfer_fastdata(a, PE_WORD_PROGRAM << 16 | 2);
     mpsse_flush_output(a);
     xfer_fastdata(a, addr);                     /* Send address. */
@@ -979,9 +975,9 @@ static void mpsse_program_row(adapter_t *adapter, unsigned addr,
     /* Use PE to write flash memory. */
     /* Send command. */
     mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
+                    ETAP_COMMAND_NBITS, ETAP_FASTDATA,
                     TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);  
+                    0);
     xfer_fastdata(a, PE_ROW_PROGRAM << 16 | words_per_row);
     mpsse_flush_output(a);
     xfer_fastdata(a, addr);                     /* Send address. */
@@ -1021,9 +1017,9 @@ static void mpsse_verify_data(adapter_t *adapter,
     /* Use PE to get CRC of flash memory. */
     /* Send command. */
     mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
+                    ETAP_COMMAND_NBITS, ETAP_FASTDATA,
                     TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0); 
+                    0);
     xfer_fastdata(a, PE_GET_CRC << 16);
     mpsse_flush_output(a);
     xfer_fastdata(a, addr);                     /* Send address. */
@@ -1217,12 +1213,12 @@ failed: libusb_release_interface(a->usbdev, 0);
     mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
                     MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE,
                     TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0); 
+                    0);
     /* Xfer data. */
     mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
                     MTAP_COMMAND_DR_NBITS, MCHP_STATUS,
                     TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1); 
+                    1);
     unsigned status = mpsse_recv(a);
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
