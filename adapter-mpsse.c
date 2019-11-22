@@ -147,6 +147,10 @@ typedef struct {
 #define TMS_FOOTER_XFERDATAFAST_NBITS   2
 #define TMS_FOOTER_XFERDATAFAST_VAL     0b01
 
+#define SET_MODE_TAP_RESET  0
+#define SET_MODE_EXIT       1
+#define SET_MODE_ICSP_SYNC  2
+
 static const device_t devlist[] = {
     { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000, 0x0100, 1, 0x0008, 1},
     { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000, 0x0100, 1, 0x0008, 1},
@@ -450,6 +454,151 @@ static void mpsse_setPins(mpsse_adapter_t *a, int sysrst, int led,
                         sysrst, led, icsp, icsp_oe, output, direction);
 }
 
+static uint32_t mpsse_bitReversal(uint32_t input){
+    uint32_t output = 0;
+    uint32_t counter = 0;
+    for(counter=0; counter<32; counter++){
+        if(input & (1<<counter)){
+            output = output | (1<<(31-counter));
+        }
+    }
+    return output;
+}
+
+static void mpsse_setMode(mpsse_adapter_t *a, uint32_t mode, uint32_t immediate){
+    
+    if (SET_MODE_TAP_RESET == mode){
+        /* TMS 1-1-1-1-1-0 */
+        mpsse_send(a, TMS_HEADER_RESET_TAP_NBITS, TMS_HEADER_RESET_TAP_VAL, 0, 0, 0, 0, 0);
+    }
+    else if (SET_MODE_EXIT == mode){
+        /* TMS 1-1-1-1-1 */
+        mpsse_send(a, 5, 0x1F, 0, 0, 0, 0, 0);
+    }
+    else if (SET_MODE_ICSP_SYNC == mode && (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface)){
+        // In JTAG mode, send the MCHP key to enter ICSP on the TMS line.
+		uint32_t entryCode = 0x4D434850;   // MCHP in ascii.
+		entryCode = mpsse_bitReversal(entryCode);
+		mpsse_send(a, 8, entryCode & 0xFF, 0, 0, 0, 0, 0);
+		mpsse_send(a, 8, (entryCode >> 8) & 0xFF, 0, 0, 0, 0, 0);
+		mpsse_send(a, 8, (entryCode >> 16) & 0xFF, 0, 0, 0, 0, 0);
+		mpsse_send(a, 8, (entryCode >> 24) & 0xFF, 0, 0, 0, 0, 0);
+
+    }
+    else{
+        fprintf(stderr, "mpsse_setMode called with invalid mode, quitting\n");
+        exit(-1);
+    }
+    if (immediate){
+        mpsse_flush_output(a);
+    }
+}
+
+static void mpsse_sendCommand(mpsse_adapter_t *a, uint32_t command, uint32_t immediate){
+    // All 5-bit commands. The 8-bit ones are command_DR, go through XferData
+    if (MTAP_COMMAND != command && TAP_SW_MTAP != command       // MTAP commands
+        && TAP_SW_ETAP != command && MTAP_IDCODE != command     // MTAP commands
+        && ETAP_ADDRESS != command && ETAP_DATA != command      // ETAP commands
+        && ETAP_CONTROL != command && ETAP_EJTAGBOOT != command // ETAP commands
+        && ETAP_FASTDATA != command && ETAP_NORMALBOOT != command){ // ETAP commands
+        fprintf(stderr, "mpsse_sendCommand called with invalid command 0x%02x, quitting\n", command);
+        exit(-1);   // TODO make exit procedure
+    }
+
+    if (MTAP_COMMAND != command && TAP_SW_MTAP != command 
+        && TAP_SW_ETAP != command && MTAP_IDCODE != command){   // MTAP commands
+        mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+                    MTAP_COMMAND_NBITS, command,
+                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
+                    0);
+    }
+    else if (ETAP_ADDRESS != command && ETAP_DATA != command    // ETAP commands
+            && ETAP_CONTROL != command && ETAP_EJTAGBOOT != command 
+            && ETAP_FASTDATA != command && ETAP_NORMALBOOT != command){
+        mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
+                    ETAP_COMMAND_NBITS, command,
+                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
+                    0);
+    }
+    if (immediate){
+        mpsse_flush_output(a);
+    }
+
+}
+
+
+static uint64_t mpsse_xferData(mpsse_adapter_t *a, uint32_t nBits, 
+                uint32_t iData, uint32_t readFlag, uint32_t immediate){
+    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
+                    nBits, iData, 
+                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
+                    readFlag);
+    if (readFlag){
+        /* Flushes the output data, and returns the data */
+        return mpsse_recv(a);
+    }
+    if (immediate){
+        mpsse_flush_output(a);
+    }
+    return 0;
+}
+
+static uint64_t mpsse_xferFastData(mpsse_adapter_t *a, unsigned word, uint32_t readFlag, uint32_t immediate)
+{
+    uint64_t temp;
+    mpsse_send(a, TMS_HEADER_XFERDATAFAST_NBITS, TMS_HEADER_XFERDATAFAST_VAL,
+                    33, (unsigned long long) word << 1,
+                    TMS_FOOTER_XFERDATAFAST_NBITS, TMS_FOOTER_XFERDATAFAST_VAL,
+                    1);
+    temp = mpsse_recv(a);
+    if (!(temp & 0x01)){
+        fprintf(stderr, "Warning: PrACC not set in xferFastData\n");
+    }
+    if (readFlag){
+        return temp;
+    }
+    return 0;
+}
+
+static void mpsse_xferInstruction(mpsse_adapter_t *a, unsigned instruction)
+{
+    unsigned ctl;
+    unsigned maxCounter = 0;
+
+    if (debug_level > 1)
+        fprintf(stderr, "%s: xfer instruction %08x\n", a->name, instruction);
+
+    /* Select Control Register */
+    mpsse_sendCommand(a, ETAP_CONTROL, 1); // ETAP_CONTROL, immediate
+
+    // Wait until CPU is ready
+    // Check if Processor Access bit (bit 18) is set
+    do {
+        ctl = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN 
+            | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1, 1);    // Send data, readflag, immediate don't care
+        if ((! (ctl & CONTROL_PRACC))){
+            fprintf(stderr, "xfer instruction, ctl was %08x\n", ctl);
+            maxCounter++;
+            if (maxCounter > 4){
+                fprintf(stderr, "Processor still not ready. Quitting\n");
+                exit(-1);   // TODO exit procedure
+            }
+            mdelay(1000);
+        }
+    } while (! (ctl & CONTROL_PRACC));
+
+    /* Select Data Register */
+    mpsse_sendCommand(a, ETAP_DATA, 1);    // ETAP_DATA, immediate
+
+    /* Send the instruction */
+    mpsse_xferData(a, 32, instruction, 0, 1);  // Send instruction, don't read, immediate
+
+    /* Tell CPU to execute instruction */
+    mpsse_sendCommand(a, ETAP_CONTROL, 1); // ETAP_CONTROL, immediate
+    /* Send data. */
+    mpsse_xferData(a, 32, (CONTROL_PROBEN | CONTROL_PROBTRAP), 0, 1);   // Send data, no readback, immediate
+}
+
 static void mpsse_speed(mpsse_adapter_t *a, int khz)
 {
     unsigned char output [3];
@@ -520,12 +669,8 @@ static unsigned mpsse_get_idcode(adapter_t *adapter)
     /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
      * After reset, the IDCODE register is always selected.
      * Read out 32 bits of data. */
-    mpsse_send(a, TMS_HEADER_RESET_TAP_NBITS + TMS_HEADER_XFERDATA_NBITS,
-                    TMS_HEADER_RESET_TAP_VAL + (TMS_HEADER_XFERDATA_VAL << TMS_HEADER_RESET_TAP_NBITS),
-                    32, 0,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1);
-    idcode = mpsse_recv(a);
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    /* Send TAP reset, immediate */
+    idcode = mpsse_xferData(a, 32, 0, 1, 1);    /* Send 32 0s, receive, immediate (don't care) */
     return idcode;
 }
 
@@ -542,44 +687,26 @@ static void serial_execution(mpsse_adapter_t *a)
     if (debug_level > 0)
         fprintf(stderr, "%s: enter serial execution\n", a->name);
 
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, TAP_SW_ETAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_EJTAGBOOT,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    /* Reset TAP */
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
+    /* Switch to ETAP */
+    mpsse_sendCommand(a, TAP_SW_ETAP, 1);   // Send command, immediate
+    /* Reset TAP */
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
+    /* Put CPU in Serial Exec Mode */
+    mpsse_sendCommand(a, ETAP_EJTAGBOOT, 1); // Send command, immediate
 
     /* Check status. */
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, TAP_SW_MTAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, TAP_SW_MTAP, 0);  // Command, not immediate
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, MTAP_COMMAND,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, MTAP_COMMAND, 0);
     /* Xfer data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST, 
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0); 
+    mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST, 0, 1);
     /* Xfer data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0);  
-    /* Xfer data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1);
-    unsigned status = mpsse_recv(a);
+    mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);  
+    /* Get status */
+    unsigned status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
     if ((status & ~MCHP_STATUS_DEVRST) !=
@@ -594,21 +721,11 @@ static void serial_execution(mpsse_adapter_t *a)
 
     /* Check status. */
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, TAP_SW_MTAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, TAP_SW_MTAP, 0);  // Command, not immediate
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, MTAP_COMMAND,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-    /* Xfer data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1);  
-    status = mpsse_recv(a);
+    mpsse_sendCommand(a, MTAP_COMMAND, 0);
+    /* Get status */
+    status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
     if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
@@ -618,70 +735,7 @@ static void serial_execution(mpsse_adapter_t *a)
     }
 
     /* Leave it in ETAP mode. */
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS , TAP_SW_ETAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-    mpsse_flush_output(a);
-}
-
-static void xfer_fastdata(mpsse_adapter_t *a, unsigned word)
-{
-    mpsse_send(a, TMS_HEADER_XFERDATAFAST_NBITS, TMS_HEADER_XFERDATAFAST_VAL,
-                    33, (unsigned long long) word << 1,
-                    TMS_FOOTER_XFERDATAFAST_NBITS, TMS_FOOTER_XFERDATAFAST_VAL,
-                    0);
-}
-
-static void xfer_instruction(mpsse_adapter_t *a, unsigned instruction)
-{
-    unsigned ctl;
-
-    if (debug_level > 1)
-        fprintf(stderr, "%s: xfer instruction %08x\n", a->name, instruction);
-
-    // Select Control Register
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_CONTROL,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-
-    // Wait until CPU is ready
-    // Check if Processor Access bit (bit 18) is set
-    do {
-        mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                        32, CONTROL_PRACC |CONTROL_PROBEN |CONTROL_PROBTRAP | CONTROL_EJTAGBRK,
-                        TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                        1);
-        ctl = mpsse_recv(a);
-    } while (! (ctl & CONTROL_PRACC));
-
-    // Select Data Register
-    // Send the instruction
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_DATA,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-    /* Send data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    32, instruction,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0);
-
-    // Tell CPU to execute instruction
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_CONTROL,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-    /* Send data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    32, CONTROL_PROBEN | CONTROL_PROBTRAP,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0);
+    mpsse_sendCommand(a, TAP_SW_ETAP, 1);
 }
 
 static unsigned get_pe_response(mpsse_adapter_t *a)
@@ -690,46 +744,29 @@ static unsigned get_pe_response(mpsse_adapter_t *a)
 
     // Select Control Register
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_CONTROL,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, ETAP_CONTROL, 1);
 
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
     do {
-        mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                        32, CONTROL_PRACC |CONTROL_PROBEN |CONTROL_PROBTRAP | CONTROL_EJTAGBRK,
-                        TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                        1);
-        ctl = mpsse_recv(a);
+        ctl = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN 
+                | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1, 1);    // Send data, readflag, immediate don't care
     } while (! (ctl & CONTROL_PRACC));
 
     // Select Data Register
     // Send the instruction
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_DATA,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, ETAP_DATA, 1);
+
     /* Get data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    32, 0,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1);
-    response = mpsse_recv(a);
+    response = mpsse_xferData(a, 32, 0, 1, 1);  // Send 32 zeroes, read response, immediate don't care
 
     // Tell CPU to execute NOP instruction
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_CONTROL,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, ETAP_CONTROL, 1);
     /* Send data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    32, CONTROL_PROBEN | CONTROL_PROBTRAP,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0);
+    mpsse_xferData(a, 32, (CONTROL_PROBEN | CONTROL_PROBTRAP), 0, 1);
+
     if (debug_level > 1)
         fprintf(stderr, "%s: get PE response %08x\n", a->name, response);
     return response;
@@ -743,27 +780,23 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
     unsigned addr_lo = addr & 0xFFFF;
     unsigned addr_hi = (addr >> 16) & 0xFFFF;
+    unsigned word = 0;
 
     serial_execution(a);
 
     //fprintf(stderr, "%s: read word from %08x\n", a->name, addr);
-    xfer_instruction(a, 0x3c04bf80);            // lui s3, 0xFF20
-    xfer_instruction(a, 0x3c080000 | addr_hi);  // lui t0, addr_hi
-    xfer_instruction(a, 0x35080000 | addr_lo);  // ori t0, addr_lo
-    xfer_instruction(a, 0x8d090000);            // lw t1, 0(t0)
-    xfer_instruction(a, 0xae690000);            // sw t1, 0(s3)
+    mpsse_xferInstruction(a, 0x3c04bf80);            // lui s3, 0xFF20
+    mpsse_xferInstruction(a, 0x3c080000 | addr_hi);  // lui t0, addr_hi
+    mpsse_xferInstruction(a, 0x35080000 | addr_lo);  // ori t0, addr_lo
+    mpsse_xferInstruction(a, 0x8d090000);            // lw t1, 0(t0)
+    mpsse_xferInstruction(a, 0xae690000);            // sw t1, 0(s3)
 
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0); 
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
     /* Get fastdata. */
-    mpsse_send(a, TMS_HEADER_XFERDATAFAST_NBITS, TMS_HEADER_XFERDATAFAST_VAL,
-                    33, 0,
-                    TMS_FOOTER_XFERDATAFAST_NBITS, TMS_FOOTER_XFERDATAFAST_VAL,
-                    1);
-    unsigned word = mpsse_recv(a) >> 1;
+    
+    /* Send zeroes, read response, immediate don't care. Shift by 1 to get rid of PrACC */
+    word = mpsse_xferFastData(a, 0, 1, 1) >> 1;
 
     if (debug_level > 0)
         fprintf(stderr, "%s: read word at %08x -> %08x\n", a->name, addr, word);
@@ -792,12 +825,9 @@ static void mpsse_read_data(adapter_t *adapter,
     /* Use PE to read memory. */
     for (words_read = 0; words_read < nwords; words_read += 32) {
 
-        mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0); 
-        xfer_fastdata(a, PE_READ << 16 | 32);       /* Read 32 words */
-        xfer_fastdata(a, addr);                     /* Address */
+        mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+        mpsse_xferFastData(a, PE_READ << 16 | 32, 0, 1);       /* Read 32 words */  // Data, don't read, immediate
+        mpsse_xferFastData(a, addr, 0, 1);                     /* Address */        // Data, don't read, immediate
 
         unsigned response = get_pe_response(a);     /* Get response */
         if (response != PE_READ << 16) {
@@ -827,24 +857,24 @@ static void mpsse_load_executive(adapter_t *adapter,
         fprintf(stderr, "%s: download PE loader\n", a->name);
 
     /* Step 1. */
-    xfer_instruction(a, 0x3c04bf88);    // lui a0, 0xbf88
-    xfer_instruction(a, 0x34842000);    // ori a0, 0x2000 - address of BMXCON
-    xfer_instruction(a, 0x3c05001f);    // lui a1, 0x1f
-    xfer_instruction(a, 0x34a50040);    // ori a1, 0x40   - a1 has 001f0040
-    xfer_instruction(a, 0xac850000);    // sw  a1, 0(a0)  - BMXCON initialized
+    mpsse_xferInstruction(a, 0x3c04bf88);    // lui a0, 0xbf88
+    mpsse_xferInstruction(a, 0x34842000);    // ori a0, 0x2000 - address of BMXCON
+    mpsse_xferInstruction(a, 0x3c05001f);    // lui a1, 0x1f
+    mpsse_xferInstruction(a, 0x34a50040);    // ori a1, 0x40   - a1 has 001f0040
+    mpsse_xferInstruction(a, 0xac850000);    // sw  a1, 0(a0)  - BMXCON initialized
 
     /* Step 2. */
-    xfer_instruction(a, 0x34050800);    // li  a1, 0x800  - a1 has 00000800
-    xfer_instruction(a, 0xac850010);    // sw  a1, 16(a0) - BMXDKPBA initialized
+    mpsse_xferInstruction(a, 0x34050800);    // li  a1, 0x800  - a1 has 00000800
+    mpsse_xferInstruction(a, 0xac850010);    // sw  a1, 16(a0) - BMXDKPBA initialized
 
     /* Step 3. */
-    xfer_instruction(a, 0x8c850040);    // lw  a1, 64(a0) - load BMXDMSZ
-    xfer_instruction(a, 0xac850020);    // sw  a1, 32(a0) - BMXDUDBA initialized
-    xfer_instruction(a, 0xac850030);    // sw  a1, 48(a0) - BMXDUPBA initialized
+    mpsse_xferInstruction(a, 0x8c850040);    // lw  a1, 64(a0) - load BMXDMSZ
+    mpsse_xferInstruction(a, 0xac850020);    // sw  a1, 32(a0) - BMXDUDBA initialized
+    mpsse_xferInstruction(a, 0xac850030);    // sw  a1, 48(a0) - BMXDUPBA initialized
 
     /* Step 4. */
-    xfer_instruction(a, 0x3c04a000);    // lui a0, 0xa000
-    xfer_instruction(a, 0x34840800);    // ori a0, 0x800  - a0 has a0000800
+    mpsse_xferInstruction(a, 0x3c04a000);    // lui a0, 0xa000
+    mpsse_xferInstruction(a, 0x34840800);    // ori a0, 0x800  - a0 has a0000800
 
     /* Download the PE loader. */
     int i;
@@ -853,53 +883,46 @@ static void mpsse_load_executive(adapter_t *adapter,
         unsigned opcode1 = 0x3c060000 | pic32_pe_loader[i];
         unsigned opcode2 = 0x34c60000 | pic32_pe_loader[i+1];
 
-        xfer_instruction(a, opcode1);       // lui a2, PE_loader_hi++
-        xfer_instruction(a, opcode2);       // ori a2, PE_loader_lo++
-        xfer_instruction(a, 0xac860000);    // sw  a2, 0(a0)
-        xfer_instruction(a, 0x24840004);    // addiu a0, 4
+        mpsse_xferInstruction(a, opcode1);       // lui a2, PE_loader_hi++
+        mpsse_xferInstruction(a, opcode2);       // ori a2, PE_loader_lo++
+        mpsse_xferInstruction(a, 0xac860000);    // sw  a2, 0(a0)
+        mpsse_xferInstruction(a, 0x24840004);    // addiu a0, 4
     }
 
     /* Jump to PE loader (step 6). */
-    xfer_instruction(a, 0x3c19a000);    // lui t9, 0xa000
-    xfer_instruction(a, 0x37390800);    // ori t9, 0x800  - t9 has a0000800
-    xfer_instruction(a, 0x03200008);    // jr  t9
-    xfer_instruction(a, 0x00000000);    // nop
+    mpsse_xferInstruction(a, 0x3c19a000);    // lui t9, 0xa000
+    mpsse_xferInstruction(a, 0x37390800);    // ori t9, 0x800  - t9 has a0000800
+    mpsse_xferInstruction(a, 0x03200008);    // jr  t9
+    mpsse_xferInstruction(a, 0x00000000);    // nop
 
     /* Switch from serial to fast execution mode. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS , TAP_SW_ETAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, TAP_SW_ETAP, 1);
     /* TMS 1-1-1-1-1-0 */
-    mpsse_send(a, TMS_HEADER_RESET_TAP_NBITS, TMS_HEADER_RESET_TAP_VAL,
-                0, 0, 0, 0, 0);
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
 
     /* Send parameters for the loader (step 7-A).
      * PE_ADDRESS = 0xA000_0900,
      * PE_SIZE */
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);  
-    xfer_fastdata(a, 0xa0000900);
-    xfer_fastdata(a, nwords);
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+    mpsse_xferFastData(a, 0xa0000900, 0, 1);    /* Don't read, immediate */
+    mpsse_xferFastData(a, nwords, 0, 1);        /* Don't read, immediate */
 
     /* Download the PE itself (step 7-B). */
     if (debug_level > 0)
         fprintf(stderr, "%s: download PE\n", a->name);
     for (i=0; i<nwords; i++) {
-        xfer_fastdata(a, *pe++);
+        mpsse_xferFastData(a, *pe++, 0, 0);     /* Don't read, not immediate */
     }
     mpsse_flush_output(a);
     mdelay(10);
 
     /* Download the PE instructions. */
-    xfer_fastdata(a, 0);                        /* Step 8 - jump to PE. */
-    xfer_fastdata(a, 0xDEAD0000);
-    mpsse_flush_output(a);
+    /* Step 8 - jump to PE. */
+    mpsse_xferFastData(a, 0, 0, 1);             /* Don't read, immediate */                  
+    mpsse_xferFastData(a, 0xDEAD0000, 0, 1);    /* Don't read, immediate */
     mdelay(10);
-    xfer_fastdata(a, PE_EXEC_VERSION << 16);
+    mpsse_xferFastData(a, PE_EXEC_VERSION << 16, 0, 1); /* Don't read, immediate */
 
     unsigned version = get_pe_response(a);
     if (version != (PE_EXEC_VERSION << 16 | pe_version)) {
@@ -918,31 +941,34 @@ static void mpsse_load_executive(adapter_t *adapter,
 static void mpsse_erase_chip(adapter_t *adapter)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+    unsigned status = 0;
 
+    /* Switch to MTAP */
+    mpsse_sendCommand(a, TAP_SW_MTAP, 1);
+    /* Reset TAP */
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    TMS_HEADER_COMMAND_VAL, TAP_SW_MTAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    TMS_HEADER_COMMAND_VAL, MTAP_COMMAND,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, MTAP_COMMAND, 1);
     /* Xfer data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MTAP_COMMAND,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0);
-    mpsse_flush_output(a);
-    mdelay(400);
+    mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_ERASE, 0, 1);
+    mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST, 0, 1);
 
-    /* Leave it in ETAP mode. */
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS , TAP_SW_ETAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    // https://www.microchip.com/forums/m627418.aspx .......
+    if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){
+        mpsse_setPins(a, 0, 1, 0, 0, 1);  /* No Reset, LED, no ICSP, no ICSP_OE, immediate */
+    }
+
+    do{
+        status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);  // Send data, read response, immediate don't care
+        //fprintf(stderr, "Status is 0x%08x ... \n", statuss);
+        if (!(status & MCHP_STATUS_CFGRDY) || (status & MCHP_STATUS_FCBUSY)){
+            printf(".");
+            mdelay(10);
+        }
+    }while(!(status & MCHP_STATUS_CFGRDY) || (status & MCHP_STATUS_FCBUSY));
+
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1); 
+    mdelay(25);
 }
 
 /*
@@ -963,15 +989,11 @@ static void mpsse_program_word(adapter_t *adapter,
 
     /* Use PE to write flash memory. */
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);  
-    xfer_fastdata(a, PE_WORD_PROGRAM << 16 | 2);
-    mpsse_flush_output(a);
-    xfer_fastdata(a, addr);                     /* Send address. */
-    mpsse_flush_output(a);
-    xfer_fastdata(a, word);                     /* Send word. */
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+
+    mpsse_xferFastData(a, PE_WORD_PROGRAM << 16 | 2, 0, 1); // Data, don't read, immediate
+    mpsse_xferFastData(a, addr, 0, 1);  /* Send address. */ // Data, don't read, immediate
+    mpsse_xferFastData(a, word, 0, 1);  /* Send word. */    // Data, don't read, immediate
 
     unsigned response = get_pe_response(a);
     if (response != (PE_WORD_PROGRAM << 16)) {
@@ -1001,19 +1023,16 @@ static void mpsse_program_row(adapter_t *adapter, unsigned addr,
 
     /* Use PE to write flash memory. */
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);  
-    xfer_fastdata(a, PE_ROW_PROGRAM << 16 | words_per_row);
-    mpsse_flush_output(a);
-    xfer_fastdata(a, addr);                     /* Send address. */
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1); 
+
+    mpsse_xferFastData(a, PE_ROW_PROGRAM << 16 | words_per_row, 0, 1);  // Data, don't read, immediate
+    mpsse_xferFastData(a, addr, 0, 1);  /* Send address. */             // Data, don't read, immediate
 
     /* Download data. */
     for (i = 0; i < words_per_row; i++) {
         if ((i & 7) == 0)
             mpsse_flush_output(a);
-        xfer_fastdata(a, *data++);              /* Send word. */
+        mpsse_xferFastData(a, *data++, 0, 0);   /* Send word. Don't read, not immediate */
     }
     mpsse_flush_output(a);
 
@@ -1043,15 +1062,13 @@ static void mpsse_verify_data(adapter_t *adapter,
 
     /* Use PE to get CRC of flash memory. */
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    ETAP_COMMAND_NBITS, ETAP_FASTDATA, 
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0); 
-    xfer_fastdata(a, PE_GET_CRC << 16);
-    mpsse_flush_output(a);
-    xfer_fastdata(a, addr);                     /* Send address. */
-    mpsse_flush_output(a);
-    xfer_fastdata(a, nwords * 4);               /* Send length. */
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+
+    mpsse_xferFastData(a, PE_GET_CRC << 16, 0, 1);  // Data, don't read, immediate
+     /* Send address. */
+    mpsse_xferFastData(a, addr, 0, 1);              // Data, don't read, immediate
+    /* Send length. */
+    mpsse_xferFastData(a, nwords * 4, 0, 1);        // Data, don't read, immediate
 
     unsigned response = get_pe_response(a);
     if (response != (PE_GET_CRC << 16)) {
