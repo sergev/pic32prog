@@ -180,9 +180,9 @@ step1_6_mm(pickit_adapter_t *a, unsigned nwords)
         pickit_send(a, 20, CMD_CLEAR_DOWNLOAD_BUFFER,
             CMD_DOWNLOAD_DATA, 12,          //------------- step 5
                 WORD_AS_BYTES((0x41A6
-                    | pic32_pemm_loader[i+1] << 16)),
-                WORD_AS_BYTES((0x50c6
                     | pic32_pemm_loader[i] << 16)),
+                WORD_AS_BYTES((0x50c6
+                    | pic32_pemm_loader[i+1] << 16)),
                 WORD_AS_BYTES(0x6e42eb40),
             CMD_EXECUTE_SCRIPT, 3,          //------------- execute
                 SCRIPT_JT2_XFERINST_BUF,
@@ -318,6 +318,10 @@ static void pickit_load_executive(adapter_t *adapter,
     //fprintf(stderr, "%s: load_executive\n", a->name);
     a->use_executive = 1;
     serial_execution(a);
+
+	/* Round nwords to 10, to be compatible with routine below.
+	 * This is why there are extra 0s in the executive file for padding. */
+	nwords = (nwords%10) == 0 ? nwords : nwords + 10 - (nwords%10);
 
     if (strcmp(a->name, "mm") == 0)
         step1_6_mm(a, nwords);

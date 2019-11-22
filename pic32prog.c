@@ -25,6 +25,8 @@
 #include "localize.h"
 #include "adapter.h"
 
+#include "pic32.h"
+
 #ifndef VERSION
 #define VERSION         "2.0."GITCOUNT
 #endif
@@ -59,10 +61,27 @@ int total_bytes;
 int interface = INTERFACE_DEFAULT;  /* Optionally specified JTAG or ICSP */
 int interface_speed = 0;            /* Optional clock speed of interface */
 
+// PIC32MX, MZ and MK DEVCFG definitions
 #define devcfg3 (*(unsigned*) &boot_data [devcfg_offset])
 #define devcfg2 (*(unsigned*) &boot_data [devcfg_offset + 4])
 #define devcfg1 (*(unsigned*) &boot_data [devcfg_offset + 8])
 #define devcfg0 (*(unsigned*) &boot_data [devcfg_offset + 12])
+
+// PIC32MM definitions
+#define offset_first 0xc0
+#define offset_alternate 0x40
+#define fdevopt  (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x04])
+#define ficd     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x08])
+#define fpor     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x0c])
+#define fwdt     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x10])
+#define foscsel  (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x14])
+#define fsec     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x18])
+#define afdevopt  (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x04])
+#define aficd     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x08])
+#define afpor     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x0c])
+#define afwdt     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x10])
+#define afoscsel  (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x14])
+#define afsec     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x18])
 
 unsigned progress_count;
 int verify_only;
@@ -161,6 +180,10 @@ int read_srec(char *filename)
         perror(filename);
         exit(1);
     }
+
+    fdevopt = 0;    /* PIC32MM config bit check */
+    afdevopt = 0;   /* PIC32MM config bit check */
+
     while (fgets((char*) buf, sizeof(buf), fd)) {
         if (buf[0] == '\n')
             continue;
@@ -227,6 +250,8 @@ int read_hex(char *filename)
         perror(filename);
         exit(1);
     }
+    fdevopt = 0;    /* PIC32MM config bit check */
+    afdevopt = 0;   /* PIC32MM config bit check */
     high = 0;
     while (fgets((char*) buf, sizeof(buf), fd)) {
         if (buf[0] == '\n')
@@ -492,14 +517,24 @@ void do_program(char *filename)
 
     /* Verify DEVCFGx values. */
     if (boot_used) {
-        if (devcfg0 == 0xffffffff) {
-            fprintf(stderr, _("DEVCFG values are missing -- check your HEX file!\n"));
-            exit(1);
+        if (target->family->name_short == FAMILY_MM){
+            /* Check if both values have something in them.
+             * DEVOPT (and other) have some permanent 1 bits. Use those. */
+            if ( ((fdevopt&0x0ff0) != 0x0ff0) || ((afdevopt&0x0ff0) != 0x0ff0)){
+                fprintf(stderr, _("Configuration bits are missing -- check your HEX file!\n"));
+                exit(1);
+            }
         }
-        if (devcfg_offset == 0xffc0) {
-            /* For MZ family, clear bits DEVSIGN0[31] and ADEVSIGN0[31]. */
-            boot_data[0xFFEF] &= 0x7f;
-            boot_data[0xFF6F] &= 0x7f;
+        else{
+            if (devcfg0 == 0xffffffff) {
+                fprintf(stderr, _("DEVCFG values are missing -- check your HEX file!\n"));
+                exit(1);
+            }
+            if (devcfg_offset == 0xffc0) {
+                /* For MZ family, clear bits DEVSIGN0[31] and ADEVSIGN0[31]. */
+                boot_data[0xFFEF] &= 0x7f;
+                boot_data[0xFF6F] &= 0x7f;
+            }
         }
     }
 
@@ -573,8 +608,15 @@ void do_program(char *filename)
             printf(_("# done      \n"));
             if (! boot_dirty [devcfg_offset / blocksz]) {
                 /* Write chip configuration. */
-                target_program_devcfg(target,
-                    devcfg0, devcfg1, devcfg2, devcfg3);
+                if (target->family->name_short == FAMILY_MM){
+                    target_program_devcfg(target, fdevopt, ficd, fpor, fwdt, 
+                                            foscsel, fsec, afdevopt, aficd, 
+                                            afpor, afwdt, afoscsel, afsec);
+                }
+                else{
+                    target_program_devcfg(target, devcfg0, devcfg1, devcfg2, devcfg3,
+                                            0, 0, 0, 0, 0, 0, 0, 0);
+                }
                 boot_dirty [devcfg_offset / blocksz] = 1;
             }
         }

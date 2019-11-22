@@ -14,6 +14,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <errno.h>
+#include <stdint.h>
 
 #include "target.h"
 #include "adapter.h"
@@ -31,7 +32,7 @@ extern print_func_t print_mm;
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
 static const
 family_t family_mm  = { "mm", FAMILY_MM, 
-                        4, 0x1780,  256, print_mz,  pic32_pemm,  2000, 0x0510 };
+                        4, 0x1700,  256, print_mm,  pic32_pemm,  555, 0x0510 };
 static const
 family_t family_mx1 = { "mx1", FAMILY_MX1,
                         3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
@@ -279,6 +280,7 @@ static variant_t pic32_tab[TABSZ] = {
 
     /* MM family */
     {0x46b12053, "MM0064GPL028",  64,   &family_mm},
+    {0x46b16053, "MM0064GPL036",  64,   &family_mm},
     {0x66b04053, "MM0016GPL028",  16,   &family_mm},
 
     /* USB bootloader */
@@ -635,20 +637,48 @@ void target_print_devcfg(target_t *t)
     if (! t->family->devcfg_offset)
         return;
 
-    unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
-    unsigned devcfg3 = t->adapter->read_word(t->adapter, devcfg_addr);
-    unsigned devcfg2 = t->adapter->read_word(t->adapter, devcfg_addr + 4);
-    unsigned devcfg1 = t->adapter->read_word(t->adapter, devcfg_addr + 8);
-    unsigned devcfg0 = t->adapter->read_word(t->adapter, devcfg_addr + 12);
+    if (FAMILY_MM == t->family->name_short){
+        uint32_t devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
+        uint32_t offset_first = 0xc0;
+        uint32_t offset_alternate = 0x40;
+        
+        uint32_t fdevopt = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x04);
+        uint32_t ficd    = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x08);
+        uint32_t fpor    = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x0c);
+        uint32_t fwdt    = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x10);
+        uint32_t foscsel = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x14);
+        uint32_t fsec    = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x18);
+        uint32_t afdevopt = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x04);
+        uint32_t aficd    = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x08);
+        uint32_t afpor    = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x0c);
+        uint32_t afwdt    = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x10);
+        uint32_t afoscsel = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x14);
+        uint32_t afsec    = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x18);
+        if (fdevopt == 0 || afdevopt == 0){
+            fprintf(stderr, "Failed to read config value, or values are garbage\n");            
+            return;
+        } 
+        print_mm(fdevopt, ficd, fpor, fwdt, foscsel, fsec,
+                                afdevopt, aficd, afpor, afwdt, afoscsel, afsec);
+    }
+    else{
+        /* MX, MK, MZ */
+        unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
+        unsigned devcfg3 = t->adapter->read_word(t->adapter, devcfg_addr);
+        unsigned devcfg2 = t->adapter->read_word(t->adapter, devcfg_addr + 4);
+        unsigned devcfg1 = t->adapter->read_word(t->adapter, devcfg_addr + 8);
+        unsigned devcfg0 = t->adapter->read_word(t->adapter, devcfg_addr + 12);
 
-    if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
-        devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
-        return;
-    if (devcfg3 == 0 && devcfg2 == 0 && devcfg1 == 0 && devcfg0 == 0)
-        return;
+        if (devcfg3 == 0xffffffff && devcfg2 == 0xffffffff &&
+            devcfg1 == 0xffffffff && devcfg0 == 0x7fffffff)
+            return;
+        if (devcfg3 == 0 && devcfg2 == 0 && devcfg1 == 0 && devcfg0 == 0)
+            return;
 
-    printf(_("Configuration:\n"));
-    t->family->print_devcfg(devcfg0, devcfg1, devcfg2, devcfg3);
+        printf(_("Configuration:\n"));
+        t->family->print_devcfg(devcfg0, devcfg1, devcfg2, devcfg3,
+                                0, 0, 0, 0, 0, 0, 0, 0);
+    }
 }
 
 /*
@@ -775,29 +805,54 @@ void target_program_block(target_t *t, unsigned addr,
 /*
  * Program the configuration registers.
  */
-void target_program_devcfg(target_t *t, unsigned devcfg0,
-        unsigned devcfg1, unsigned devcfg2, unsigned devcfg3)
+void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
+        uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, 
+        uint32_t arg6, uint32_t arg7, uint32_t arg8, uint32_t arg9, 
+        uint32_t arg10, uint32_t arg11)
 {
     if (! t->family->devcfg_offset)
         return;
 
-    unsigned addr = 0x1fc00000 + t->family->devcfg_offset;
+    unsigned devcfg_addr = 0x1fc00000 + t->family->devcfg_offset;
 
-    fprintf(stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, devcfg0, devcfg1, devcfg2, devcfg3);
-    if (t->family->pe_version >= 0x0500) {
-        /* Since pic32mz, the programming executive */
+    if (t->family->name_short == FAMILY_MM){
+        uint32_t offset_first = 0xc0;
+        uint32_t offset_alternate = 0x40;
 
-        /* Disable JTAG on MM series. */
-        if (memcmp(t->family->name, "mm", 2) == 0)
-            t->adapter->program_double_word(t->adapter, 0x1FC017C8, 0xfffffff3, 0xffffffff);
+        fprintf(stderr, "%s: fdevopt = %08x, ficd = %08x, fpor =  %08x,\n", __func__, arg0, arg1, arg2);
+        fprintf(stderr, "fwdt = %08x, foscsel = %08x, fsecr =  %08x,\n", arg3, arg4, arg5);
+        fprintf(stderr, "afdevopt = %08x, aficd = %08x, afpor =  %08x,\n", arg6, arg7, arg8);
+        fprintf(stderr, "afwdt = %08x, afoscsel = %08x, afsecr =  %08x\n", arg9, arg10, arg11);
 
-        t->adapter->program_quad_word(t->adapter, addr, devcfg3,
-            devcfg2, devcfg1, devcfg0);
-        return;
+        // So, MM family doesn't have program_word, just double_word
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_first + 0x00, 0xFFFFFFFF, arg0);   // padding + fdevopt
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_first + 0x08, arg1, arg2);         // ficd + fpor
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_first + 0x10, arg3, arg4);         // fwdt + foscsel
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_first + 0x18, arg5, 0xFFFFFFFF);  // fsec + padding
+        // Also says something about FSIGN, that doesn't appear anywhere else...
+
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_alternate + 0x00, 0xFFFFFFFF, arg6);   // padding + afdevopt
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_alternate + 0x08, arg7, arg8);         // aficd + afpor
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_alternate + 0x10, arg9, arg10);        // afwdt + afoscsel
+        t->adapter->program_double_word(t->adapter, devcfg_addr + offset_alternate + 0x18, arg11, 0xFFFFFFFF); // afsec + padding
+        // Also says something about FSIGN, that doesn't appear anywhere else...
+
     }
+    else{
 
-    t->adapter->program_word(t->adapter, addr, devcfg3);
-    t->adapter->program_word(t->adapter, addr + 4, devcfg2);
-    t->adapter->program_word(t->adapter, addr + 8, devcfg1);
-    t->adapter->program_word(t->adapter, addr + 12, devcfg0);
+        fprintf(stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, arg0, arg1, arg2, arg3);
+        if (t->family->pe_version >= 0x0500) {
+            /* Since pic32mz, the programming executive */
+
+            t->adapter->program_quad_word(t->adapter, devcfg_addr, arg3,
+                arg2, arg1, arg0);
+            return;
+        }
+
+        t->adapter->program_word(t->adapter, devcfg_addr, arg3);
+        t->adapter->program_word(t->adapter, devcfg_addr + 4, arg2);
+        t->adapter->program_word(t->adapter, devcfg_addr + 8, arg1);
+        t->adapter->program_word(t->adapter, devcfg_addr + 12, arg0);
+
+    }
 }

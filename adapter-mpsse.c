@@ -1091,74 +1091,141 @@ static void mpsse_load_executive(adapter_t *adapter,
     if (debug_level > 0)
         fprintf(stderr, "%s: download PE loader\n", a->name);
 
-    /* Step 1. */
-    mpsse_xferInstruction(a, 0x3c04bf88);    // lui a0, 0xbf88
-    mpsse_xferInstruction(a, 0x34842000);    // ori a0, 0x2000 - address of BMXCON
-    mpsse_xferInstruction(a, 0x3c05001f);    // lui a1, 0x1f
-    mpsse_xferInstruction(a, 0x34a50040);    // ori a1, 0x40   - a1 has 001f0040
-    mpsse_xferInstruction(a, 0xac850000);    // sw  a1, 0(a0)  - BMXCON initialized
+    if (a->adapter.family_name_short == FAMILY_MX1
+        || a->adapter.family_name_short == FAMILY_MX3
+        || a->adapter.family_name_short == FAMILY_MK
+        || a->adapter.family_name_short == FAMILY_MZ)
+    {
+        /* Step 1. */
+        mpsse_xferInstruction(a, 0x3c04bf88);    // lui a0, 0xbf88
+        mpsse_xferInstruction(a, 0x34842000);    // ori a0, 0x2000 - address of BMXCON
+        mpsse_xferInstruction(a, 0x3c05001f);    // lui a1, 0x1f
+        mpsse_xferInstruction(a, 0x34a50040);    // ori a1, 0x40   - a1 has 001f0040
+        mpsse_xferInstruction(a, 0xac850000);    // sw  a1, 0(a0)  - BMXCON initialized
 
-    /* Step 2. */
-    mpsse_xferInstruction(a, 0x34050800);    // li  a1, 0x800  - a1 has 00000800
-    mpsse_xferInstruction(a, 0xac850010);    // sw  a1, 16(a0) - BMXDKPBA initialized
+        /* Step 2. */
+        mpsse_xferInstruction(a, 0x34050800);    // li  a1, 0x800  - a1 has 00000800
+        mpsse_xferInstruction(a, 0xac850010);    // sw  a1, 16(a0) - BMXDKPBA initialized
 
-    /* Step 3. */
-    mpsse_xferInstruction(a, 0x8c850040);    // lw  a1, 64(a0) - load BMXDMSZ
-    mpsse_xferInstruction(a, 0xac850020);    // sw  a1, 32(a0) - BMXDUDBA initialized
-    mpsse_xferInstruction(a, 0xac850030);    // sw  a1, 48(a0) - BMXDUPBA initialized
+        /* Step 3. */
+        mpsse_xferInstruction(a, 0x8c850040);    // lw  a1, 64(a0) - load BMXDMSZ
+        mpsse_xferInstruction(a, 0xac850020);    // sw  a1, 32(a0) - BMXDUDBA initialized
+        mpsse_xferInstruction(a, 0xac850030);    // sw  a1, 48(a0) - BMXDUPBA initialized
 
-    /* Step 4. */
-    mpsse_xferInstruction(a, 0x3c04a000);    // lui a0, 0xa000
-    mpsse_xferInstruction(a, 0x34840800);    // ori a0, 0x800  - a0 has a0000800
+        /* Step 4. */
+        mpsse_xferInstruction(a, 0x3c04a000);    // lui a0, 0xa000
+        mpsse_xferInstruction(a, 0x34840800);    // ori a0, 0x800  - a0 has a0000800
 
-    /* Download the PE loader. */
-    int i;
-    for (i=0; i<PIC32_PE_LOADER_LEN; i+=2) {
-        /* Step 5. */
-        unsigned opcode1 = 0x3c060000 | pic32_pe_loader[i];
-        unsigned opcode2 = 0x34c60000 | pic32_pe_loader[i+1];
+        /* Download the PE loader. */
+        int i;
+        for (i=0; i<PIC32_PE_LOADER_LEN; i+=2) {
+            /* Step 5. */
+            unsigned opcode1 = 0x3c060000 | pic32_pe_loader[i];
+            unsigned opcode2 = 0x34c60000 | pic32_pe_loader[i+1];
 
-        mpsse_xferInstruction(a, opcode1);       // lui a2, PE_loader_hi++
-        mpsse_xferInstruction(a, opcode2);       // ori a2, PE_loader_lo++
-        mpsse_xferInstruction(a, 0xac860000);    // sw  a2, 0(a0)
-        mpsse_xferInstruction(a, 0x24840004);    // addiu a0, 4
+            mpsse_xferInstruction(a, opcode1);       // lui a2, PE_loader_hi++
+            mpsse_xferInstruction(a, opcode2);       // ori a2, PE_loader_lo++
+            mpsse_xferInstruction(a, 0xac860000);    // sw  a2, 0(a0)
+            mpsse_xferInstruction(a, 0x24840004);    // addiu a0, 4
+        }
+
+        /* Jump to PE loader (step 6). */
+        mpsse_xferInstruction(a, 0x3c19a000);    // lui t9, 0xa000
+        mpsse_xferInstruction(a, 0x37390800);    // ori t9, 0x800  - t9 has a0000800
+        mpsse_xferInstruction(a, 0x03200008);    // jr  t9
+        mpsse_xferInstruction(a, 0x00000000);    // nop
+
+        /* Switch from serial to fast execution mode. */
+        mpsse_sendCommand(a, TAP_SW_ETAP, 1);
+        /* TMS 1-1-1-1-1-0 */
+        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+
+        /* Send parameters for the loader (step 7-A).
+         * PE_ADDRESS = 0xA000_0900,
+         * PE_SIZE */
+        /* Send command. */
+        mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+        mpsse_xferFastData(a, 0xa0000900, 0, 1);    /* Don't read, immediate */
+        mpsse_xferFastData(a, nwords, 0, 1);        /* Don't read, immediate */
+
+        /* Download the PE itself (step 7-B). */
+        if (debug_level > 0)
+            fprintf(stderr, "%s: download PE\n", a->name);
+        for (i=0; i<nwords; i++) {
+            mpsse_xferFastData(a, *pe++, 0, 0);     /* Don't read, not immediate */
+        }
+        mpsse_flush_output(a);
+        mdelay(10);
+
+        /* Download the PE instructions. */
+        /* Step 8 - jump to PE. */
+        mpsse_xferFastData(a, 0, 0, 1);             /* Don't read, immediate */                  
+        mpsse_xferFastData(a, 0xDEAD0000, 0, 1);    /* Don't read, immediate */
+        mdelay(10);
+        mpsse_xferFastData(a, PE_EXEC_VERSION << 16, 0, 1); /* Don't read, immediate */
     }
+    else{
+        /* Else MM family */
+        // Step 1. Setup PIC32MM RAM address for the PE 
+		mpsse_xferInstruction(a, 0xa00041a4);    // lui a0, 0xa000
+		mpsse_xferInstruction(a, 0x02005084);    // ori a0, a0, 0x800 A total of 0xa000_0200
 
-    /* Jump to PE loader (step 6). */
-    mpsse_xferInstruction(a, 0x3c19a000);    // lui t9, 0xa000
-    mpsse_xferInstruction(a, 0x37390800);    // ori t9, 0x800  - t9 has a0000800
-    mpsse_xferInstruction(a, 0x03200008);    // jr  t9
-    mpsse_xferInstruction(a, 0x00000000);    // nop
+		// Step 2. Load the PE_loader.
+		int i;
+		for (i=0; i<PIC32_PEMM_LOADER_LEN; i+=2) {
+		    /* Step 5. */
+		    unsigned opcode1 = 0x41A6 | (pic32_pemm_loader[i] << 16);
+		    unsigned opcode2 = 0x50C6 | (pic32_pemm_loader[i+1] << 16);
 
-    /* Switch from serial to fast execution mode. */
-    mpsse_sendCommand(a, TAP_SW_ETAP, 1);
-    /* TMS 1-1-1-1-1-0 */
-    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+		    mpsse_xferInstruction(a, opcode1);       // lui a2, PE_loader_hi++
+		    mpsse_xferInstruction(a, opcode2);       // ori a2, a2, PE_loader_lo++
+		    mpsse_xferInstruction(a, 0x6E42EB40);    // sw  a2, 0(a0); addiu a0, a0, 4;
+		}
 
-    /* Send parameters for the loader (step 7-A).
-     * PE_ADDRESS = 0xA000_0900,
-     * PE_SIZE */
-    /* Send command. */
-    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
-    mpsse_xferFastData(a, 0xa0000900, 0, 1);    /* Don't read, immediate */
-    mpsse_xferFastData(a, nwords, 0, 1);        /* Don't read, immediate */
+		// Step 3. Jump to the PE_Loader
+		mpsse_xferInstruction(a, 0xA00041B9);       // lui t9, 0xa000
+		mpsse_xferInstruction(a, 0x02015339);       // ori t9, t9, 0x0800. Same address as at beginning +1.
+		mpsse_xferInstruction(a, 0x0C004599);       // jr t9; nop;
 
-    /* Download the PE itself (step 7-B). */
-    if (debug_level > 0)
-        fprintf(stderr, "%s: download PE\n", a->name);
-    for (i=0; i<nwords; i++) {
-        mpsse_xferFastData(a, *pe++, 0, 0);     /* Don't read, not immediate */
+		/* These nops here are MANDATORY. And exactly this many.
+		 * Less it doesn't work, more it doesn't work. */
+		mpsse_xferInstruction(a, 0x0C000C00);
+		mpsse_xferInstruction(a, 0x0C000C00);
+
+		// Step 4. Load the PE using the PE_loader
+		// Switch to ETAP
+		mpsse_sendCommand(a, TAP_SW_ETAP, 1);
+		/* TMS 1-1-1-1-1-0 */
+		mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+		// Set to FASTDATA
+		mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+
+		// Send PE_ADDRESS, Address os PE program block from PE Hex file
+		mpsse_xferFastData(a, 0xA0000300, 0, 1);	// Taken from the .hex file.
+		
+		// Send PE_SIZE, number as 32-bit words of the program block from the PE Hex file
+		mpsse_xferFastData(a, nwords, 0, 1);        // Data, don't read, immediate (wasn't before)
+
+		if (debug_level > 0){
+			fprintf(stderr, "%s: download PE, nwords = %d\n", a->name, nwords);
+			//mdelay(3000);		
+		}
+		for (i=0; i<nwords; i++) {
+			mpsse_xferFastData(a, *pe++, 0, 0);     // Data, don't read, no immediate
+		}
+		mpsse_flush_output(a);
+		mdelay(10);
+
+		// Step 5, Jump to the PE.
+		mpsse_xferFastData(a, 0x00000000, 0, 1);
+		mpsse_xferFastData(a, 0xDEAD0000, 0, 1);
+
+		// Done.
+		// Get PE version?
+		mdelay(10);
+		mpsse_xferFastData(a, PE_EXEC_VERSION << 16, 0, 1);     // Data, don't read, immediate (wasn't before)
     }
-    mpsse_flush_output(a);
-    mdelay(10);
-
-    /* Download the PE instructions. */
-    /* Step 8 - jump to PE. */
-    mpsse_xferFastData(a, 0, 0, 1);             /* Don't read, immediate */                  
-    mpsse_xferFastData(a, 0xDEAD0000, 0, 1);    /* Don't read, immediate */
-    mdelay(10);
-    mpsse_xferFastData(a, PE_EXEC_VERSION << 16, 0, 1); /* Don't read, immediate */
-
+    
     unsigned version = get_pe_response(a);
     if (version != (PE_EXEC_VERSION << 16 | pe_version)) {
         fprintf(stderr, "%s: bad PE version = %08x, expected %08x\n",
@@ -1579,5 +1646,6 @@ failed: libusb_release_interface(a->usbdev, 0);
     a->adapter.erase_chip = mpsse_erase_chip;
     a->adapter.program_word = mpsse_program_word;
     a->adapter.program_row = mpsse_program_row;
+    a->adapter.program_double_word = mpsse_program_double_word;
     return &a->adapter;
 }
