@@ -56,6 +56,8 @@ unsigned boot_bytes;
 unsigned flash_bytes;
 unsigned devcfg_offset;         /* Offset of devcfg registers in boot data */
 int total_bytes;
+int interface = INTERFACE_DEFAULT;  /* Optionally specified JTAG or ICSP */
+int interface_speed = 0;            /* Optional clock speed of interface */
 
 #define devcfg3 (*(unsigned*) &boot_data [devcfg_offset])
 #define devcfg2 (*(unsigned*) &boot_data [devcfg_offset + 4])
@@ -360,7 +362,7 @@ void do_probe()
 {
     /* Open and detect the device. */
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -441,7 +443,7 @@ int verify_block(target_t *mc, unsigned addr)
 void do_erase()
 {
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -463,7 +465,7 @@ void do_program(char *filename)
 
     /* Open and detect the device. */
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -628,7 +630,7 @@ void do_read(char *filename, unsigned base, unsigned nbytes)
 
     /* Open and detect the device. */
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -750,7 +752,7 @@ int main(int argc, char **argv)
 #endif
     signal(SIGTERM, interrupted);
 
-    while ((ch = getopt_long(argc, argv, "vDhrpeCVWSd:b:B:",
+    while ((ch = getopt_long(argc, argv, "vDhrpeCVWSd:b:B:i:s:",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -803,6 +805,29 @@ int main(int argc, char **argv)
         case 'S':
             ++skip_verify;
             continue;
+        case 'i':
+            if (strcmp(optarg, "jtag") == 0 || strcmp(optarg, "JTAG") == 0){
+                interface = INTERFACE_JTAG;
+                if (debug_level > 0){
+                    fprintf(stderr, "Using JTAG interface, if available\n");
+                }
+            }
+            else if ( strcmp(optarg, "icsp") == 0 || strcmp(optarg, "ICSP") == 0){
+                interface = INTERFACE_ICSP;
+                if (debug_level > 0){
+                    fprintf(stderr, "Using ICSP interface, if available\n");
+                }
+            }
+            else{
+                fprintf(stderr, "Unknown interface \"%s\" specified\n", optarg);
+                return 0;
+            }
+            continue;
+        case 's':
+            interface_speed = strtoul(optarg, 0, 0);
+            if (debug_level > 0){
+                fprintf(stderr, "Using clock speed of %d khz, if available\n", interface_speed);
+            }
         }
 usage:
         printf("%s.\n\n", copyright);
@@ -826,6 +851,8 @@ usage:
         printf("       -d device           Use specified serial or USB device\n");
         printf("       -b baudrate         Serial speed, default 115200\n");
         printf("       -B alt_baud         Request an alternative baud rate\n");
+        printf("       -i interface        Choose JTAG or ICSP (if supported)\n");
+        printf("       -s clock_speed      Speed of interface in khz, if supported\n");
         printf("       -e                  Erase chip\n");
         printf("       -p                  Leave board powered on\n");
         printf("       -D                  Debug mode\n");

@@ -17,6 +17,7 @@ typedef void print_func_t(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned 
 
 typedef struct {
     const char      *name;
+	unsigned		name_short;
     unsigned        boot_kbytes;
     unsigned        devcfg_offset;
     unsigned        bytes_per_row;
@@ -43,7 +44,7 @@ typedef struct {
     unsigned        boot_bytes;
 } target_t;
 
-target_t *target_open(const char *port, int baud_rate);
+target_t *target_open(const char *port, int baud_rate, int interface, int speed);
 void target_close(target_t *t, int power_on);
 void target_use_executive(target_t *t);
 void target_configure(void);

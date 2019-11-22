@@ -30,16 +30,16 @@ extern print_func_t print_mm;
  */
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
 static const
-family_t family_mm  = { "mm",
+family_t family_mm  = { "mm", FAMILY_MM, 
                         4, 0x1780,  256, print_mz,  pic32_pemm,  2000, 0x0510 };
 static const
-family_t family_mx1 = { "mx1",
+family_t family_mx1 = { "mx1", FAMILY_MX1,
                         3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
 static const
-family_t family_mx3 = { "mx3",
+family_t family_mx3 = { "mx3", FAMILY_MX3,
                         12, 0x2ff0, 512,  print_mx3, pic32_pemx3, 1044, 0x0201 };
 static const
-family_t family_mz  = { "mz",
+family_t family_mz  = { "mz", FAMILY_MZ,
                         80, 0xffc0, 2048, print_mz,  pic32_pemz,  1052, 0x0502 };
 /*
  * This one is a special one for the bootloader. We have no idea what we're
@@ -344,7 +344,7 @@ void mdelay(unsigned msec)
  * Open USB adapter, detected by vendor/product ID.
  * Return a pointer to adapter structure, or 0 when not found.
  */
-static adapter_t *open_usb_adapter(const char *port_name)
+static adapter_t *open_usb_adapter(const char *port_name, int interface, int speed)
 {
     char *delimiter;
     const char *serial = 0;
@@ -353,18 +353,39 @@ static adapter_t *open_usb_adapter(const char *port_name)
     if (!port_name) {
         /* Autodetect the device from a list of known adapters. */
         adapter_t *a = adapter_open_pickit2(0, 0, 0);
-        if (! a)
+		if(a && (INTERFACE_JTAG == interface)){
+			fprintf(stderr, "Found Pickit2, but it does not support the JTAG interface\n");
+			return 0;
+		}
+        if (! a){
             a = adapter_open_pickit3(0, 0, 0);
+			if(a && (INTERFACE_JTAG == interface)){
+				fprintf(stderr, "Found Pickit3, but it does not support the JTAG interface\n");
+				return 0;
+			}
+		}
 #ifdef USE_MPSSE
         if (! a)
-            a = adapter_open_mpsse(0, 0, 0);
+            a = adapter_open_mpsse(0, 0, 0, interface, speed);
 #endif
-        if (! a)
+        if (! a){
             a = adapter_open_hidboot(0, 0, 0);
-        if (! a)
+			if(a && (INTERFACE_DEFAULT != interface)){
+				fprintf(stderr, "Found bootloader, ignoring specified interface\n");
+			}
+		}
+        if (! a){
             a = adapter_open_an1388(0, 0, 0);
-        if (! a)
+			if(a && (INTERFACE_DEFAULT != interface)){
+				fprintf(stderr, "Found bootloader, ignoring specified interface\n");
+			}
+		}
+        if (! a){
             a = adapter_open_uhb(0, 0, 0);
+			if(a && (INTERFACE_DEFAULT != interface)){
+				fprintf(stderr, "Found bootloader, ignoring specified interface\n");
+			}
+		}
         return a;
     }
 
@@ -404,10 +425,16 @@ found:
  * To select other protocols, add a prefix to the port name,
  * like "bitbang:COM5".
  */
-static adapter_t *open_serial_adapter(const char *port_name, int baud_rate)
+static adapter_t *open_serial_adapter(const char *port_name, int baud_rate, 
+										int interface, int speed)
 {
     const char *prefix, *delimiter;
     int prefix_len, len, i;
+
+	if (INTERFACE_DEFAULT != interface){
+		fprintf(stderr, "Non-default interface currently not-supported on \
+						serial adapters, ingoring specified interface\n");
+	}
 
     /* Get protocol prefix. */
     delimiter = strchr(port_name, ':');
@@ -463,7 +490,7 @@ static int is_usb_device(const char *port_name)
 /*
  * Connect to JTAG adapter.
  */
-target_t *target_open(const char *port_name, int baud_rate)
+target_t *target_open(const char *port_name, int baud_rate, int interface, int speed)
 {
     target_t *t;
 
@@ -479,9 +506,9 @@ target_t *target_open(const char *port_name, int baud_rate)
 
     /* Find adapter. */
     if (is_usb_device(port_name)) {
-        t->adapter = open_usb_adapter(port_name);
+        t->adapter = open_usb_adapter(port_name, interface, speed);
     } else {
-        t->adapter = open_serial_adapter(port_name, baud_rate);
+        t->adapter = open_serial_adapter(port_name, baud_rate, interface, speed);
     }
     if (! t->adapter) {
         fprintf(stderr, "\n");
@@ -517,6 +544,8 @@ target_t *target_open(const char *port_name, int baud_rate)
         t->boot_bytes = t->adapter->boot_nbytes;
     }
     t->adapter->family_name = t->family->name;
+    t->adapter->family_name_short = t->family->name_short;
+
     return t;
 }
 

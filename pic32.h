@@ -24,6 +24,12 @@ extern const unsigned pic32_pemx3[];
 extern const unsigned pic32_pemz[];
 extern const unsigned pic32_pemm[];
 
+#define FAMILY_MX1	0
+#define FAMILY_MX3	1
+#define FAMILY_MZ	2
+#define FAMILY_MK	3
+#define FAMILY_MM	4
+
 /*
  * TAP instructions (5-bit).
  */

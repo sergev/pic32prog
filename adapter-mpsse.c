@@ -42,7 +42,11 @@ typedef struct {
     uint16_t led_control;
     uint8_t led_inverted;
     const char *product;
-    uint16_t extra_output;
+    uint16_t extra_output;      /* Default OE settings, etc. */
+    uint16_t icsp_control;      /* Selecting ICSP mode. 0 == JTAG, 1 == ICSP */
+    uint16_t icsp_inverted; 
+    uint16_t icsp_oe_control;   /* Selecting data direction in ICSP mode. 0 == OUTPUT, 1 == INPUT */
+    uint16_t icsp_oe_inverted;
 } device_t;
 
 typedef struct {
@@ -59,7 +63,7 @@ typedef struct {
     int bytes_to_write;
 
     /* Receive buffer. */
-    unsigned char input [64];
+    unsigned char input [256];  /* Increased for ICSP, just in case */
     int bytes_to_read;
     int bytes_per_word;
     unsigned long long fix_high_bit;
@@ -71,10 +75,13 @@ typedef struct {
     unsigned trst_control, trst_inverted;
     unsigned sysrst_control, sysrst_inverted;
     unsigned led_control, led_inverted;
+    unsigned icsp_control, icsp_inverted;
+    unsigned icsp_oe_control, icsp_oe_inverted;
     unsigned dir_control;
     unsigned extra_output;
 
     unsigned mhz;
+    unsigned interface;
     unsigned use_executive;
     unsigned serial_execution_mode;
 } mpsse_adapter_t;
@@ -133,21 +140,21 @@ typedef struct {
 #define TMS_HEADER_RESET_TAP_NBITS      6
 #define TMS_HEADER_RESET_TAP_VAL        0b011111
 
-#define TMS_FOOTER_COMMAND_NBITS        3
-#define TMS_FOOTER_COMMAND_VAL          0b001
-#define TMS_FOOTER_XFERDATA_NBITS       3
-#define TMS_FOOTER_XFERDATA_VAL         0b001
+#define TMS_FOOTER_COMMAND_NBITS        2
+#define TMS_FOOTER_COMMAND_VAL          0b01
+#define TMS_FOOTER_XFERDATA_NBITS       2
+#define TMS_FOOTER_XFERDATA_VAL         0b01
 #define TMS_FOOTER_XFERDATAFAST_NBITS   2
 #define TMS_FOOTER_XFERDATAFAST_VAL     0b01
 
 static const device_t devlist[] = {
-    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000},
-    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000},
-    { OLIMEX_VID,           OLIMEX_ARM_USB_OCD_H,   "Olimex ARM-USB-OCD-H",             30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000},
-    { OLIMEX_VID,           OLIMEX_MIPS_USB_OCD_H,  "Olimex MIPS-USB-OCD-H",            30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0800,  0, NULL, 0x0000},
-    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "TinCanTools Flyswatter",            6,  0x0cf0, 0x0010, 1,  0x0020,  1,   0x0c00,  1, "Flyswatter", 0x0000},
-    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "Neofoxx JTAG/SWD adapter",         30,  0xff3b, 0x0100, 1,  0x0200,  1,   0x8000,  1, "Neofoxx JTAG/SWD adapter", 0x0020},
-    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "Dangerous Prototypes Bus Blaster", 30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0000,  0, NULL, 0x0000},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY,    "Olimex ARM-USB-Tiny",               6,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000, 0x0100, 1, 0x0008, 1},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_TINY_H,  "Olimex ARM-USB-Tiny-H",            30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000, 0x0100, 1, 0x0008, 1},
+    { OLIMEX_VID,           OLIMEX_ARM_USB_OCD_H,   "Olimex ARM-USB-OCD-H",             30,  0x0f10, 0x0100, 1,  0x0200,  0,   0x0800,  0, NULL, 0x0000, 0x0100, 1, 0x0008, 1},
+    { OLIMEX_VID,           OLIMEX_MIPS_USB_OCD_H,  "Olimex MIPS-USB-OCD-H",            30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0800,  0, NULL, 0x0000, 0x0100, 1, 0x0008, 1},
+    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "TinCanTools Flyswatter",            6,  0x0cf0, 0x0010, 1,  0x0020,  1,   0x0c00,  1, "Flyswatter", 0x0000, 0x0100, 1, 0x0008, 1},
+    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "Neofoxx JTAG/SWD adapter",         30,  0xff3b, 0x0100, 1,  0x0200,  1,   0x8000,  1, "Neofoxx JTAG/SWD adapter", 0x0000, 0x0020, 1, 0x1000, 0},
+    { FTDI_DEFAULT_VID,     FTDI_DEFAULT_PID,       "Dangerous Prototypes Bus Blaster", 30,  0x0f10, 0x0100, 1,  0x0200,  1,   0x0000,  0, NULL, 0x0000, 0x0100, 1, 0x0008, 1},
     { 0 }
 };
 
@@ -389,16 +396,15 @@ static unsigned long long mpsse_recv(mpsse_adapter_t *a)
     return mpsse_fix_data(a, word);
 }
 
-static void mpsse_reset(mpsse_adapter_t *a, int trst, int sysrst, int led)
-{
-    unsigned char buf [3];
-    unsigned output    = 0x0008 | a->extra_output;  /* TCK idle high, OE pins etc. */
-    unsigned direction = 0x000b | a->dir_control;
+/*  Renamed function to mpsse_setPins, since it does more than just reset. 
+ *  Now controls state of reset (always SYSRST), LED,
+ *  ICSP select and ICSP output enable pins */
 
-    if (trst)
-        output |= a->trst_control;
-    if (a->trst_inverted)
-        output ^= a->trst_control;
+static void mpsse_setPins(mpsse_adapter_t *a, int sysrst, int led,
+                            int icsp, int icsp_oe, int immediateWrite)
+{
+    unsigned output    = 0x0008 | a->extra_output;  /* TMS idle high, OE pins etc. */
+    unsigned direction = 0x000b | a->dir_control;
 
     if (sysrst)
         output |= a->sysrst_control;
@@ -410,21 +416,38 @@ static void mpsse_reset(mpsse_adapter_t *a, int trst, int sysrst, int led)
     if (a->led_inverted)
         output ^= a->led_control;
 
+    if (icsp)
+        output |= a->icsp_control;
+    if (a->icsp_inverted)
+        output ^= a->icsp_control;
+
+    if (icsp){
+		if (output & a->icsp_oe_control){
+            output ^= a->icsp_oe_control; /* Fix for boards that use TMS as OE */
+		}
+		if (icsp_oe)
+		    output |= a->icsp_oe_control;
+		if (a->icsp_oe_inverted)
+		    output ^= a->icsp_oe_control;
+	}
+
     /* command "set data bits low byte" */
-    buf [0] = 0x80;
-    buf [1] = output;
-    buf [2] = direction;
-    bulk_write(a, buf, 3);
+    a->output [a->bytes_to_write++] = 0x80;
+    a->output [a->bytes_to_write++] = output;
+    a->output [a->bytes_to_write++] = direction;
 
     /* command "set data bits high byte" */
-    buf [0] = 0x82;
-    buf [1] = output >> 8;
-    buf [2] = direction >> 8;
-    bulk_write(a, buf, 3);
+    a->output [a->bytes_to_write++] = 0x82;
+    a->output [a->bytes_to_write++] = output >> 8;
+    a->output [a->bytes_to_write++] = direction >> 8;
 
-    if (debug_level)
-        fprintf(stderr, "mpsse_reset(trst=%d, sysrst=%d) output=%04x, direction: %04x\n",
-            trst, sysrst, output, direction);
+    if (immediateWrite)
+        mpsse_flush_output(a);
+
+    if (debug_level>1)
+        fprintf(stderr, "mpsse_setPins(sysrst=%d, led=%d, icsp=%d, icsp_oe=%d)\
+                         output=%04x, direction: %04x\n",
+                        sysrst, led, icsp, icsp_oe, output, direction);
 }
 
 static void mpsse_speed(mpsse_adapter_t *a, int khz)
@@ -477,9 +500,9 @@ static void mpsse_close(adapter_t *adapter, int power_on)
     mpsse_flush_output(a);
 
     /* Toggle /SYSRST. */
-    mpsse_reset(a, 0, 1, 1);
+    mpsse_setPins(a, 1, 1, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
     mdelay(100);    /* Hold in reset for a bit, so it auto-runs afterwards */
-    mpsse_reset(a, 0, 0, 0);
+    mpsse_setPins(a, 0, 0, 0, 0, 1); // No Reset, no LED, no ICSP, no ICSP_OE, immediate
 
     libusb_release_interface(a->usbdev, 0);
     libusb_close(a->usbdev);
@@ -566,7 +589,7 @@ static void serial_execution(mpsse_adapter_t *a)
     }
 
     /* Deactivate /SYSRST. */
-    mpsse_reset(a, 0, 0, 1);
+    mpsse_setPins(a, 0, 1, 0, 0, 1); // No Reset, LED, no ICSP, no ICSP_OE, immediate
     mdelay(10);
 
     /* Check status. */
@@ -1052,7 +1075,8 @@ static void mpsse_verify_data(adapter_t *adapter,
  * When adapter not found, return 0.
  * Parameters vid, pid and serial are not used.
  */
-adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial)
+adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial, 
+                                int interface, int speed)
 {
     mpsse_adapter_t *a;
     unsigned char product [256];
@@ -1094,6 +1118,7 @@ adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial)
             if (match == 1) {
                 a->name = devlist[i].name;
                 a->mhz = devlist[i].mhz;
+                a->interface = interface;
                 a->dir_control      = devlist[i].dir_control;
                 a->trst_control     = devlist[i].trst_control;
                 a->trst_inverted    = devlist[i].trst_inverted;
@@ -1102,6 +1127,10 @@ adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial)
                 a->led_control      = devlist[i].led_control;
                 a->led_inverted     = devlist[i].led_inverted;
                 a->extra_output     = devlist[i].extra_output;
+                a->icsp_control     = devlist[i].icsp_control;
+                a->icsp_inverted     = devlist[i].icsp_inverted;
+                a->icsp_oe_control     = devlist[i].icsp_oe_control;
+                a->icsp_oe_inverted     = devlist[i].icsp_oe_inverted;
                 goto found;
             }
         }
@@ -1168,8 +1197,11 @@ failed: libusb_release_interface(a->usbdev, 0);
     if (debug_level)
         fprintf(stderr, "%s: latency timer: %u usec\n", a->name, latency_timer);
 
-    /* By default, use 500 kHz speed. */
+    /* By default, use 500 kHz speed, unless specified */
     int khz = 500;
+    if (0 != speed){
+        khz = speed;
+    }
     mpsse_speed(a, khz);
 
     /* Disable TDI to TDO loopback. */
@@ -1177,7 +1209,7 @@ failed: libusb_release_interface(a->usbdev, 0);
     bulk_write(a, enable_loopback, 1);
 
     /* Activate LED. */
-    mpsse_reset(a, 0, 0, 1);
+    mpsse_setPins(a, 0, 1, 0, 0, 1); // No Reset, LED, no ICSP, no ICSP_OE, immediate
 
     /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
      * After reset, the IDCODE register is always selected.
@@ -1194,12 +1226,12 @@ failed: libusb_release_interface(a->usbdev, 0);
         if (debug_level > 0 || (idcode != 0 && idcode != 0xffffffff))
             fprintf(stderr, "%s: incompatible CPU detected, IDCODE=%08x\n",
                 a->name, idcode);
-        mpsse_reset(a, 0, 0, 0);
+        mpsse_setPins(a, 0, 0, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
         goto failed;
     }
 
     /* Activate /SYSRST and LED. */
-    mpsse_reset(a, 0, 1, 1);
+    mpsse_setPins(a, 1, 1, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
     mdelay(10);
 
     /* Check status. */
@@ -1229,7 +1261,7 @@ failed: libusb_release_interface(a->usbdev, 0);
     if ((status & ~MCHP_STATUS_DEVRST) !=
         (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY | MCHP_STATUS_FAEN)) {
         fprintf(stderr, "%s: invalid status = %04x\n", a->name, status);
-        mpsse_reset(a, 0, 0, 0);
+        mpsse_setPins(a, 0, 0, 0, 0, 1); // No reset, no LED, no ICSP mode, no ICSP_OE, immediate
         goto failed;
     }
     printf("      Adapter: %s\n", a->name);
