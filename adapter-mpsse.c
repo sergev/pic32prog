@@ -907,8 +907,7 @@ static void serial_execution(mpsse_adapter_t *a)
             if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){  
                 /* For these chips, ICSP & JTAG pins are shared. Can do a trick */
                 if (FAMILY_MX1 == a->adapter.family_name_short
-                    || FAMILY_MX1 == a->adapter.family_name_short
-                    || FAMILY_MM == a->adapter.family_name_short)
+                    || FAMILY_MX3 == a->adapter.family_name_short)
                 {
 				    fprintf(stderr, "In JTAG mode, trying to recover automatically\n");
 				    // MCLR is currently 1.
@@ -996,7 +995,7 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
     serial_execution(a);
     do{
         if (FAMILY_MX1 == a->adapter.family_name_short
-                        || FAMILY_MX1 == a->adapter.family_name_short
+                        || FAMILY_MX3 == a->adapter.family_name_short
                         || FAMILY_MK == a->adapter.family_name_short
                         || FAMILY_MZ == a->adapter.family_name_short)
         {
