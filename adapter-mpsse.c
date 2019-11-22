@@ -219,6 +219,7 @@ static void mpsse_flush_output(mpsse_adapter_t *a)
 {
     int bytes_read, n;
     unsigned char reply [64];
+    uint64_t icspTemp = 0;
 
     if (a->bytes_to_write <= 0)
         return;
@@ -250,10 +251,25 @@ static void mpsse_flush_output(mpsse_adapter_t *a)
             }
         }
         if (n > 2) {
-            /* Copy data. */
-            memcpy(a->input + bytes_read, reply + 2, n - 2);
+            if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface)
+            {
+                /* Copy data. */
+                memcpy(a->input + bytes_read, reply + 2, n - 2);
+            }
+            else{
+                /* Else ICSP. Do data reconstruction from the bytes */
+                int counter;
+                for (counter=2; counter<n; counter++){
+                    icspTemp = icspTemp>>1 | ((reply[counter]&0x80) ? (1ULL<<63) : 0);
+                }
+            }
             bytes_read += n - 2;
         }
+    }
+    if (INTERFACE_ICSP == a->interface){
+        /* Since data is LSB, shift data to far right */
+        icspTemp = icspTemp>>((63+1) - a->bytes_to_read);
+        memcpy(a->input, &icspTemp, sizeof(uint64_t));        
     }
     if (debug_level > 1) {
         int i;
@@ -263,141 +279,6 @@ static void mpsse_flush_output(mpsse_adapter_t *a)
         fprintf(stderr, "\n");
     }
     a->bytes_to_read = 0;
-}
-
-static void mpsse_send(mpsse_adapter_t *a,
-    unsigned tms_prolog_nbits, unsigned tms_prolog,
-    unsigned tdi_nbits, unsigned long long tdi,
-    unsigned tms_epilog_nbits, unsigned tms_epilog, int read_flag)
-{
-
-    /* Check that we have enough space in output buffer.
-     * Max size of one packet is 23 bytes (6+8+3+3+3). */
-    if (a->bytes_to_write > sizeof(a->output) - 23)
-        mpsse_flush_output(a);
-
-    /* Prepare a packet of MPSSE commands. */
-    if (tms_prolog_nbits > 0) {
-        /* Prologue TMS, from 1 to 14 bits.
-         * 4b - Clock Data to TMS Pin (no Read) */
-        a->output [a->bytes_to_write++] = WTMS + BITMODE + CLKWNEG + LSB;
-        if (tms_prolog_nbits < 8) {
-            a->output [a->bytes_to_write++] = tms_prolog_nbits - 1;
-            a->output [a->bytes_to_write++] = tms_prolog;
-        } else {
-            a->output [a->bytes_to_write++] = 7 - 1;
-            a->output [a->bytes_to_write++] = tms_prolog & 0x7f;
-            a->output [a->bytes_to_write++] = WTMS + BITMODE + CLKWNEG + LSB;
-            a->output [a->bytes_to_write++] = tms_prolog_nbits - 7 - 1;
-            a->output [a->bytes_to_write++] = tms_prolog >> 7;
-        }
-    }
-    if (tdi_nbits > 0) {
-        /* Data, from 1 to 64 bits. */
-        if (tms_epilog_nbits > 0) {
-            /* Last bit should be accompanied with signal TMS=1. */
-            tdi_nbits--;
-        }
-        unsigned nbytes = tdi_nbits / 8;
-        unsigned last_byte_bits = tdi_nbits & 7;
-        if (read_flag) {
-            a->high_byte_bits = last_byte_bits;
-            a->fix_high_bit = 0;
-            a->high_byte_mask = 0;
-            a->bytes_per_word = nbytes;
-            if (a->high_byte_bits > 0)
-                a->bytes_per_word++;
-            a->bytes_to_read += a->bytes_per_word;
-        }
-        if (nbytes > 0) {
-            /* Whole bytes.
-             * 39 - Clock Data Bytes In and Out LSB First
-             * 19 - Clock Data Bytes Out LSB First (no Read) */
-            a->output [a->bytes_to_write++] = read_flag ?
-                (WTDI + RTDO + CLKWNEG + LSB) :
-                (WTDI + CLKWNEG + LSB);
-            a->output [a->bytes_to_write++] = nbytes - 1;
-            a->output [a->bytes_to_write++] = (nbytes - 1) >> 8;
-            while (nbytes-- > 0) {
-                a->output [a->bytes_to_write++] = tdi;
-                tdi >>= 8;
-            }
-        }
-        if (last_byte_bits) {
-            /* Last partial byte.
-             * 3b - Clock Data Bits In and Out LSB First
-             * 1b - Clock Data Bits Out LSB First (no Read) */
-            a->output [a->bytes_to_write++] = read_flag ?
-                (WTDI + RTDO + BITMODE + CLKWNEG + LSB) :
-                (WTDI + BITMODE + CLKWNEG + LSB);
-            a->output [a->bytes_to_write++] = last_byte_bits - 1;
-            a->output [a->bytes_to_write++] = tdi;
-            tdi >>= last_byte_bits;
-            a->high_byte_mask = 0xffULL << (a->bytes_per_word - 1) * 8;
-        }
-        if (tms_epilog_nbits > 0) {
-            /* Last bit (actually two bits).
-             * 6b - Clock Data to TMS Pin with Read
-             * 4b - Clock Data to TMS Pin (no Read) */
-            tdi_nbits++;
-            a->output [a->bytes_to_write++] = read_flag ?
-                (WTMS + RTDO + BITMODE + CLKWNEG + LSB) :
-                (WTMS + BITMODE + CLKWNEG + LSB);
-            a->output [a->bytes_to_write++] = 1;
-            a->output [a->bytes_to_write++] = tdi << 7 | 1 | tms_epilog << 1;
-            tms_epilog_nbits--;
-            tms_epilog >>= 1;
-            if (read_flag) {
-                /* Last bit wil come in next byte.
-                 * Compute a mask for correction. */
-                a->fix_high_bit = 0x40ULL << (a->bytes_per_word * 8);
-                a->bytes_per_word++;
-                a->bytes_to_read++;
-            }
-        }
-        if (read_flag)
-            a->high_bit_mask = 1ULL << (tdi_nbits - 1);
-    }
-    if (tms_epilog_nbits > 0) {
-        /* Epiloque TMS, from 1 to 7 bits.
-         * 4b - Clock Data to TMS Pin (no Read) */
-        a->output [a->bytes_to_write++] = WTMS + BITMODE + CLKWNEG + LSB;
-        a->output [a->bytes_to_write++] = tms_epilog_nbits - 1;
-        a->output [a->bytes_to_write++] = tms_epilog;
-    }
-}
-
-static unsigned long long mpsse_fix_data(mpsse_adapter_t *a, unsigned long long word)
-{
-    unsigned long long fix_high_bit = word & a->fix_high_bit;
-    //if (debug) fprintf(stderr, "fix (%08llx) high_bit=%08llx\n", word, a->fix_high_bit);
-
-    if (a->high_byte_bits) {
-        /* Fix a high byte of received data. */
-        unsigned long long high_byte = a->high_byte_mask &
-            ((word & a->high_byte_mask) >> (8 - a->high_byte_bits));
-        word = (word & ~a->high_byte_mask) | high_byte;
-        //if (debug) fprintf(stderr, "Corrected byte %08llx -> %08llx\n", a->high_byte_mask, high_byte);
-    }
-    word &= a->high_bit_mask - 1;
-    if (fix_high_bit) {
-        /* Fix a high bit of received data. */
-        word |= a->high_bit_mask;
-        //if (debug) fprintf(stderr, "Corrected bit %08llx -> %08llx\n", a->high_bit_mask, word >> 9);
-    }
-    return word;
-}
-
-static unsigned long long mpsse_recv(mpsse_adapter_t *a)
-{
-    unsigned long long word;
-
-    /* Send a packet. */
-    mpsse_flush_output(a);
-
-    /* Process a reply: one 64-bit word. */
-    memcpy(&word, a->input, sizeof(word));
-    return mpsse_fix_data(a, word);
 }
 
 /*  Renamed function to mpsse_setPins, since it does more than just reset. 
@@ -452,6 +333,246 @@ static void mpsse_setPins(mpsse_adapter_t *a, int sysrst, int led,
         fprintf(stderr, "mpsse_setPins(sysrst=%d, led=%d, icsp=%d, icsp_oe=%d)\
                          output=%04x, direction: %04x\n",
                         sysrst, led, icsp, icsp_oe, output, direction);
+}
+
+static void mpsse_send(mpsse_adapter_t *a,
+    unsigned tms_prolog_nbits, unsigned tms_prolog,
+    unsigned tdi_nbits, unsigned long long tdi,
+    unsigned tms_epilog_nbits, unsigned tms_epilog, int read_flag)
+{
+
+    if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface)
+    {
+        /* Check that we have enough space in output buffer.
+         * Max size of one packet is 23 bytes (6+8+3+3+3). */
+        if (a->bytes_to_write > sizeof(a->output) - 23)
+            mpsse_flush_output(a);
+
+        /* Prepare a packet of MPSSE commands. */
+        if (tms_prolog_nbits > 0) {
+            /* Prologue TMS, from 1 to 14 bits.
+             * 4b - Clock Data to TMS Pin (no Read) */
+            a->output [a->bytes_to_write++] = WTMS + BITMODE + CLKWNEG + LSB;
+            if (tms_prolog_nbits < 8) {
+                a->output [a->bytes_to_write++] = tms_prolog_nbits - 1;
+                a->output [a->bytes_to_write++] = tms_prolog;
+            } else {
+                a->output [a->bytes_to_write++] = 7 - 1;
+                a->output [a->bytes_to_write++] = tms_prolog & 0x7f;
+                a->output [a->bytes_to_write++] = WTMS + BITMODE + CLKWNEG + LSB;
+                a->output [a->bytes_to_write++] = tms_prolog_nbits - 7 - 1;
+                a->output [a->bytes_to_write++] = tms_prolog >> 7;
+            }
+        }
+        if (tdi_nbits > 0) {
+            /* Data, from 1 to 64 bits. */
+            if (tms_epilog_nbits > 0) {
+                /* Last bit should be accompanied with signal TMS=1. */
+                tdi_nbits--;
+            }
+            unsigned nbytes = tdi_nbits / 8;
+            unsigned last_byte_bits = tdi_nbits & 7;
+            if (read_flag) {
+                a->high_byte_bits = last_byte_bits;
+                a->fix_high_bit = 0;
+                a->high_byte_mask = 0;
+                a->bytes_per_word = nbytes;
+                if (a->high_byte_bits > 0)
+                    a->bytes_per_word++;
+                a->bytes_to_read += a->bytes_per_word;
+            }
+            if (nbytes > 0) {
+                /* Whole bytes.
+                 * 39 - Clock Data Bytes In and Out LSB First
+                 * 19 - Clock Data Bytes Out LSB First (no Read) */
+                a->output [a->bytes_to_write++] = read_flag ?
+                    (WTDI + RTDO + CLKWNEG + LSB) :
+                    (WTDI + CLKWNEG + LSB);
+                a->output [a->bytes_to_write++] = nbytes - 1;
+                a->output [a->bytes_to_write++] = (nbytes - 1) >> 8;
+                while (nbytes-- > 0) {
+                    a->output [a->bytes_to_write++] = tdi;
+                    tdi >>= 8;
+                }
+            }
+            if (last_byte_bits) {
+                /* Last partial byte.
+                 * 3b - Clock Data Bits In and Out LSB First
+                 * 1b - Clock Data Bits Out LSB First (no Read) */
+                a->output [a->bytes_to_write++] = read_flag ?
+                    (WTDI + RTDO + BITMODE + CLKWNEG + LSB) :
+                    (WTDI + BITMODE + CLKWNEG + LSB);
+                a->output [a->bytes_to_write++] = last_byte_bits - 1;
+                a->output [a->bytes_to_write++] = tdi;
+                tdi >>= last_byte_bits;
+                a->high_byte_mask = 0xffULL << (a->bytes_per_word - 1) * 8;
+            }
+            if (tms_epilog_nbits > 0) {
+                /* Last bit (actually two bits).
+                 * 6b - Clock Data to TMS Pin with Read
+                 * 4b - Clock Data to TMS Pin (no Read) */
+                tdi_nbits++;
+                a->output [a->bytes_to_write++] = read_flag ?
+                    (WTMS + RTDO + BITMODE + CLKWNEG + LSB) :
+                    (WTMS + BITMODE + CLKWNEG + LSB);
+                a->output [a->bytes_to_write++] = 1;
+                a->output [a->bytes_to_write++] = tdi << 7 | 1 | tms_epilog << 1;
+                tms_epilog_nbits--;
+                tms_epilog >>= 1;
+                if (read_flag) {
+                    /* Last bit wil come in next byte.
+                     * Compute a mask for correction. */
+                    a->fix_high_bit = 0x40ULL << (a->bytes_per_word * 8);
+                    a->bytes_per_word++;
+                    a->bytes_to_read++;
+                }
+            }
+            if (read_flag)
+                a->high_bit_mask = 1ULL << (tdi_nbits - 1);
+        }
+        if (tms_epilog_nbits > 0) {
+            /* Epiloque TMS, from 1 to 7 bits.
+             * 4b - Clock Data to TMS Pin (no Read) */
+            a->output [a->bytes_to_write++] = WTMS + BITMODE + CLKWNEG + LSB;
+            a->output [a->bytes_to_write++] = tms_epilog_nbits - 1;
+            a->output [a->bytes_to_write++] = tms_epilog;
+        }
+    }
+    else{
+        /* Else ICSP */
+        /* If no read flag, then should be simple.
+         *  -> Send two bits, change pin/OE, "read" two bits, change pin/OE
+         * If there is read flag, then similar, but from 3rd bit on, read 2 bits.
+         *  --> This means, we will get 2 bits of data - one TDO bit and one garbage.
+         *   --> Care must be taken to extract the right one!
+         *   --> (Since data is shifted LSB, the right one will be the MSB bit in the byte)
+         */
+
+        /* Check that we have enough space in output buffer.
+         * Max size of one packet is roughly 123 bytes (4+1+32+2+2)*3.
+         * Flush in any case, TODO optimize later */
+        mpsse_flush_output(a);
+        mpsse_setPins(a, 0, 1, 1, 0, 0);   /* No Reset, LED, ICSP, ICSP_OE == Output, not immediate */
+
+        /* Enable 3-phse clocking. Without this, the data will NOT be
+         * output on the proper edge! Due to this clock stretching, the speed
+         * could be set a bit higher in ICSP, to compensate. */
+        a->output [a->bytes_to_write++] = 0x8C;
+
+        /* Write the TMS prologue */
+        if (tms_prolog_nbits > 0)
+        {
+            /* Write all bits. Special case for the last one */
+            for(;tms_prolog_nbits>0; tms_prolog_nbits--){
+                a->output [a->bytes_to_write++] = BITMODE + LSB + CLKWNEG + WTDI; /* Write in bit mode, LSB first, on TDI, on NEGATIVE EDGE */
+                a->output [a->bytes_to_write++] = 2-1;    /* Always write 2 bits - "data" and TMS. */
+                a->output [a->bytes_to_write++] = (0) | ((tms_prolog & 0x01)<<1);
+                tms_prolog = tms_prolog>>1;
+
+                mpsse_setPins(a, 0, 1, 1, 1, 0);   /* No Reset, LED, ICSP, ICSP_OE == INPUT, not immediate */
+
+                /* During reading, WTDI NEEDS TO BE HERE! Without it won't work properly */
+                a->output [a->bytes_to_write++] = (tms_prolog_nbits == 1 && read_flag) ? 
+                    (BITMODE + LSB + RTDO + CLKWNEG + WTDI) :  /* Read in bit mode, LSB first, on TDO, on POSITIVE EDGE */
+                    (BITMODE + LSB + CLKWNEG + WTDI) ;         
+                a->output [a->bytes_to_write++] = 2-1;    /* Always write 2 bits - dummy in this case */
+                a->output [a->bytes_to_write++] = 0;
+                if (tms_prolog_nbits == 1 && read_flag){
+                    a->bytes_to_read++;
+                }
+
+                mpsse_setPins(a, 0, 1, 1, 0, 0);   /* No Reset, LED, ICSP, ICSP_OE == OUTPUT, not immediate */
+            }
+         
+            
+        }
+
+        /* Write all data bits */
+        if (tdi_nbits > 0){
+            /* Write all bits. Special case for the last one (TMS = 1)*/
+            for(;tdi_nbits>0; tdi_nbits--){
+                a->output [a->bytes_to_write++] = BITMODE + LSB + CLKWNEG + WTDI; /* Write in bit mode, LSB first, on TDI, on NEGATIVE EDGE */
+                a->output [a->bytes_to_write++] = 2-1;    /* Always write 2 bits - "data" and TMS. */
+                a->output [a->bytes_to_write++] = (tdi & 0x01) | ((tdi_nbits == 1) ? 1 : 0)<<1;    /* Write data, then TMS. TMS is 0, except for last bit */
+                tdi = tdi>>1;
+
+                mpsse_setPins(a, 0, 1, 1, 1, 0);   /* No Reset, LED, ICSP, ICSP_OE == INPUT, not immediate */
+
+                /* During reading, WTDI NEEDS TO BE HERE! Without it won't work properly */
+                a->output [a->bytes_to_write++] = (tdi_nbits > 1 && read_flag) ? /* Don't read on last bit - we got the last bit in the previous one. */
+                    (BITMODE + LSB + RTDO + CLKWNEG + WTDI) :  /* Read in bit mode, LSB first, on TDO, on POSITIVE EDGE */
+                    (BITMODE + LSB + CLKWNEG + WTDI) ;
+                a->output [a->bytes_to_write++] = 2-1;    /* Always write 2 bits - dummy in this case */
+                a->output [a->bytes_to_write++] = 0;
+                if (tdi_nbits > 1 && read_flag){
+                    a->bytes_to_read++;
+                }
+
+                mpsse_setPins(a, 0, 1, 1, 0, 0);   /* No Reset, LED, ICSP, ICSP_OE == OUTPUT, not immediate */
+            }
+        }
+    
+         /* Write the TMS epilog */
+        if (tms_epilog_nbits > 0)
+        {
+            /* Write all bits. Special case for the last one */
+            for(;tms_epilog_nbits>0; tms_epilog_nbits--){
+                a->output [a->bytes_to_write++] = BITMODE + LSB + CLKWNEG + WTDI; /* Write in bit mode, LSB first, on TDI, on NEGATIVE EDGE */
+                a->output [a->bytes_to_write++] = 2-1;    /* Always write 2 bits - "data" and TMS. */
+                a->output [a->bytes_to_write++] = (0) | ((tms_epilog & 0x01)<<1);
+                tms_epilog = tms_epilog>>1;
+
+                mpsse_setPins(a, 0, 1, 1, 1, 0);   /* No Reset, LED, ICSP, ICSP_OE == INPUT, not immediate */
+
+                /* During reading, WTDI NEEDS TO BE HERE! Without it won't work properly */
+                a->output [a->bytes_to_write++] = (BITMODE + LSB + CLKWNEG + WTDI) ; /* Just read. */
+                a->output [a->bytes_to_write++] = 2-1;    /* Always write 2 bits - dummy in this case */
+                a->output [a->bytes_to_write++] = 0;
+
+                mpsse_setPins(a, 0, 1, 1, 0, 0);   /* No Reset, LED, ICSP, ICSP_OE == OUTPUT, not immediate */
+            }
+         
+            
+        }
+
+    }
+}
+
+static unsigned long long mpsse_fix_data(mpsse_adapter_t *a, unsigned long long word)
+{
+    unsigned long long fix_high_bit = word & a->fix_high_bit;
+    //if (debug) fprintf(stderr, "fix (%08llx) high_bit=%08llx\n", word, a->fix_high_bit);
+
+    if (a->high_byte_bits) {
+        /* Fix a high byte of received data. */
+        unsigned long long high_byte = a->high_byte_mask &
+            ((word & a->high_byte_mask) >> (8 - a->high_byte_bits));
+        word = (word & ~a->high_byte_mask) | high_byte;
+        //if (debug) fprintf(stderr, "Corrected byte %08llx -> %08llx\n", a->high_byte_mask, high_byte);
+    }
+    word &= a->high_bit_mask - 1;
+    if (fix_high_bit) {
+        /* Fix a high bit of received data. */
+        word |= a->high_bit_mask;
+        //if (debug) fprintf(stderr, "Corrected bit %08llx -> %08llx\n", a->high_bit_mask, word >> 9);
+    }
+    return word;
+}
+
+static unsigned long long mpsse_recv(mpsse_adapter_t *a)
+{
+    unsigned long long word;
+
+    /* Send a packet. */
+    mpsse_flush_output(a);
+
+    /* Process a reply: one 64-bit word. */
+    memcpy(&word, a->input, sizeof(word));
+    if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface)
+        return mpsse_fix_data(a, word);
+    else
+        /* Else ICSP */
+        return(word);
 }
 
 static uint32_t mpsse_bitReversal(uint32_t input){
@@ -637,16 +758,9 @@ static void mpsse_close(adapter_t *adapter, int power_on)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
-    /* Clear EJTAGBOOT mode. */
-    /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, TAP_SW_ETAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
-    /* TMS 1-1-1-1-1-0 */
-    mpsse_send(a, TMS_HEADER_RESET_TAP_NBITS, TMS_HEADER_RESET_TAP_VAL,
-                0, 0, 0, 0, 0);
-    mpsse_flush_output(a);
+    mpsse_sendCommand(a, TAP_SW_ETAP, 1);  
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);   // Send TAP reset, immediate
+    mdelay(10);
 
     /* Toggle /SYSRST. */
     mpsse_setPins(a, 1, 1, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
@@ -674,11 +788,52 @@ static unsigned mpsse_get_idcode(adapter_t *adapter)
     return idcode;
 }
 
+/* Sends the special command to enter ICSP mode */
+static void mpsse_enter_icsp(mpsse_adapter_t *a)
+{
+    uint32_t entryCode = 0x4D434850;   /* MCHP in ascii.
+                                        * Data is normally sent LSB first,
+                                        * so we need to bit reverse this */
+	unsigned tempInterface = a->interface;	// Save, this might come in handy in JTAG too.
+
+    entryCode = mpsse_bitReversal(entryCode);
+    a->interface = INTERFACE_JTAG;  /* Sets up mpsse_send with different clocking
+                                    -> Data needs to be sent on rising edge,
+                                     JTAG mode does that already */
+    mpsse_setPins(a, 1, 1, 1, 0, 1);  /* Reset, LED, no ICSP, ICSP_OE = Output, immediate */
+    mpsse_flush_output(a);
+    mdelay(10);
+
+    mpsse_setPins(a, 0, 1, 1, 0, 1);  /* No Reset, LED, ICSP, ICSP_OE = Output, immediate */
+    mpsse_flush_output(a);
+    mdelay(10);
+
+    mpsse_setPins(a, 1, 1, 1, 0, 1);  /* Reset, LED, ICSP, ICSP_OE = Output, immediate */
+    mpsse_flush_output(a);
+
+    mpsse_send(a, 0, 0, 32, entryCode, 0, 0, 0);    /* Send the entry code  */
+    mpsse_flush_output(a);
+    mdelay(10);
+
+	if (INTERFACE_ICSP == tempInterface){
+		mpsse_setPins(a, 0, 1, 1, 0, 1);  /* No Reset, LED, ICSP, ICSP_OE = Output, immediate ,
+		                                ICSP selected from here on. */
+	}
+	else{
+		mpsse_setPins(a, 0, 1, 0, 0, 1);	// Same thing as above, just no ICSP.
+	}
+    mpsse_flush_output(a);
+    a->interface = tempInterface;  /* Sets up mpsse_send with proper clocking again */ 
+
+}
+
 /*
  * Put device to serial execution mode.
  */
 static void serial_execution(mpsse_adapter_t *a)
 {
+    uint32_t counter = 2000;
+
     if (a->serial_execution_mode)
         return;
     a->serial_execution_mode = 1;
@@ -687,55 +842,106 @@ static void serial_execution(mpsse_adapter_t *a)
     if (debug_level > 0)
         fprintf(stderr, "%s: enter serial execution\n", a->name);
 
-    /* Reset TAP */
-    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
-    /* Switch to ETAP */
-    mpsse_sendCommand(a, TAP_SW_ETAP, 1);   // Send command, immediate
-    /* Reset TAP */
-    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
-    /* Put CPU in Serial Exec Mode */
-    mpsse_sendCommand(a, ETAP_EJTAGBOOT, 1); // Send command, immediate
-
-    /* Check status. */
     /* Send command. */
     mpsse_sendCommand(a, TAP_SW_MTAP, 0);  // Command, not immediate
+    /* Reset TAP */
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
     /* Send command. */
     mpsse_sendCommand(a, MTAP_COMMAND, 0);
     /* Xfer data. */
-    mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST, 0, 1);
-    /* Xfer data. */
-    mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);  
-    /* Get status */
-    unsigned status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
-    if (debug_level > 0)
-        fprintf(stderr, "%s: status %04x\n", a->name, status);
-    if ((status & ~MCHP_STATUS_DEVRST) !=
-        (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY | MCHP_STATUS_FAEN)) {
-        fprintf(stderr, "%s: invalid status = %04x (reset)\n", a->name, status);
+    uint64_t status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
+    if(!(status & MCHP_STATUS_CPS)){
+        fprintf(stderr, "CPS bit is SET, please erase MCU first. Status: 0x%08x\n", (uint32_t)status);
         exit(-1);
     }
+    
+    do{
 
-    /* Deactivate /SYSRST. */
-    mpsse_setPins(a, 0, 1, 0, 0, 1); // No Reset, LED, no ICSP, no ICSP_OE, immediate
+        if (INTERFACE_ICSP == a->interface){
+            mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_ASSERT_RST, 0, 1);    // Data, don't read, immediate
+        }
+        if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){
+            mpsse_setPins(a, 1, 1, 0, 0, 1);   // Reset, LED, no ICSP, no ICSP_OE, immediate
+            mpsse_flush_output(a);
+        }
+
+        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
+        /* Switch to ETAP */
+        mpsse_sendCommand(a, TAP_SW_ETAP, 1);   // Send command, immediate
+        /* Reset TAP */
+        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
+        /* Put CPU in Serial Exec Mode */
+        mpsse_sendCommand(a, ETAP_EJTAGBOOT, 1); // Send command, immediate
+        
+        if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){
+            mpsse_setPins(a, 0, 1, 0, 0, 1);   // No reset, LED, no ICSP, no ICSP_OE, immediate
+            mpsse_flush_output(a);
+        }
+        else{
+            /* Else ICSP */
+            /* Send command. */
+            mpsse_sendCommand(a, TAP_SW_MTAP, 1);
+            /* Reset TAP */
+            mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
+            /* Send command. */
+            mpsse_sendCommand(a, MTAP_COMMAND, 1);
+            /* Send command. */
+            mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST, 0, 1);
+            /* Send command */ // TODO RECHECK
+            mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);
+            /* Switch to ETAP */
+            mpsse_sendCommand(a, TAP_SW_ETAP, 1);
+            mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
+        }
+    
+        /* What is the value of ECR, after trying to connect */
+        mdelay(10);
+        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+        mpsse_sendCommand(a, TAP_SW_ETAP, 1);
+        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+        mpsse_sendCommand(a, ETAP_CONTROL, 1);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);    // Send data, readflag, immediate, don't care
+
+        if (!(status & CONTROL_PRACC)){   
+            fprintf(stderr, "Failed to enter serial execution. Status was %08x\n", (uint32_t)status);
+            if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){  
+                /* For these chips, ICSP & JTAG pins are shared. Can do a trick */
+                if (FAMILY_MX1 == a->adapter.family_name_short
+                    || FAMILY_MX1 == a->adapter.family_name_short
+                    || FAMILY_MM == a->adapter.family_name_short)
+                {
+				    fprintf(stderr, "In JTAG mode, trying to recover automatically\n");
+				    // MCLR is currently 1.
+				    // We need to go 0, enter ICSP, go 1, go 0, repeat this do-while loop.
+				    // NOTE!! This needs to be done on the TMS LINE! TDI should be held low, probably.
+				    mpsse_setPins(a, 1, 1, 0, 0, 1);   // Reset, LED, no ICSP, no ICSP_OE, immediate - immediate here means something else...
+               		mpsse_flush_output(a);
+				    mdelay(5);
+				    
+				    mpsse_setMode(a, SET_MODE_ICSP_SYNC, 1);
+				    mdelay(5);
+
+				    mpsse_setPins(a, 0, 1, 0, 0, 1);   // no Reset, LED, no ICSP, no ICSP_OE, immediate - immediate here means something else...
+               		mpsse_flush_output(a);
+				    mdelay(5);
+                }
+                else{
+                    fprintf(stderr, "In JTAG mode, only recovery is through a power-cycle, or reset via ICSP. Quitting.\n");
+                    exit(-1);
+                }
+
+				// Reset will be asserted in the beginning of the loop again.
+								
+            }
+        }
+        
+    }while(!(status & CONTROL_PRACC) && counter-- > 1);    // Repeat, until we sucessefully enter serial execution. Extend if necessary, to more than PROBEN!
+    
+    if (counter == 0){
+        fprintf(stderr, "Couldn't enter serial execution, quitting\n");
+    }
+
     mdelay(10);
-
-    /* Check status. */
-    /* Send command. */
-    mpsse_sendCommand(a, TAP_SW_MTAP, 0);  // Command, not immediate
-    /* Send command. */
-    mpsse_sendCommand(a, MTAP_COMMAND, 0);
-    /* Get status */
-    status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
-    if (debug_level > 0)
-        fprintf(stderr, "%s: status %04x\n", a->name, status);
-    if (status != (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY |
-                   MCHP_STATUS_FAEN)) {
-        fprintf(stderr, "%s: invalid status = %04x (no reset)\n", a->name, status);
-        exit(-1);
-    }
-
-    /* Leave it in ETAP mode. */
-    mpsse_sendCommand(a, TAP_SW_ETAP, 1);
 }
 
 static unsigned get_pe_response(mpsse_adapter_t *a)
@@ -782,21 +988,50 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
     unsigned addr_hi = (addr >> 16) & 0xFFFF;
     unsigned word = 0;
 
+    /* Workaround for PIC32MM. If not in serial execution mode,
+     * read byte twice after enering serial execution,
+     * as first byte will be garbage. */
+    unsigned times = (a->serial_execution_mode)?0:1;
+
     serial_execution(a);
+    do{
+        if (FAMILY_MX1 == a->adapter.family_name_short
+                        || FAMILY_MX1 == a->adapter.family_name_short
+                        || FAMILY_MK == a->adapter.family_name_short
+                        || FAMILY_MZ == a->adapter.family_name_short)
+        {
+            //fprintf(stderr, "%s: read word from %08x\n", a->name, addr);
+            mpsse_xferInstruction(a, 0x3c04bf80);            // lui s3, 0xFF20
+            mpsse_xferInstruction(a, 0x3c080000 | addr_hi);  // lui t0, addr_hi
+            mpsse_xferInstruction(a, 0x35080000 | addr_lo);  // ori t0, addr_lo
+            mpsse_xferInstruction(a, 0x8d090000);            // lw t1, 0(t0)
+            mpsse_xferInstruction(a, 0xae690000);            // sw t1, 0(s3)
 
-    //fprintf(stderr, "%s: read word from %08x\n", a->name, addr);
-    mpsse_xferInstruction(a, 0x3c04bf80);            // lui s3, 0xFF20
-    mpsse_xferInstruction(a, 0x3c080000 | addr_hi);  // lui t0, addr_hi
-    mpsse_xferInstruction(a, 0x35080000 | addr_lo);  // ori t0, addr_lo
-    mpsse_xferInstruction(a, 0x8d090000);            // lw t1, 0(t0)
-    mpsse_xferInstruction(a, 0xae690000);            // sw t1, 0(s3)
+            /* Send command. */
+            mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+            /* Get fastdata. */    
+            /* Send zeroes, read response, immediate don't care. Shift by 1 to get rid of PrACC */
+            word = mpsse_xferFastData(a, 0, 1, 1) >> 1;
+        }
+        else{
+            /* Else PIC32MM */
+			mpsse_xferInstruction(a, 0xFF2041B3);					// lui s3, FAST_DATA_REG(32:16). Set address of fastdata register
+			mpsse_xferInstruction(a, 0x000041A8 | (addr_hi<<16));	// lui t0, DATA_ADDRESS(31:16)
+			mpsse_xferInstruction(a, 0x00005108 | (addr_lo<<16));	// ori t0, DATA_ADDRESS(15:0)
+	 		mpsse_xferInstruction(a, 0x0000FD28);					// lw t1, 0(t0) - read data
+	 		mpsse_xferInstruction(a, 0x0000F933);					// sw t1, 0(s3) - store data to fast register
+			mpsse_xferInstruction(a, 0x0c000c00);					// Nop, 2x
+			mpsse_xferInstruction(a, 0x0c000c00);					// Nop, 2x, again. Without this (4x nop), you will get garbage after a few bytes!
+																	// Extra Nops make it even worse, always get 0s
+	 		
+			/* Send command. */
+			mpsse_sendCommand(a, ETAP_FASTDATA, 1);
 
-    /* Send command. */
-    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
-    /* Get fastdata. */
-    
-    /* Send zeroes, read response, immediate don't care. Shift by 1 to get rid of PrACC */
-    word = mpsse_xferFastData(a, 0, 1, 1) >> 1;
+			/* Get fastdata. */
+			word = mpsse_xferFastData(a, 0, 1, 1) >> 1; // Send zeroes, read response, immediate don't care. Shift by 1 to get rid of PrACC
+        }
+
+    }while(times-- > 0);
 
     if (debug_level > 0)
         fprintf(stderr, "%s: read word at %08x -> %08x\n", a->name, addr, word);

@@ -828,6 +828,7 @@ int main(int argc, char **argv)
             if (debug_level > 0){
                 fprintf(stderr, "Using clock speed of %d khz, if available\n", interface_speed);
             }
+            continue;
         }
 usage:
         printf("%s.\n\n", copyright);
