@@ -517,7 +517,7 @@ void do_program(char *filename)
 
     /* Verify DEVCFGx values. */
     if (boot_used) {
-        if (target->family->name_short == FAMILY_MM){
+        if (FAMILY_MM == target->family->name_short){
             /* Check if both values have something in them.
              * DEVOPT (and other) have some permanent 1 bits. Use those. */
             if ( ((fdevopt&0x0ff0) != 0x0ff0) || ((afdevopt&0x0ff0) != 0x0ff0)){
@@ -608,7 +608,7 @@ void do_program(char *filename)
             printf(_("# done      \n"));
             if (! boot_dirty [devcfg_offset / blocksz]) {
                 /* Write chip configuration. */
-                if (target->family->name_short == FAMILY_MM){
+                if (FAMILY_MM == target->family->name_short){
                     target_program_devcfg(target, fdevopt, ficd, fpor, fwdt, 
                                             foscsel, fsec, afdevopt, aficd, 
                                             afpor, afwdt, afoscsel, afsec);

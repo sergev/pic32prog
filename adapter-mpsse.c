@@ -1604,26 +1604,14 @@ failed: libusb_release_interface(a->usbdev, 0);
 
     /* Check status. */
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, TAP_SW_MTAP,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, TAP_SW_MTAP, 1);
     /* Send command. */
-    mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
-                    MTAP_COMMAND_NBITS, MTAP_COMMAND,
-                    TMS_FOOTER_COMMAND_NBITS, TMS_FOOTER_COMMAND_VAL,
-                    0);
+    mpsse_sendCommand(a, MTAP_COMMAND, 1);
     /* Xfer data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    0); 
+    mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);
     /* Xfer data. */
-    mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    MTAP_COMMAND_DR_NBITS, MCHP_STATUS,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1); 
-    unsigned status = mpsse_recv(a);
+    unsigned status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
+
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
     if ((status & (MCHP_STATUS_CFGRDY | MCHP_STATUS_FCBUSY)) != (MCHP_STATUS_CFGRDY)) {

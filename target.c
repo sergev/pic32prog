@@ -815,7 +815,7 @@ void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
 
     unsigned devcfg_addr = 0x1fc00000 + t->family->devcfg_offset;
 
-    if (t->family->name_short == FAMILY_MM){
+    if (FAMILY_MM == t->family->name_short){
         uint32_t offset_first = 0xc0;
         uint32_t offset_alternate = 0x40;
 
