@@ -1214,6 +1214,10 @@ static void mpsse_program_word(adapter_t *adapter,
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
+    if (FAMILY_MM == a->adapter.family_name_short){
+        fprintf(stderr, "Program word is not available on MM family. Quitting\n");
+    }
+
     if (debug_level > 0)
         fprintf(stderr, "%s: program word at %08x: %08x\n", a->name, addr, word);
     if (! a->use_executive) {
@@ -1236,6 +1240,40 @@ static void mpsse_program_word(adapter_t *adapter,
             a->name, word, addr, response);
         exit(-1);
     }
+}
+
+static void mpsse_program_double_word(adapter_t *adapter, unsigned addr, unsigned word0, unsigned word1){
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+    
+    if (FAMILY_MM != a->adapter.family_name_short){
+        fprintf(stderr, "Program double word is only available on MM family. Quitting\n");
+    }
+
+	if (debug_level > 0){
+		fprintf(stderr, "%s: program double word at 0x%08x: 0x%08x 0x%08x\n", a->name, addr, word0, word1);
+	}
+	if (! a->use_executive) {
+        /* Without PE. */
+        fprintf(stderr, "%s: slow flash write not implemented yet.\n", a->name);
+        exit(-1);
+    }
+
+	 /* Use PE to write flash memory. */
+    /* Send command. */
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+
+    mpsse_xferFastData(a, PE_DOUBLE_WORD_PGRM << 16 | 2, 0, 1); // Data, don't read, immediate
+    mpsse_xferFastData(a, addr, 0, 1);  	/* Send address. */ // Data, don't read, immediate
+    mpsse_xferFastData(a, word0, 0, 1);  	/* Send 1st word. */    // Data, don't read, immediate, was not before
+    mpsse_xferFastData(a, word1, 0, 1);  	/* Send 2nd word. */    // Data, don't read, immediate, was not before
+ 
+    unsigned response = get_pe_response(a);
+    if (response != (PE_DOUBLE_WORD_PGRM << 16)) {
+        fprintf(stderr, "%s: failed to program double words 0x%08x 0x%08x at 0x%08x, reply = %08x\n",
+            a->name, word0, word1, addr, response);
+        exit(-1);
+    }
+	
 }
 
 /*
@@ -1463,16 +1501,24 @@ failed: libusb_release_interface(a->usbdev, 0);
     /* Activate LED. */
     mpsse_setPins(a, 0, 1, 0, 0, 1); // No Reset, LED, no ICSP, no ICSP_OE, immediate
 
+    if (INTERFACE_ICSP == interface){
+        mpsse_enter_icsp(a);
+    }
+
+    /* Delay required for ICSP */
+    mdelay(5);     
+
     /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
      * After reset, the IDCODE register is always selected.
      * Read out 32 bits of data. */
     unsigned idcode;
-    mpsse_send(a, TMS_HEADER_RESET_TAP_NBITS + TMS_HEADER_XFERDATA_NBITS,
-                    TMS_HEADER_RESET_TAP_VAL + (TMS_HEADER_XFERDATA_VAL << TMS_HEADER_RESET_TAP_NBITS),
-                    32, 0,
-                    TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
-                    1);
-    idcode = mpsse_recv(a);
+
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+    mpsse_sendCommand(a, TAP_SW_MTAP, 1);
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+    mpsse_sendCommand(a, MTAP_IDCODE, 1);
+
+    idcode = mpsse_xferData(a, 32, 0, 1, 1);
     if ((idcode & 0xfff) != 0x053) {
         /* Microchip vendor ID is expected. */
         if (debug_level > 0 || (idcode != 0 && idcode != 0xffffffff))
@@ -1482,8 +1528,11 @@ failed: libusb_release_interface(a->usbdev, 0);
         goto failed;
     }
 
-    /* Activate /SYSRST and LED. */
-    mpsse_setPins(a, 1, 1, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
+    /* Activate /SYSRST and LED. Only done in JTAG mode */
+    if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface)
+    {
+        mpsse_setPins(a, 1, 1, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
+    } 
     mdelay(10);
 
     /* Check status. */
@@ -1510,8 +1559,7 @@ failed: libusb_release_interface(a->usbdev, 0);
     unsigned status = mpsse_recv(a);
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
-    if ((status & ~MCHP_STATUS_DEVRST) !=
-        (MCHP_STATUS_CPS | MCHP_STATUS_CFGRDY | MCHP_STATUS_FAEN)) {
+    if ((status & (MCHP_STATUS_CFGRDY | MCHP_STATUS_FCBUSY)) != (MCHP_STATUS_CFGRDY)) {
         fprintf(stderr, "%s: invalid status = %04x\n", a->name, status);
         mpsse_setPins(a, 0, 0, 0, 0, 1); // No reset, no LED, no ICSP mode, no ICSP_OE, immediate
         goto failed;
