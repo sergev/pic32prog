@@ -61,11 +61,30 @@ int total_bytes;
 int interface = INTERFACE_DEFAULT;  /* Optionally specified JTAG or ICSP */
 int interface_speed = 0;            /* Optional clock speed of interface */
 
-// PIC32MX, MZ and MK DEVCFG definitions
+// PIC32MX, MZ DEVCFG definitions
 #define devcfg3 (*(unsigned*) &boot_data [devcfg_offset])
 #define devcfg2 (*(unsigned*) &boot_data [devcfg_offset + 4])
 #define devcfg1 (*(unsigned*) &boot_data [devcfg_offset + 8])
 #define devcfg0 (*(unsigned*) &boot_data [devcfg_offset + 12])
+
+// PIC32MK DEVCFG definitions
+#define bf1devcfg3 	(*(unsigned*) &boot_data [devcfg_offset])
+#define bf1devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 4])
+#define bf1devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 8])
+#define bf1devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 12])
+#define bf1devcp 	(*(unsigned*) &boot_data [devcfg_offset + 28])
+#define bf1devsign 	(*(unsigned*) &boot_data [devcfg_offset + 44])
+#define bf1seq 		(*(unsigned*) &boot_data [devcfg_offset + 48])
+
+#define bf2devcfg3 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000])
+#define bf2devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 4])
+#define bf2devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 8])
+#define bf2devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 12])
+#define bf2devcp 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 28])
+#define bf2devsign 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 44])
+#define bf2seq 		(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 48])
+
+
 
 // PIC32MM definitions
 #define offset_first 0xc0

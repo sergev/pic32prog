@@ -854,6 +854,8 @@ static void serial_execution(mpsse_adapter_t *a)
         fprintf(stderr, "CPS bit is SET, please erase MCU first. Status: 0x%08x\n", (uint32_t)status);
         exit(-1);
     }
+
+    fprintf(stderr, "Status was %08x\n", status);
     
     do{
 
@@ -865,7 +867,7 @@ static void serial_execution(mpsse_adapter_t *a)
             mpsse_flush_output(a);
         }
 
-        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
+        //mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
         /* Switch to ETAP */
         mpsse_sendCommand(a, TAP_SW_ETAP, 1);   // Send command, immediate
         /* Reset TAP */
@@ -887,8 +889,11 @@ static void serial_execution(mpsse_adapter_t *a)
             mpsse_sendCommand(a, MTAP_COMMAND, 1);
             /* Send command. */
             mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_DEASSERT_RST, 0, 1);
-            /* Send command */ // TODO RECHECK
-            mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);
+            if (FAMILY_MX1 == a->adapter.family_name_short
+                || FAMILY_MX3 == a->adapter.family_name_short){
+                /* Send command, only for PIC32MX */
+                mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);
+            }
             /* Switch to ETAP */
             mpsse_sendCommand(a, TAP_SW_ETAP, 1);
             mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
@@ -901,8 +906,24 @@ static void serial_execution(mpsse_adapter_t *a)
         mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
         mpsse_sendCommand(a, ETAP_CONTROL, 1);
         status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);    // Send data, readflag, immediate, don't care
+        fprintf(stderr, "Status was %08x\n", status);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
+        fprintf(stderr, "Status was %08x\n", status);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
+        fprintf(stderr, "Status was %08x\n", status);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
+        fprintf(stderr, "Status was %08x\n", status);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
+        fprintf(stderr, "Status was %08x\n", status);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
+        fprintf(stderr, "Status was %08x\n", status);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
+        fprintf(stderr, "Status was %08x\n", status);
+        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
+        fprintf(stderr, "Status was %08x\n", status);
 
-        if (!(status & CONTROL_PRACC)){   
+//        if (!(status & CONTROL_PRACC)){   
+        if (!(status & CONTROL_PROBEN)){   
             fprintf(stderr, "Failed to enter serial execution. Status was %08x\n", (uint32_t)status);
             if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){  
                 /* For these chips, ICSP & JTAG pins are shared. Can do a trick */
@@ -930,11 +951,11 @@ static void serial_execution(mpsse_adapter_t *a)
                 }
 
 				// Reset will be asserted in the beginning of the loop again.
-								
+				mdelay(1000);			
             }
         }
         
-    }while(!(status & CONTROL_PRACC) && counter-- > 1);    // Repeat, until we sucessefully enter serial execution. Extend if necessary, to more than PROBEN!
+    }while(!(status & CONTROL_PROBEN) && counter-- > 1);    // Repeat, until we sucessefully enter serial execution. Extend if necessary, to more than PROBEN!
     
     if (counter == 0){
         fprintf(stderr, "Couldn't enter serial execution, quitting\n");
@@ -1000,11 +1021,13 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
                         || FAMILY_MZ == a->adapter.family_name_short)
         {
             //fprintf(stderr, "%s: read word from %08x\n", a->name, addr);
-            mpsse_xferInstruction(a, 0x3c04bf80);            // lui s3, 0xFF20
+
+            mpsse_xferInstruction(a, 0x3c13ff20);            // lui s3, FASTDATA_REG_ADDR(31:16)
             mpsse_xferInstruction(a, 0x3c080000 | addr_hi);  // lui t0, addr_hi
             mpsse_xferInstruction(a, 0x35080000 | addr_lo);  // ori t0, addr_lo
             mpsse_xferInstruction(a, 0x8d090000);            // lw t1, 0(t0)
             mpsse_xferInstruction(a, 0xae690000);            // sw t1, 0(s3)
+            mpsse_xferInstruction(a, 0);                     // NOP - necessary!
 
             /* Send command. */
             mpsse_sendCommand(a, ETAP_FASTDATA, 1);

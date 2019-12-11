@@ -25,6 +25,7 @@ extern print_func_t print_mx1;
 extern print_func_t print_mx3;
 extern print_func_t print_mz;
 extern print_func_t print_mm;
+extern print_func_t print_mk;
 
 /*
  * PIC32 families.
@@ -42,6 +43,13 @@ family_t family_mx3 = { "mx3", FAMILY_MX3,
 static const
 family_t family_mz  = { "mz", FAMILY_MZ,
                         80, 0xffc0, 2048, print_mz,  pic32_pemz,  1052, 0x0502 };
+
+// Adding MK family support. Please hang on.
+//Name, FAMILY_NAME
+// Boot flash kB, offset of DevCFG from start of BootFlash, Bytes per row, etc.
+static const
+family_t family_mk  = { "mk", FAMILY_MK,
+                        16, 0x3fc0, 512, print_mk,  pic32_pemk,  804, 0x0502 };
 /*
  * This one is a special one for the bootloader. We have no idea what we're
  * programming, so set the values to the maximum out of all the others.
@@ -282,6 +290,10 @@ static variant_t pic32_tab[TABSZ] = {
     {0x46b12053, "MM0064GPL028",  64,   &family_mm},
     {0x46b16053, "MM0064GPL036",  64,   &family_mm},
     {0x66b04053, "MM0016GPL028",  16,   &family_mm},
+
+    /* MK family */
+    {0x6201053, "MK1024MCF100",  1024,   &family_mk},
+
 
     /* USB bootloader */
     {0xEAFB00B, "Bootloader",   0,      &family_bl},
@@ -661,8 +673,50 @@ void target_print_devcfg(target_t *t)
         print_mm(fdevopt, ficd, fpor, fwdt, foscsel, fsec,
                                 afdevopt, aficd, afpor, afwdt, afoscsel, afsec);
     }
+    else if (FAMILY_MK == t->family->name_short){
+        uint32_t devcfg_addr    = 0x1fc40000 + target_devcfg_offset(t);    // Offset to BF1DEVCFG3.
+        uint32_t bf1devcfg3     = t->adapter->read_word(t->adapter, devcfg_addr);
+        uint32_t bf1devcfg2     = t->adapter->read_word(t->adapter, devcfg_addr + 4);
+        uint32_t bf1devcfg1     = t->adapter->read_word(t->adapter, devcfg_addr + 8);
+        uint32_t bf1devcfg0     = t->adapter->read_word(t->adapter, devcfg_addr + 12);
+        uint32_t bf1devcp       = t->adapter->read_word(t->adapter, devcfg_addr + 28);
+        uint32_t bf1devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 44);
+        uint32_t bf1seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 48);
+
+        uint32_t bf2devcfg3 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000);
+        uint32_t bf2devcfg2 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 4);
+        uint32_t bf2devcfg1 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 8);
+        uint32_t bf2devcfg0 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 12);
+        uint32_t bf2devcp       = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 28);
+        uint32_t bf2devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 44);
+        uint32_t bf2seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 48);
+
+		uint32_t LBAdevsign     = t->adapter->read_word(t->adapter, 0x1FC03FEC);
+        uint32_t devidnew 		= t->adapter->read_word(t->adapter, 0x1F800020);
+		uint32_t devidold       = t->adapter->get_idcode(t->adapter);
+        
+
+
+        uint32_t UUID1          = t->adapter->read_word(t->adapter, 0x1FC45020);
+        uint32_t UUID2          = t->adapter->read_word(t->adapter, 0x1FC45024);
+        uint32_t UUID3          = t->adapter->read_word(t->adapter, 0x1FC45028);
+        uint32_t UUID4          = t->adapter->read_word(t->adapter, 0x1FC4502C);
+
+        fprintf(stderr, "address is: %08x\n", devcfg_addr);
+        fprintf(stderr, "MK family: %08x %08x %08x %08x\n%08x %08x %08x %08x\n%08x %08x %08x\n",
+                UUID1, UUID2, UUID3, UUID4,
+                bf1devcfg3, bf1devcfg2, bf1devcfg1, bf1devcfg0,
+                bf1devcp, bf1devsign, bf1seq);
+        fprintf(stderr, "MK family: %08x %08x %08x %08x\n%08x %08x %08x %08x\n%08x %08x %08x\n",
+                UUID1, UUID2, UUID3, UUID4,
+                bf2devcfg3, bf2devcfg2, bf2devcfg1, bf2devcfg0,
+                bf2devcp, bf2devsign, bf2seq);
+		fprintf(stderr, "Addresses %08x %08x\n", devcfg_addr + 44, devcfg_addr + 44);
+		fprintf(stderr, "Vals %08x %08x %08x\n", LBAdevsign, devidnew, devidold);
+
+    }
     else{
-        /* MX, MK, MZ */
+        /* MX, MZ */
         unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
         unsigned devcfg3 = t->adapter->read_word(t->adapter, devcfg_addr);
         unsigned devcfg2 = t->adapter->read_word(t->adapter, devcfg_addr + 4);

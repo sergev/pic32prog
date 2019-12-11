@@ -10,7 +10,7 @@ PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
                   adapter-pickit2.o adapter-hidboot.o adapter-an1388.o\
                   adapter-bitbang.o adapter-stk500v2.o adapter-uhb.o \
                   adapter-an1388-uart.o configure.o \
-                  family-mx1.o family-mx3.o family-mz.o \
+                  family-mx1.o family-mx3.o family-mz.o family-mm.o family-mk.o \
                   hidapi/windows/.libs/libhidapi.a
 
 # JTAG adapters based on FT2232 chip
@@ -48,6 +48,8 @@ executive.o: executive.c pic32.h
 family-mx1.o: family-mx1.c pic32.h
 family-mx3.o: family-mx3.c pic32.h
 family-mz.o: family-mz.c pic32.h
+family-mm.o: family-mm.c pic32.h
+family-mk.o: family-mk.c pic32.h
 pic32prog.o: pic32prog.c target.h adapter.h serial.h localize.h
 serial.o: serial.c adapter.h
 target.o: target.c target.h adapter.h localize.h pic32.h

@@ -23,6 +23,7 @@ extern const unsigned pic32_pemx1[];
 extern const unsigned pic32_pemx3[];
 extern const unsigned pic32_pemz[];
 extern const unsigned pic32_pemm[];
+extern const unsigned pic32_pemk[];
 
 #define FAMILY_MX1	0
 #define FAMILY_MX3	1
