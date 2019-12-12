@@ -38,7 +38,7 @@
 #define FLASHP_BASE     0x1d000000
 #define BOOTP_BASE      0x1fc00000
 #define FLASH_BYTES     (2048 * 1024)
-#define BOOT_BYTES      (80 * 1024)
+#define BOOT_BYTES      (512 * 1024)	// Fix for MK family, space is 404kB big
 
 /* Macros for converting between hex and binary. */
 #define NIBBLE(x)       (isdigit(x) ? (x)-'0' : tolower(x)+10-'a')
@@ -68,21 +68,21 @@ int interface_speed = 0;            /* Optional clock speed of interface */
 #define devcfg0 (*(unsigned*) &boot_data [devcfg_offset + 12])
 
 // PIC32MK DEVCFG definitions
-#define bf1devcfg3 	(*(unsigned*) &boot_data [devcfg_offset])
-#define bf1devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 4])
-#define bf1devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 8])
-#define bf1devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 12])
-#define bf1devcp 	(*(unsigned*) &boot_data [devcfg_offset + 28])
-#define bf1devsign 	(*(unsigned*) &boot_data [devcfg_offset + 44])
-#define bf1seq 		(*(unsigned*) &boot_data [devcfg_offset + 48])
+#define bf1devcfg3 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000])
+#define bf1devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 4])
+#define bf1devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 8])
+#define bf1devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 12])
+#define bf1devcp 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 28])
+#define bf1devsign 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 44])
+#define bf1seq 		(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 48])
 
-#define bf2devcfg3 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000])
-#define bf2devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 4])
-#define bf2devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 8])
-#define bf2devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 12])
-#define bf2devcp 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 28])
-#define bf2devsign 	(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 44])
-#define bf2seq 		(*(unsigned*) &boot_data [devcfg_offset + 0x20000 + 48])
+#define bf2devcfg3 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000])
+#define bf2devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 4])
+#define bf2devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 8])
+#define bf2devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 12])
+#define bf2devcp 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 28])
+#define bf2devsign 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 44])
+#define bf2seq 		(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 48])
 
 
 
@@ -178,6 +178,7 @@ void store_data(unsigned address, unsigned byte)
     } else {
         /* Ignore incorrect data. */
         //fprintf(stderr, _("%08X: address out of flash memory\n"), address);
+		fprintf(stdout, "Else statement\n");
         return;
     }
     total_bytes++;
@@ -199,9 +200,6 @@ int read_srec(char *filename)
         perror(filename);
         exit(1);
     }
-
-    fdevopt = 0;    /* PIC32MM config bit check */
-    afdevopt = 0;   /* PIC32MM config bit check */
 
     while (fgets((char*) buf, sizeof(buf), fd)) {
         if (buf[0] == '\n')
@@ -269,8 +267,6 @@ int read_hex(char *filename)
         perror(filename);
         exit(1);
     }
-    fdevopt = 0;    /* PIC32MM config bit check */
-    afdevopt = 0;   /* PIC32MM config bit check */
     high = 0;
     while (fgets((char*) buf, sizeof(buf), fd)) {
         if (buf[0] == '\n')
@@ -394,7 +390,7 @@ static int is_boot_block_dirty(unsigned offset)
 
     for (i=0; i<blocksz; i++, offset++) {
         /* Skip devcfg registers. */
-        if (offset >= devcfg_offset && offset < devcfg_offset+16)
+		if (offset >= devcfg_offset && offset < devcfg_offset+16)
             continue;
         if (boot_data [offset] != 0xff)
             return 1;
@@ -544,6 +540,33 @@ void do_program(char *filename)
                 exit(1);
             }
         }
+		else if (FAMILY_MK == target->family->name_short){
+			/* Check if some bits were set to high */
+            if ( (bf1devcfg0 & 0x0F000000) != 0x0F000000 ){
+                fprintf(stderr, _("Configuration bits are missing -- check your HEX file!\n"));
+                exit(1);
+            }
+
+			
+		    // This is a bit of a hack, but OK.
+		    // Any unused data should be 0xFFFFFFFF in the flash and here. But some isn't (special values, etc).
+		    // For example, there's a clash in the Lower Alias Boot region. 
+		    // CRC here calculates based on 0xFFFFFFFF, but GET_CRC calculates based on real data.
+
+			// Also, because even though the registers exist, but MPLAB doens't do anything with it...
+			bf1devsign &= 0x7FFFFFFF;
+			bf2devsign &= 0x7FFFFFFF;
+
+		    uint32_t copyFrom = 0x1fc43fc0 - BOOTP_BASE;
+			uint32_t copyTo = 0x1fc03fc0 - BOOTP_BASE;
+			uint32_t length = 0x40;
+			uint32_t counter = 0;
+			for(counter = 0; counter < length; counter++){
+				boot_data[copyTo + counter] = boot_data[copyFrom + counter];
+			}
+
+
+		}
         else{
             if (devcfg0 == 0xffffffff) {
                 fprintf(stderr, _("DEVCFG values are missing -- check your HEX file!\n"));
@@ -630,11 +653,17 @@ void do_program(char *filename)
                 if (FAMILY_MM == target->family->name_short){
                     target_program_devcfg(target, fdevopt, ficd, fpor, fwdt, 
                                             foscsel, fsec, afdevopt, aficd, 
-                                            afpor, afwdt, afoscsel, afsec);
+                                            afpor, afwdt, afoscsel, afsec, 0, 0);
                 }
+				else if (FAMILY_MK == target->family->name_short){
+					target_program_devcfg(target, bf1devcfg0, bf1devcfg1,
+						bf1devcfg2, bf1devcfg3, bf1devcp, bf1devsign, bf1seq,
+						bf2devcfg0, bf2devcfg1, bf2devcfg2, bf2devcfg3,
+						bf2devcp, bf2devsign, bf2seq);
+				}
                 else{
                     target_program_devcfg(target, devcfg0, devcfg1, devcfg2, devcfg3,
-                                            0, 0, 0, 0, 0, 0, 0, 0);
+                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
                 }
                 boot_dirty [devcfg_offset / blocksz] = 1;
             }

@@ -49,7 +49,7 @@ family_t family_mz  = { "mz", FAMILY_MZ,
 // Boot flash kB, offset of DevCFG from start of BootFlash, Bytes per row, etc.
 static const
 family_t family_mk  = { "mk", FAMILY_MK,
-                        16, 0x3fc0, 512, print_mk,  pic32_pemk,  804, 0x0502 };
+                        16, 0x3fc0, 512, print_mk,  pic32_pemk,  804, 0x0506 };
 /*
  * This one is a special one for the bootloader. We have no idea what we're
  * programming, so set the values to the maximum out of all the others.
@@ -675,26 +675,26 @@ void target_print_devcfg(target_t *t)
 								0, 0, 0, 0, 0, 0);
     }
     else if (FAMILY_MK == t->family->name_short){
-		// Offset is set to BF1DEVCFG3
+		// Offset is set to BF1DEVCFG3 in Boot Flash 1!
         uint32_t devcfg_addr    = 0x1fc40000 + target_devcfg_offset(t);
 		
 		// Boot flash 1 area
         uint32_t bf1devcfg3     = t->adapter->read_word(t->adapter, devcfg_addr);
-        uint32_t bf1devcfg2     = t->adapter->read_word(t->adapter, devcfg_addr + 4);
-        uint32_t bf1devcfg1     = t->adapter->read_word(t->adapter, devcfg_addr + 8);
-        uint32_t bf1devcfg0     = t->adapter->read_word(t->adapter, devcfg_addr + 12);
-        uint32_t bf1devcp       = t->adapter->read_word(t->adapter, devcfg_addr + 28);
-        uint32_t bf1devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 44);
-        uint32_t bf1seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 48);
+        uint32_t bf1devcfg2     = t->adapter->read_word(t->adapter, devcfg_addr + 0x04);
+        uint32_t bf1devcfg1     = t->adapter->read_word(t->adapter, devcfg_addr + 0x08);
+        uint32_t bf1devcfg0     = t->adapter->read_word(t->adapter, devcfg_addr + 0x0c);
+        uint32_t bf1devcp       = t->adapter->read_word(t->adapter, devcfg_addr + 0x1c);
+        uint32_t bf1devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 0x2c);
+        uint32_t bf1seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 0x30);
 
 		// Boot flash 2 area
         uint32_t bf2devcfg3 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000);
-        uint32_t bf2devcfg2 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 4);
-        uint32_t bf2devcfg1 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 8);
-        uint32_t bf2devcfg0 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 12);
-        uint32_t bf2devcp       = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 28);
-        uint32_t bf2devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 44);
-        uint32_t bf2seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 48);
+        uint32_t bf2devcfg2 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 0x04);
+        uint32_t bf2devcfg1 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 0x8);
+        uint32_t bf2devcfg0 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 0x0c);
+        uint32_t bf2devcp       = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 0x1c);
+        uint32_t bf2devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 0x2c);
+        uint32_t bf2seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 0x30);
 
 		// DEVSNx registers
         uint32_t devsn0         = t->adapter->read_word(t->adapter, 0x1FC45020);
@@ -855,7 +855,7 @@ void target_program_block(target_t *t, unsigned addr,
 void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
         uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, 
         uint32_t arg6, uint32_t arg7, uint32_t arg8, uint32_t arg9, 
-        uint32_t arg10, uint32_t arg11)
+        uint32_t arg10, uint32_t arg11, uint32_t arg12, uint32_t arg13)
 {
     if (! t->family->devcfg_offset)
         return;
@@ -885,6 +885,44 @@ void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
         // Also says something about FSIGN, that doesn't appear anywhere else...
 
     }
+	else if (FAMILY_MK == t->family->name_short){
+        devcfg_addr = devcfg_addr + 0x40000;    // Offset to Boot flash 1
+    
+        // Note, the MK family says to only use program_quad_word, 
+        // when writing into the sequence and configuration spaces.
+        fprintf(stderr, "%s:\nbf1devcfg0 = %08x, bf1devcfg1 = %08x,\n", __func__, arg0, arg1);
+        fprintf(stderr, "bf1devcfg2 = %08x, bf1devcfg3 = %08x,\n", arg2, arg3);
+        fprintf(stderr, "bf1devcp = %08x, bf1devsign = %08x,\n", arg4, arg5);
+        fprintf(stderr, "bf1seq = %08x,\n", arg6);
+        fprintf(stderr, "bf2devcfg0 = %08x, bf2devcfg1 = %08x,\n", arg7, arg8);
+        fprintf(stderr, "bf2devcfg2 = %08x, bf2devcfg3 = %08x,\n", arg9, arg10);
+        fprintf(stderr, "bf2devcp = %08x, bf2devsign = %08x,\n", arg11, arg12);
+        fprintf(stderr, "bf2seq = %08x\n", arg13);
+
+        // The datasheet is a bit vague. Says to use quad word program. OK.
+        // Writes must be aligned to a four word boundary! Bits 0 & 1 should be 0.
+        // -> TWe can align to xxx0. So DEVCFG bits can be one write,
+        // -> DEVCP one, DEVSIGN one, and SEQ one. Pad the unused bytes with 1s.
+  
+        // bf1devcfg3, bf1devcfg2, bf1devcfg1, bf1devcfg0. Address at 3FC0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr, arg3, arg2, arg1, arg0);
+        // bf1devcp. Address at 3FDC, with start of write at 3FD0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr + 0x10, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, arg4);
+        // bf1devsign. Address at 3FEC, with start of write at 3FE0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr + 0x20, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, arg5);
+        // bf1seq. Address at 3FF0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr + 0x30, arg6, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
+
+        // bf2devcfg3, bf2devcfg2, bf2devcfg1, bf2devcfg0. Address at 3FC0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr + 0x20000, arg10, arg9, arg8, arg7);
+        // bf2devcp. Address at 3FDC, with start of write at 3FD0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr + 0x20000 + 0x10, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, arg11);
+        // bf2devsign. Address at 3FEC, with start of write at 3FE0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr + 0x20000 + 0x20, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF, arg12);
+        // bf2seq. Address at 3FF0
+        t->adapter->program_quad_word(t->adapter, devcfg_addr + 0x20000 + 0x30, arg13, 0xFFFFFFFF, 0xFFFFFFFF, 0xFFFFFFFF);
+
+	}
     else{
 
         fprintf(stderr, "%s: devcfg0-3 = %08x %08x %08x %08x\n", __func__, arg0, arg1, arg2, arg3);

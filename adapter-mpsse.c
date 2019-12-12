@@ -697,16 +697,19 @@ static void mpsse_xferInstruction(mpsse_adapter_t *a, unsigned instruction)
     do {
         ctl = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN 
             | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1, 1);    // Send data, readflag, immediate don't care
-        if ((! (ctl & CONTROL_PRACC))){
+        // For MK family, PRACC doesn't cut it.
+//        if ((! (ctl & CONTROL_PRACC))){
+        if (!(ctl & CONTROL_PROBEN)){  
             fprintf(stderr, "xfer instruction, ctl was %08x\n", ctl);
             maxCounter++;
-            if (maxCounter > 4){
+            if (maxCounter > 40){
                 fprintf(stderr, "Processor still not ready. Quitting\n");
                 exit(-1);   // TODO exit procedure
             }
             mdelay(1000);
         }
-    } while (! (ctl & CONTROL_PRACC));
+//    } while (! (ctl & CONTROL_PRACC));
+    } while (! (ctl & CONTROL_PROBEN));
 
     /* Select Data Register */
     mpsse_sendCommand(a, ETAP_DATA, 1);    // ETAP_DATA, immediate
@@ -833,6 +836,7 @@ static void mpsse_enter_icsp(mpsse_adapter_t *a)
 static void serial_execution(mpsse_adapter_t *a)
 {
     uint32_t counter = 2000;
+    uint32_t counterPre = 0;
 
     if (a->serial_execution_mode)
         return;
@@ -855,8 +859,6 @@ static void serial_execution(mpsse_adapter_t *a)
         exit(-1);
     }
 
-    fprintf(stderr, "Status was %08x\n", status);
-    
     do{
 
         if (INTERFACE_ICSP == a->interface){
@@ -905,22 +907,12 @@ static void serial_execution(mpsse_adapter_t *a)
         mpsse_sendCommand(a, TAP_SW_ETAP, 1);
         mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
         mpsse_sendCommand(a, ETAP_CONTROL, 1);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);    // Send data, readflag, immediate, don't care
-        fprintf(stderr, "Status was %08x\n", status);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
-        fprintf(stderr, "Status was %08x\n", status);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
-        fprintf(stderr, "Status was %08x\n", status);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
-        fprintf(stderr, "Status was %08x\n", status);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
-        fprintf(stderr, "Status was %08x\n", status);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
-        fprintf(stderr, "Status was %08x\n", status);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
-        fprintf(stderr, "Status was %08x\n", status);
-        status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);
-        fprintf(stderr, "Status was %08x\n", status);
+
+        // At least on the MK chip, the first read is negative. Read again, and it's ok.
+        counterPre = 10;
+        do{
+            status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);    // Send data, readflag, immediate, don't care
+        }while(!(status & CONTROL_PROBEN) && counterPre-- > 0); 
 
 //        if (!(status & CONTROL_PRACC)){   
         if (!(status & CONTROL_PROBEN)){   
@@ -1350,7 +1342,7 @@ static void mpsse_program_double_word(adapter_t *adapter, unsigned addr, unsigne
 	 /* Use PE to write flash memory. */
     /* Send command. */
     mpsse_sendCommand(a, ETAP_FASTDATA, 1);
-
+    // TODO - RECHECK the | 2!!!
     mpsse_xferFastData(a, PE_DOUBLE_WORD_PGRM << 16 | 2, 0, 1); // Data, don't read, immediate
     mpsse_xferFastData(a, addr, 0, 1);  	/* Send address. */ // Data, don't read, immediate
     mpsse_xferFastData(a, word0, 0, 1);  	/* Send 1st word. */    // Data, don't read, immediate, was not before
@@ -1360,6 +1352,45 @@ static void mpsse_program_double_word(adapter_t *adapter, unsigned addr, unsigne
     if (response != (PE_DOUBLE_WORD_PGRM << 16)) {
         fprintf(stderr, "%s: failed to program double words 0x%08x 0x%08x at 0x%08x, reply = %08x\n",
             a->name, word0, word1, addr, response);
+        exit(-1);
+    }
+	
+}
+
+static void mpsse_program_quad_word(adapter_t *adapter, unsigned addr, 
+            unsigned word0, unsigned word1, unsigned word2, unsigned word3){
+    mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
+
+    if (FAMILY_MK != a->adapter.family_name_short
+        && FAMILY_MZ != a->adapter.family_name_short){
+        fprintf(stderr, "Program quad word is only available on MK and MZ families. Quitting\n");
+    }
+
+	if (debug_level > 0){
+		fprintf(stderr, "%s: program quad word at 0x%08x: 0x%08x 0x%08x 0x%08x 0x%08x\n",
+                         a->name, addr, word0, word1, word2, word3);
+	}
+	if (! a->use_executive) {
+        /* Without PE. */
+        fprintf(stderr, "%s: slow flash write not implemented yet.\n", a->name);
+        exit(-1);
+    }
+
+	 /* Use PE to write flash memory. */
+    /* Send command. */
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
+
+    mpsse_xferFastData(a, PE_QUAD_WORD_PGRM << 16, 0, 1); // Data, don't read, immediate
+    mpsse_xferFastData(a, addr, 0, 1);  	/* Send address. */ // Data, don't read, immediate
+    mpsse_xferFastData(a, word0, 0, 1);  	/* Send 1st word. */    // Data, don't read, immediate, was not before
+    mpsse_xferFastData(a, word1, 0, 1);  	/* Send 2nd word. */    // Data, don't read, immediate, was not before
+    mpsse_xferFastData(a, word2, 0, 1);  	/* Send 1st word. */    // Data, don't read, immediate, was not before
+    mpsse_xferFastData(a, word3, 0, 1);  	/* Send 2nd word. */    // Data, don't read, immediate, was not before
+ 
+    unsigned response = get_pe_response(a);
+    if (response != (PE_QUAD_WORD_PGRM << 16)) {
+        fprintf(stderr, "%s: failed to program quad words 0x%08x 0x%08x 0x%08x 0x%08x at 0x%08x, reply = %08x\n",
+            a->name, word0, word1, word2, word3, addr, response);
         exit(-1);
     }
 	
@@ -1439,7 +1470,6 @@ static void mpsse_verify_data(adapter_t *adapter,
         exit(-1);
     }
     flash_crc = get_pe_response(a) & 0xffff;
-
     data_crc = calculate_crc(0xffff, (unsigned char*) data, nwords * 4);
     if (flash_crc != data_crc) {
         fprintf(stderr, "%s: checksum failed at %08x: sum=%04x, expected=%04x\n",
@@ -1657,5 +1687,6 @@ failed: libusb_release_interface(a->usbdev, 0);
     a->adapter.program_word = mpsse_program_word;
     a->adapter.program_row = mpsse_program_row;
     a->adapter.program_double_word = mpsse_program_double_word;
+    a->adapter.program_quad_word = mpsse_program_quad_word;
     return &a->adapter;
 }
