@@ -671,10 +671,14 @@ void target_print_devcfg(target_t *t)
             return;
         } 
         print_mm(fdevopt, ficd, fpor, fwdt, foscsel, fsec,
-                                afdevopt, aficd, afpor, afwdt, afoscsel, afsec);
+                                afdevopt, aficd, afpor, afwdt, afoscsel, afsec,
+								0, 0, 0, 0, 0, 0);
     }
     else if (FAMILY_MK == t->family->name_short){
-        uint32_t devcfg_addr    = 0x1fc40000 + target_devcfg_offset(t);    // Offset to BF1DEVCFG3.
+		// Offset is set to BF1DEVCFG3
+        uint32_t devcfg_addr    = 0x1fc40000 + target_devcfg_offset(t);
+		
+		// Boot flash 1 area
         uint32_t bf1devcfg3     = t->adapter->read_word(t->adapter, devcfg_addr);
         uint32_t bf1devcfg2     = t->adapter->read_word(t->adapter, devcfg_addr + 4);
         uint32_t bf1devcfg1     = t->adapter->read_word(t->adapter, devcfg_addr + 8);
@@ -683,6 +687,7 @@ void target_print_devcfg(target_t *t)
         uint32_t bf1devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 44);
         uint32_t bf1seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 48);
 
+		// Boot flash 2 area
         uint32_t bf2devcfg3 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000);
         uint32_t bf2devcfg2 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 4);
         uint32_t bf2devcfg1 	= t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 8);
@@ -691,29 +696,17 @@ void target_print_devcfg(target_t *t)
         uint32_t bf2devsign     = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 44);
         uint32_t bf2seq 	    = t->adapter->read_word(t->adapter, devcfg_addr + 0x20000 + 48);
 
-		uint32_t LBAdevsign     = t->adapter->read_word(t->adapter, 0x1FC03FEC);
-        uint32_t devidnew 		= t->adapter->read_word(t->adapter, 0x1F800020);
-		uint32_t devidold       = t->adapter->get_idcode(t->adapter);
-        
+		// DEVSNx registers
+        uint32_t devsn0         = t->adapter->read_word(t->adapter, 0x1FC45020);
+        uint32_t devsn1         = t->adapter->read_word(t->adapter, 0x1FC45024);
+        uint32_t devsn2         = t->adapter->read_word(t->adapter, 0x1FC45028);
+        uint32_t devsn3         = t->adapter->read_word(t->adapter, 0x1FC4502C);
 
-
-        uint32_t UUID1          = t->adapter->read_word(t->adapter, 0x1FC45020);
-        uint32_t UUID2          = t->adapter->read_word(t->adapter, 0x1FC45024);
-        uint32_t UUID3          = t->adapter->read_word(t->adapter, 0x1FC45028);
-        uint32_t UUID4          = t->adapter->read_word(t->adapter, 0x1FC4502C);
-
-        fprintf(stderr, "address is: %08x\n", devcfg_addr);
-        fprintf(stderr, "MK family: %08x %08x %08x %08x\n%08x %08x %08x %08x\n%08x %08x %08x\n",
-                UUID1, UUID2, UUID3, UUID4,
-                bf1devcfg3, bf1devcfg2, bf1devcfg1, bf1devcfg0,
-                bf1devcp, bf1devsign, bf1seq);
-        fprintf(stderr, "MK family: %08x %08x %08x %08x\n%08x %08x %08x %08x\n%08x %08x %08x\n",
-                UUID1, UUID2, UUID3, UUID4,
-                bf2devcfg3, bf2devcfg2, bf2devcfg1, bf2devcfg0,
-                bf2devcp, bf2devsign, bf2seq);
-		fprintf(stderr, "Addresses %08x %08x\n", devcfg_addr + 44, devcfg_addr + 44);
-		fprintf(stderr, "Vals %08x %08x %08x\n", LBAdevsign, devidnew, devidold);
-
+		t->family->print_devcfg(bf1devcfg3, bf1devcfg2, bf1devcfg1, bf1devcfg0,
+				bf1devcp, bf1devsign, bf1seq,
+				bf2devcfg3, bf2devcfg2, bf2devcfg1, bf2devcfg0,
+				bf2devcp, bf2devsign, bf2seq,
+				devsn0, devsn1, devsn2, devsn3);
     }
     else{
         /* MX, MZ */
@@ -731,7 +724,7 @@ void target_print_devcfg(target_t *t)
 
         printf(_("Configuration:\n"));
         t->family->print_devcfg(devcfg0, devcfg1, devcfg2, devcfg3,
-                                0, 0, 0, 0, 0, 0, 0, 0);
+                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
     }
 }
 

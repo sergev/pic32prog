@@ -26,7 +26,9 @@ void print_mm_fsec(uint32_t fsec, uint32_t alternate);
  */
 void print_mm(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3,
 				unsigned cfg4, unsigned cfg5, unsigned cfg6, unsigned cfg7,
-				unsigned cfg8, unsigned cfg9, unsigned cfg10, unsigned cfg11)
+				unsigned cfg8, unsigned cfg9, unsigned cfg10, unsigned cfg11,
+				unsigned cfg12, unsigned cfg13, unsigned cfg14, unsigned cfg15,
+				unsigned cfg16, unsigned cfg17)
 {
 	printf("Primary configuration bits\n");
 	print_mm_fdevopt(cfg0, PRIMARY);
