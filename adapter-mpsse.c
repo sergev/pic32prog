@@ -1620,37 +1620,52 @@ failed: libusb_release_interface(a->usbdev, 0);
     /* Activate LED. */
     mpsse_setPins(a, 0, 1, 0, 0, 1); // No Reset, LED, no ICSP, no ICSP_OE, immediate
 
-    if (INTERFACE_ICSP == interface){
-        mpsse_enter_icsp(a);
-    }
+    unsigned idcode = 0;
+    uint32_t counter = 10;
+    do{
+        if (INTERFACE_ICSP == interface){
+            mpsse_enter_icsp(a);
+        }
 
-    /* Delay required for ICSP */
-    mdelay(5);     
+        /* Delay required for ICSP */
+        mdelay(5);     
 
-    /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
-     * After reset, the IDCODE register is always selected.
-     * Read out 32 bits of data. */
-    unsigned idcode;
+        /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
+         * After reset, the IDCODE register is always selected.
+         * Read out 32 bits of data. */
+        
 
-    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
-    mpsse_sendCommand(a, TAP_SW_MTAP, 1);
-    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
-    mpsse_sendCommand(a, MTAP_IDCODE, 1);
+        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+        mpsse_sendCommand(a, TAP_SW_MTAP, 1);
+        mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
+        mpsse_sendCommand(a, MTAP_IDCODE, 1);
 
-    idcode = mpsse_xferData(a, 32, 0, 1, 1);
-    if ((idcode & 0xfff) != 0x053) {
-        /* Microchip vendor ID is expected. */
-        if (debug_level > 0 || (idcode != 0 && idcode != 0xffffffff))
-            fprintf(stderr, "%s: incompatible CPU detected, IDCODE=%08x\n",
-                a->name, idcode);
+        idcode = mpsse_xferData(a, 32, 0, 1, 1);
+        if ((idcode & 0xfff) != 0x053) {
+            /* Microchip vendor ID is expected. */
+            if (debug_level > 0 || (idcode != 0 && idcode != 0xffffffff))
+                fprintf(stderr, "%s: incompatible CPU detected, IDCODE=%08x\n",
+                    a->name, idcode);
+            fprintf(stderr, "IDCODE not valid, retrying\n");
+        }
+    }while((idcode & 0xfff) != 0x053 && counter-- > 0);
+    if(counter == 0){
         mpsse_setPins(a, 0, 0, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
+        fprintf(stderr, "Couldn't read IDCODE, exiting\n");
         goto failed;
     }
+    printf("      IDCODE=%08x\n", idcode);
 
     /* Activate /SYSRST and LED. Only done in JTAG mode */
     if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface)
     {
         mpsse_setPins(a, 1, 1, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
+
+        // So, the MM family's JTAG doesn't work in RESET...      
+        // Works like this for all the others as well.  
+        mdelay(10);
+        mpsse_setPins(a, 0, 1, 0, 0, 1); // No reset, LED, no ICSP, no ICSP_OE, immediate
+        
     } 
     mdelay(10);
 
@@ -1663,7 +1678,7 @@ failed: libusb_release_interface(a->usbdev, 0);
     mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);
     /* Xfer data. */
     unsigned status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
-
+    
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
     if ((status & (MCHP_STATUS_CFGRDY | MCHP_STATUS_FCBUSY)) != (MCHP_STATUS_CFGRDY)) {
