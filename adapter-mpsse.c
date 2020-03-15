@@ -943,7 +943,7 @@ static void serial_execution(mpsse_adapter_t *a)
                 }
 
 				// Reset will be asserted in the beginning of the loop again.
-				mdelay(1000);			
+				mdelay(100);			
             }
         }
         
