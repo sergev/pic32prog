@@ -534,9 +534,26 @@ void do_program(char *filename)
     if (boot_used) {
         if (FAMILY_MM == target->family->name_short){
             /* Check if both values have something in them.
-             * DEVOPT (and other) have some permanent 1 bits. Use those. */
-            if ( ((fdevopt&0x0ff0) != 0x0ff0) || ((afdevopt&0x0ff0) != 0x0ff0)){
+             * DEVOPT (and other) have some permanent 1 bits. Use those.
+               It would be more sensible, to set some bits to 0 in read_*, and compare to that... */
+			
+            if ( ((fdevopt&0x0f00) != 0x0f00) || ((afdevopt&0x0f00) != 0x0f00)){
                 fprintf(stderr, _("Configuration bits are missing -- check your HEX file!\n"));
+                if (debug_level > 0){
+                    fprintf(stderr, "Read config bits are:\n");
+                    fprintf(stderr, "Fdevopt:  %08x\n", fdevopt);
+                    fprintf(stderr, "Ficd:     %08x\n", ficd);
+                    fprintf(stderr, "Fpor:     %08x\n", fpor);
+                    fprintf(stderr, "Fwdt:     %08x\n", fwdt);
+                    fprintf(stderr, "Foscsel:  %08x\n", foscsel);
+                    fprintf(stderr, "Fsec:     %08x\n", fsec);
+                    fprintf(stderr, "AFdevopt: %08x\n", afdevopt);
+                    fprintf(stderr, "AFicd:    %08x\n", aficd);
+                    fprintf(stderr, "AFpor:    %08x\n", afpor);
+                    fprintf(stderr, "AFwdt:    %08x\n", afwdt);
+                    fprintf(stderr, "AFoscsel: %08x\n", afoscsel);
+                    fprintf(stderr, "AFsec:    %08x\n", afsec);
+                }
                 exit(1);
             }
         }
@@ -553,7 +570,7 @@ void do_program(char *filename)
 		    // For example, there's a clash in the Lower Alias Boot region. 
 		    // CRC here calculates based on 0xFFFFFFFF, but GET_CRC calculates based on real data.
 
-			// Also, because even though the registers exist, but MPLAB doens't do anything with it...
+			// Also, because even though the registers exist, but MPLAB doesn't do anything with it...
 			bf1devsign &= 0x7FFFFFFF;
 			bf2devsign &= 0x7FFFFFFF;
 

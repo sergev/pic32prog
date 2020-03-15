@@ -32,8 +32,12 @@ extern print_func_t print_mk;
  */
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
 static const
-family_t family_mm  = { "mm", FAMILY_MM, 
-                        4, 0x1700,  256, print_mm,  pic32_pemm,  555, 0x0510 };
+family_t family_mm_gpl  = { "mm_gpl", FAMILY_MM, 
+                        4, 0x1700,  256, print_mm,  pic32_pemm_gpl,  555, 0x0510 };
+static const
+family_t family_mm_gpm  = { "mm_gpm", FAMILY_MM, 
+                        4, 0x1700,  256, print_mm,  pic32_pemm_gpm,  555, 0x0510 };
+
 static const
 family_t family_mx1 = { "mx1", FAMILY_MX1,
                         3,  0x0bf0, 128,  print_mx1, pic32_pemx1, 422,  0x0301 };
@@ -286,10 +290,14 @@ static variant_t pic32_tab[TABSZ] = {
     {0x5f4f053, "MZ2048XXXXXX", 2048,   &family_mz},
     {0x5fb7053, "MZ2048XXXXXX", 2048,   &family_mz},
 
-    /* MM family */
-    {0x46b12053, "MM0064GPL028",  64,   &family_mm},
-    {0x46b16053, "MM0064GPL036",  64,   &family_mm},
-    {0x66b04053, "MM0016GPL028",  16,   &family_mm},
+    /* MM GPL family */
+    {0x6b12053, "MM0064GPL028",  64,   &family_mm_gpl},
+    {0x6b16053, "MM0064GPL036",  64,   &family_mm_gpl},
+    {0x6b04053, "MM0016GPL028",  16,   &family_mm_gpl},
+
+    /* MM GPL family */
+    {0x771e053, "MM0256GPM064", 256,   &family_mm_gpm},
+
 
     /* MK family */
     {0x6201053, "MK1024MCF100",  1024,   &family_mk},

@@ -962,7 +962,7 @@ static unsigned get_pe_response(mpsse_adapter_t *a)
 
     // Select Control Register
     /* Send command. */
-    mpsse_sendCommand(a, ETAP_CONTROL, 1);
+    mpsse_sendCommand(a, ETAP_CONTROL, 1);	// Command, immediate
 
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
@@ -1182,7 +1182,7 @@ static void mpsse_load_executive(adapter_t *adapter,
         /* Else MM family */
         // Step 1. Setup PIC32MM RAM address for the PE 
 		mpsse_xferInstruction(a, 0xa00041a4);    // lui a0, 0xa000
-		mpsse_xferInstruction(a, 0x02005084);    // ori a0, a0, 0x800 A total of 0xa000_0200
+		mpsse_xferInstruction(a, 0x02005084);    // ori a0, a0, 0x200 A total of 0xa000_0200
 
 		// Step 2. Load the PE_loader.
 		int i;
