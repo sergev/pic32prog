@@ -12,11 +12,17 @@
 #define _TARGET_H
 
 #include "adapter.h"
+#include <stdint.h> 
 
-typedef void print_func_t(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3);
+typedef void print_func_t(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3,
+						unsigned cfg4, unsigned cfg5, unsigned cfg6, unsigned cfg7,
+						unsigned cfg8, unsigned cfg9, unsigned cfg10, unsigned cfg11,
+                        unsigned cfg12, unsigned cfg13, unsigned cfg14, unsigned cfg15,
+                        unsigned cfg16, unsigned cfg17);
 
 typedef struct {
     const char      *name;
+	unsigned		name_short;
     unsigned        boot_kbytes;
     unsigned        devcfg_offset;
     unsigned        bytes_per_row;
@@ -43,7 +49,7 @@ typedef struct {
     unsigned        boot_bytes;
 } target_t;
 
-target_t *target_open(const char *port, int baud_rate);
+target_t *target_open(const char *port, int baud_rate, int interface, int speed);
 void target_close(target_t *t, int power_on);
 void target_use_executive(target_t *t);
 void target_configure(void);
@@ -66,7 +72,9 @@ void target_verify_block(target_t *t, unsigned addr,
 int target_erase(target_t *t);
 void target_program_block(target_t *t, unsigned addr,
     unsigned nwords, unsigned *data);
-void target_program_devcfg(target_t *t, unsigned devcfg0,
-    unsigned devcfg1, unsigned devcfg2, unsigned devcfg3);
+void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
+        uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, 
+        uint32_t arg6, uint32_t arg7, uint32_t arg8, uint32_t arg9, 
+        uint32_t arg10, uint32_t arg11, uint32_t arg12, uint32_t arg13);
 
 #endif

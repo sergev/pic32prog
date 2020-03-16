@@ -18,6 +18,10 @@
 #define AD_ERASE 0x0004
 #define AD_PROBE 0x0008
 
+#define INTERFACE_DEFAULT   0
+#define INTERFACE_JTAG      1
+#define INTERFACE_ICSP      2
+
 typedef struct _adapter_t adapter_t;
 
 struct _adapter_t {
@@ -29,6 +33,7 @@ struct _adapter_t {
 
     unsigned flags;
     const char *family_name;            /* Name of pic32 family */
+	unsigned family_name_short;			/* Int define of the family name */
 
     void (*close)(adapter_t *a, int power_on);
     unsigned (*get_idcode)(adapter_t *a);
@@ -50,7 +55,7 @@ adapter_t *adapter_open_pickit2(int vid, int pid, const char *serial);
 adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial);
 adapter_t *adapter_open_an1388(int vid, int pid, const char *serial);
 adapter_t *adapter_open_hidboot(int vid, int pid, const char *serial);
-adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial);
+adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial, int interface, int speed);
 adapter_t *adapter_open_bitbang(const char *port, int baud_rate);
 adapter_t *adapter_open_an1388_uart(const char *port, int baud_rate);
 adapter_t *adapter_open_stk500v2(const char *port, int baud_rate);

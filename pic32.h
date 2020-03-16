@@ -15,14 +15,22 @@
  * Described in PIC32MX Flash Programming Specification.
  */
 #define PIC32_PE_LOADER_LEN    42
-#define PIC32_PEMM_LOADER_LEN  22
+#define PIC32_PEMM_LOADER_LEN  28
 
 extern const unsigned short pic32_pe_loader[];
 extern const unsigned short pic32_pemm_loader[];
 extern const unsigned pic32_pemx1[];
 extern const unsigned pic32_pemx3[];
 extern const unsigned pic32_pemz[];
-extern const unsigned pic32_pemm[];
+extern const unsigned pic32_pemm_gpl[];
+extern const unsigned pic32_pemm_gpm[];
+extern const unsigned pic32_pemk[];
+
+#define FAMILY_MX1	0
+#define FAMILY_MX3	1
+#define FAMILY_MZ	2
+#define FAMILY_MK	3
+#define FAMILY_MM	4
 
 /*
  * TAP instructions (5-bit).
@@ -115,6 +123,7 @@ extern const unsigned pic32_pemm[];
 #define PE_PROGRAM_CLUSTER      0x9     /* Program N bytes */
 #define PE_GET_DEVICEID         0xA     /* Return the hardware ID of device */
 #define PE_CHANGE_CFG           0xB     /* Change PE settings */
+#define PE_QUAD_WORD_PGRM       0xD     /* Programs four words of Flash memory at the specified address */
 #define PE_DOUBLE_WORD_PGRM     0xE     /* Programs two words of Flash memory at the specified address */
 
 /*-------------------------------------------------------------------
@@ -497,4 +506,346 @@ extern const unsigned pic32_pemm[];
 #define MX1_CFG3_FUSBIDIO       0x40000000 /* USBID pin: controlled by USB */
 #define MX1_CFG3_FVBUSONIO      0x80000000 /* VBuson pin: controlled by USB */
 
+/*-------------------------------------------------------------------
+ * MM family.
+ *
+ * FDEVOPT register
+ */
+#define MM_FDEVOPT_USERID_MASK   0xffff0000 /* User-defined ID */
+#define MM_FDEVOPT_FVBUSIO       0x00008000 /* FVBUSIO bit */
+#define MM_FDEVOPT_FUSBIDIO      0x00004000 /* FUSBIDIO bit */
+#define MM_FDEVOPT_ALTI2C        0x00000010 /* ALTI2C bit */
+#define MM_FDEVOPT_SOSCHP        0x00000008 /* SOSCHP bit */
+
+/*
+ * FICD register.
+ */
+#define MM_FICD_ICS_MASK        0x00000018 /* ICS mask for both bits */
+#define MM_FICD_ICS_PAIR1       0x00000018 /* Use PGC1/PGD1 */
+#define MM_FICD_ICS_PAIR2       0x00000010 /* Use PGC2/PGD2 */
+#define MM_FICD_ICS_PAIR3       0x00000008 /* Use PGC3/PGD3 */
+#define MM_FICD_ICS_PAIRNONE    0x00000000 /* Not connected */
+#define MM_FICD_JTAGEN          0x00000004 /* JTAGEN bit */ 
+
+/*
+ * FPOR register.
+ */
+#define MM_FPOR_LPBOREN         0x00000008 /* LPBOREN bit */
+#define MM_FPOR_RETVR           0x00000004 /* RETVR bit */
+#define MM_FPOR_BOREN_MASK      0x00000003 /* Mask for BOREN */
+#define MM_FPOR_BOREN3          0x00000003 /* Brown-out Reset enabled in HW, SBOREN bit is disabled */
+#define MM_FPOR_BOREN2          0x00000002 /* Brown-out Reset in enabled only while device is active and disabled in Sleep; SBOREN bit is disabled */
+#define MM_FPOR_BOREN1          0x00000001 /* Brown-out Reset is controlled with the SBOREN bit setting */
+#define MM_FPOR_BOREN0          0x00000000 /* Brown-out Reset is disabled in HWM SBOREN bit is disabled */
+
+/*
+ * FWDT register.
+ */
+#define MM_FWDT_FWDTEN          0x00008000 /* FWDTEN bit */
+#define MM_FWDT_RCLKSEL_MASK    0x00006000 /* Mask for RCLKSEL */
+#define MM_FWDT_RCLKSEL_LPRC    0x00006000 /* Clock source is LPRC, same as for Sleep mode */
+#define MM_FWDT_RCLKSEL_FRC     0x00004000 /* Clock source is the FRC oscillator */
+#define MM_FWDT_RCLKSEL_RES     0x00002000 /* Reserved */
+#define MM_FWDT_RCLKSEL_SYS     0x00000000 /* Clock source is the system clock */
+#define MM_FWDT_RWDTPS_MASK     0x00001F00 /* Run Mode Watchdog Timer Postscale Select bits */
+#define MM_FWDT_RWDTPS_1        0x00000000 /* 1:1 */
+#define MM_FWDT_RWDTPS_2        0x00000100 /* 1:2 */
+#define MM_FWDT_RWDTPS_4        0x00000200 /* 1:4 */
+#define MM_FWDT_RWDTPS_8        0x00000300 /* 1:8 */
+#define MM_FWDT_RWDTPS_16       0x00000400 /* 1:16 */
+#define MM_FWDT_RWDTPS_32       0x00000500 /* 1:32 */
+#define MM_FWDT_RWDTPS_64       0x00000600 /* 1:64 */
+#define MM_FWDT_RWDTPS_128      0x00000700 /* 1:128 */
+#define MM_FWDT_RWDTPS_256      0x00000800 /* 1:256 */
+#define MM_FWDT_RWDTPS_512      0x00000900 /* 1:512 */
+#define MM_FWDT_RWDTPS_1024     0x00000A00 /* 1:1024 */
+#define MM_FWDT_RWDTPS_2048     0x00000B00 /* 1:2048 */
+#define MM_FWDT_RWDTPS_4096     0x00000C00 /* 1:4096 */
+#define MM_FWDT_RWDTPS_8192     0x00000D00 /* 1:8192 */
+#define MM_FWDT_RWDTPS_16384    0x00000E00 /* 1:16384 */
+#define MM_FWDT_RWDTPS_32768    0x00000F00 /* 1:32768 */
+#define MM_FWDT_RWDTPS_65536    0x00001000 /* 1:65536 */
+#define MM_FWDT_RWDTPS_131072   0x00001100 /* 1:131072 */
+#define MM_FWDT_RWDTPS_262144   0x00001200 /* 1:262144 */
+#define MM_FWDT_RWDTPS_524288   0x00001300 /* 1:524288 */
+#define MM_FWDT_RWDTPS_1048576  0x00001400 /* 1:1048573, from this to 0x1F00 */
+#define MM_FWDT_WINDIS          0x00000080 /* WINDIS bit */
+#define MM_FWDT_FWDTWINSZ_MASK  0x00000060 /* FWDTWINSZ mask */
+#define MM_FWDT_FWDTWINSZ_25    0x00000060 /* Watchdog window size 25% */
+#define MM_FWDT_FWDTWINSZ_375   0x00000040 /* Watchdog window size 37.5% */
+#define MM_FWDT_FWDTWINSZ_50    0x00000020 /* Watchdog window size 50% */
+#define MM_FWDT_FWDTWINSZ_75    0x00000000 /* Watchdog window size 75% */
+#define MM_FWDT_SWDTPS_MASK     0x0000001F /* Sleep Mode Watchdog Timer Postscale Select bits */
+#define MM_FWDT_SWDTPS_1        0x00000000 /* 1:1 */
+#define MM_FWDT_SWDTPS_2        0x00000001 /* 1:2 */
+#define MM_FWDT_SWDTPS_4        0x00000002 /* 1:4 */
+#define MM_FWDT_SWDTPS_8        0x00000003 /* 1:8 */
+#define MM_FWDT_SWDTPS_16       0x00000004 /* 1:16 */
+#define MM_FWDT_SWDTPS_32       0x00000005 /* 1:32 */
+#define MM_FWDT_SWDTPS_64       0x00000006 /* 1:64 */
+#define MM_FWDT_SWDTPS_128      0x00000007 /* 1:128 */
+#define MM_FWDT_SWDTPS_256      0x00000008 /* 1:256 */
+#define MM_FWDT_SWDTPS_512      0x00000009 /* 1:512 */
+#define MM_FWDT_SWDTPS_1024     0x0000000A /* 1:1024 */
+#define MM_FWDT_SWDTPS_2048     0x0000000B /* 1:2048 */
+#define MM_FWDT_SWDTPS_4096     0x0000000C /* 1:4096 */
+#define MM_FWDT_SWDTPS_8192     0x0000000D /* 1:8192 */
+#define MM_FWDT_SWDTPS_16384    0x0000000E /* 1:16384 */
+#define MM_FWDT_SWDTPS_32768    0x0000000F /* 1:32768 */
+#define MM_FWDT_SWDTPS_65536    0x00000010 /* 1:65536 */
+#define MM_FWDT_SWDTPS_131072   0x00000011 /* 1:131072 */
+#define MM_FWDT_SWDTPS_262144   0x00000012 /* 1:262144 */
+#define MM_FWDT_SWDTPS_524288   0x00000013 /* 1:524288 */
+#define MM_FWDT_SWDTPS_1048576  0x00000014 /* 1:1048573, from this to 0x001F */
+
+/*
+ * FOSCSEL register.
+ */
+#define MM_FOSCSEL_FCKSM_MASK   0x0000C000 /* Mask for FCKSM  - clock switching and Fail-Safe Clock Monitor Enable bits */
+#define MM_FOSCSEL_FCKSM3       0x0000C000 /* Clock is enabled, Fail-Safe Clock Monitor is enabled */
+#define MM_FOSCSEL_FCKSM2       0x00008000 /* Clock is disabled, Fail-Safe Clock Monitor is enabled */
+#define MM_FOSCSEL_FCKSM1       0x00004000 /* Clock is enabled, Fail-Safe Clock Monitor is disabled */
+#define MM_FOSCSEL_FCKSM0       0x00000000 /* Clock is disabled, Fail-Safe Clock Monitor is disabled */
+#define MM_FOSCSEL_SOSCSEL      0x00001000 /* Secondary oscillator enable bit */
+#define MM_FOSCSEL_OSCIOFNC     0x00000400 /* System clock on CLKO Pin enable bit */
+#define MM_FOSCSEL_POSCMOD_MASK 0x00000300 /* Primary oscillator mode select bit */
+#define MM_FOSCSEL_POSCMOD_DIS  0x00000300 /* Primary oscillator is disabled */
+#define MM_FOSCSEL_POSCMOD_HS   0x00000200 /* HS oscillator mode selected */
+#define MM_FOSCSEL_POSCMOD_XT   0x00000100 /* XT oscillator mode selected */
+#define MM_FOSCSEL_POSCMOD_EC   0x00000000 /* EC oscillator mode selected */
+#define MM_FOSCSEL_IESO         0x00000080 /* Two-speed start-up enable bit */
+#define MM_FOSCSEL_SOSCEN       0x00000040 /* Secondary oscillator enable bit */
+#define MM_FOSCSEL_PLLSRC       0x00000010 /* System PLL Input selection bit */
+#define MM_FOSCSEL_FNOSC_MASK   0x00000006 /* Oscillator selection bits */
+#define MM_FOSCSEL_FNOSC_PRIM_FRC_PLL 0x00000001 /* Primary or FRC oscillator + PLL */
+#define MM_FOSCSEL_FNOSC_PRIM         0x00000002 /* Primary oscillator (XT, HS, EC) */
+#define MM_FOSCSEL_FNOSC_RESERVED     0x00000003 /* Reserved */
+#define MM_FOSCSEL_FNOSC_SOCS         0x00000004 /* Secondary oscillator */
+#define MM_FOSCSEL_FNOSC_LPRC         0x00000005 /* Low-power RC oscillator */
+// Everything else, 0, 0x06, 0x07 is FRC + Divide-by-N
+#define MM_FOSCSEL_FNOSC_FRC_DIVN1    0x00000000
+#define MM_FOSCSEL_FNOSC_FRC_DIVN6    0x00000006
+#define MM_FOSCSEL_FNOSC_FRC_DIVN7    0x00000007
+
+/*
+ * FSEC register.
+ */
+#define MM_FSEC_CP              0x80000000 /* Code protect bit */
+
+
+/*-------------------------------------------------------------------
+ * MK family.
+ *
+ * DEVCFG3 register
+ */
+#define MK_DEVCFG3_FVBUSIO1		0x80000000 /* VBUSON pin controlled by USB1 */
+#define MK_DEVCFG3_FUSBIDIO1	0x40000000 /* USBID pin controlled by USB1 */
+#define MK_DEVCFG3_IOL1WAY		0x20000000 /* Peripheral Pin select - only 1 reconfig */
+#define MK_DEVCFG3_PMDL1WAY		0x10000000 /* Peripheral module disable - only 1 reconfig */
+#define MK_DEVCFG3_PGL1WAY		0x08000000 /* Permission group lock - only 1 reconfig */
+#define MK_DEVCFG3_FVBUSIO2		0x00800000 /* VBUSON pin controlled by USB2 */
+#define MK_DEVCFG3_FUSBIDIO2	0x00400000 /* USBID pin controlled by USB2 */
+#define MK_DEVCFG3_PWMLOCK		0x00100000 /* Write access to PWM IOCONx not protected */
+#define MK_DEVCFG3_USERID_MASK  0x0000FFFF /* User-defined ID */
+
+/*
+ * DEVCFG2 register.
+ */
+#define MK_DEVCFG2_UPLLEN		0x80000000 /* USB PLL disabled */
+#define MK_DEVCFG2_BORSEL		0x20000000 /* BOR trip voltage 2.1V, non-opamp config */
+#define MK_DEVCFG2_FDSEN		0x10000000 /* DS bit enable on WAIT command */
+#define MK_DEVCFG2_DSWDTEN		0x08000000 /* Enable DSWDTEN during Deep Sleep */
+#define MK_DEVCFG2_DSWDTOSC		0x04000000 /* Select LPRC as DSWDT reference clock */
+#define MK_DEVCFG2_DSWDTPS_MASK	0x03E00000 /* Deep Sleep Watchdog Timer Postscale Select bits */
+#define MK_DEVCFG2_DSWDTPS_236	0x03E00000 /* 1:236 (25.7 days), these values are 2^XY*/
+#define MK_DEVCFG2_DSWDTPS_235	0x03C00000 /* 1:235 (12.8 days) */
+#define MK_DEVCFG2_DSWDTPS_234	0x03A00000 /* 1:234 (6.4 days) */
+#define MK_DEVCFG2_DSWDTPS_233	0x03800000 /* 1:233 (77.0 hours) */ 
+#define MK_DEVCFG2_DSWDTPS_232	0x03600000 /* 1:232 (38.5 hours) */ 
+#define MK_DEVCFG2_DSWDTPS_231	0x03400000 /* 1:231 (19.2 hours) */ 
+#define MK_DEVCFG2_DSWDTPS_230	0x03200000 /* 1:230 (9.6 hours) */ 
+#define MK_DEVCFG2_DSWDTPS_229	0x03000000 /* 1:229 (4.8 hours) */ 
+#define MK_DEVCFG2_DSWDTPS_228	0x02E00000 /* 1:228 (2.4 hours) */ 
+#define MK_DEVCFG2_DSWDTPS_227	0x02C00000 /* 1:227 (72.2 minutes) */ 
+#define MK_DEVCFG2_DSWDTPS_226	0x02A00000 /* 1:226 (36.1 minutes) */ 
+#define MK_DEVCFG2_DSWDTPS_225	0x02800000 /* 1:225 (18.0 minutes) */ 
+#define MK_DEVCFG2_DSWDTPS_224	0x02600000 /* 1:224 (9.0 minutes) */ 
+#define MK_DEVCFG2_DSWDTPS_223	0x02400000 /* 1:223 (4.5 minutes) */ 
+#define MK_DEVCFG2_DSWDTPS_222	0x02200000 /* 1:222 (135.5 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_221	0x02000000 /* 1:221 (67.7 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_220	0x01E00000 /* 1:220 (33.825 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_219	0x01C00000 /* 1:219 (16.912 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_218	0x01A00000 /* 1:218 (8.456 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_217	0x01800000 /* 1:217 (4.228 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_65536	0x01600000 /* 1:65536 (2.114 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_32768	0x01400000 /* 1:32768 (1.057 seconds) */ 
+#define MK_DEVCFG2_DSWDTPS_16384	0x01200000 /* 1:16384 (528.5 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_8192	0x01000000 /* 1:8192 (264.3 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_4096	0x00E00000 /* 1:4096 (132.1 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_2048	0x00C00000 /* 1:2048 (66.1 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_1024	0x00A00000 /* 1:1024 (33 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_512	0x00800000 /* 1:512 (16.5 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_256	0x00600000 /* 1:256 (8.3 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_128	0x00400000 /* 1:128 (4.1 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_64	0x00200000 /* 1:64 (2.1 milliseconds) */ 
+#define MK_DEVCFG2_DSWDTPS_32	0x00000000 /* 1:32 (1 millisecond) */ 
+#define MK_DEVCFG2_DSBOREN		0x00100000 /* Enable ZPBOR during deep sleep */
+#define MK_DEVCFG2_VBATBOREN	0x00080000 /* Enable ZPBOR during VBAT mode */
+#define MK_DEVCFG2_FPLLODIV_MASK	0x00070000 /* Mask for System PLL Output Divisor bits */
+#define MK_DEVCFG2_FPLLODIV_32_1	0x00070000 /* Output divided by 32 */
+#define MK_DEVCFG2_FPLLODIV_32_2	0x00060000 /* Output divided by 32 */
+#define MK_DEVCFG2_FPLLODIV_32_3	0x00050000 /* Output divided by 32 */
+#define MK_DEVCFG2_FPLLODIV_16	0x00040000 /* Output divided by 16 */
+#define MK_DEVCFG2_FPLLODIV_8	0x00030000 /* Output divided by 8 */
+#define MK_DEVCFG2_FPLLODIV_4	0x00020000 /* Output divided by 4 */
+#define MK_DEVCFG2_FPLLODIV_2_1	0x00010000 /* Output divided by 2 */
+#define MK_DEVCFG2_FPLLODIV_2_2	0x00000000 /* Output divided by 2 */
+#define MK_DEVCFG2_FPLLMULT_MASK	0x00007F00	/* Mask for System PLL Feedback Divider bits */
+#define MK_DEVCFG2_FPLLMULT_SHIFT	8			/* By how much to shift the value to the right */
+#define MK_DEVCFG2_FPLLMULT_MIN_VAL	1			/* Value of 0000000 in the register. To many to do manually */
+#define MK_DEVCFG2_FPLLICLK		0x00000080 /* FRC is selected as input to the System PLL */
+#define MK_DEVCFG2_FPLLRNG_MASK	0x00000070 /* System PLL Divided Input Clock Frequency Range */
+#define MK_DEVCFG2_FPLLRNG_34_64	0x00000050 /* 34-64 MHz */
+#define MK_DEVCFG2_FPLLRNG_21_42	0x00000040 /* 21-42 MHz */
+#define MK_DEVCFG2_FPLLRNG_13_26	0x00000030 /* 13-26 MHz */
+#define MK_DEVCFG2_FPLLRNG_8_16		0x00000020 /* 8-16 MHz */
+#define MK_DEVCFG2_FPLLRNG_5_10		0x00000010 /* 5-10 MHz */
+#define MK_DEVCFG2_FPLLRNG_BYPASS	0x00000000 /* Bypass */
+/* Two other values are Reserved */
+#define MK_DEVCFG2_FPLLIDIV_MASK	0x00000007 /* Mask for PLL Input Divider bits */
+#define MK_DEVCFG2_FPLLIDIV_8		0x00000007 /* Divide by 8 */
+#define MK_DEVCFG2_FPLLIDIV_7		0x00000006 /* Divide by 7 */
+#define MK_DEVCFG2_FPLLIDIV_6		0x00000005 /* Divide by 6 */
+#define MK_DEVCFG2_FPLLIDIV_5		0x00000004 /* Divide by 5 */
+#define MK_DEVCFG2_FPLLIDIV_4		0x00000003 /* Divide by 4 */
+#define MK_DEVCFG2_FPLLIDIV_3		0x00000002 /* Divide by 3 */
+#define MK_DEVCFG2_FPLLIDIV_2		0x00000001 /* Divide by 2 */
+#define MK_DEVCFG2_FPLLIDIV_1		0x00000000 /* Divide by 1 */
+
+/*
+ * DEVCFG1 register.
+ */
+#define MK_DEVCFG1_FDMTEN		0x80000000 /* Deadman Timer is enabled and canot be disabled by software */
+#define MK_DEVCFG1_DMTCNT_MASK	0x7C000000 /* Mask for Deadman Timer Count Select bits */
+#define MK_DEVCFG1_DMTCNT_SHIFT	26 /* By how much to shift the value to the right */
+#define MK_DEVCFG1_DMTCNT_MIN_EXPONENT	8	/* 2^8, or 256 */
+#define MK_DEVCFG1_DMTCNT_MAX_EXPONENT	31	/* 2^31, or 2147483648 */
+#define MK_DEVCFG1_FWDTWINSZ_MASK	0x03000000 /* Mask for Watchdog Timer Windows Size bits */
+#define MK_DEVCFG1_FWDTWINSZ_25		0x03000000 /* Window size is 25% */
+#define MK_DEVCFG1_FWDTWINSZ_27_5	0x02000000 /* Window size is 37.5% */
+#define MK_DEVCFG1_FWDTWINSZ_50		0x01000000 /* Window size is 50% */
+#define MK_DEVCFG1_FWDTWINSZ_75		0x00000000 /* Window size is 75% */
+#define MK_DEVCFG1_FWDTEN			0x00800000 /* Watchdog Timer is enabled and cannot be disabled by software */
+#define MK_DEVCFG1_WINDIS			0x00400000 /* Watchdog Times is in non-Windows mode */
+#define MK_DEVCFG1_WDTSPGM			0x00200000 /* Watchdog Timer stops during Flash programming */
+#define MK_DEVCFG1_WDTPS_MASK		0x001F0000 /* Watchdog Timer Postscale Select bits */
+#define MK_DEVCFG1_WDTPS_1048576	0x00140000 /* 1:1048576 */
+#define MK_DEVCFG1_WDTPS_524288		0x00130000 /* 1:524288 */
+#define MK_DEVCFG1_WDTPS_262144		0x00120000 /* 1:262144 */
+#define MK_DEVCFG1_WDTPS_131072		0x00110000 /* 1:131072 */
+#define MK_DEVCFG1_WDTPS_65536		0x00100000 /* 1:65536 */
+#define MK_DEVCFG1_WDTPS_32768		0x000F0000 /* 1:32768 */
+#define MK_DEVCFG1_WDTPS_16384		0x000E0000 /* 1:16384 */
+#define MK_DEVCFG1_WDTPS_8192		0x000D0000 /* 1:8192 */
+#define MK_DEVCFG1_WDTPS_4096		0x000C0000 /* 1:4096 */
+#define MK_DEVCFG1_WDTPS_2048		0x000B0000 /* 1:2048 */
+#define MK_DEVCFG1_WDTPS_1024		0x000A0000 /* 1:1024 */
+#define MK_DEVCFG1_WDTPS_512		0x00090000 /* 1:512 */
+#define MK_DEVCFG1_WDTPS_256		0x00080000 /* 1:256 */
+#define MK_DEVCFG1_WDTPS_128		0x00070000 /* 1:128 */
+#define MK_DEVCFG1_WDTPS_64			0x00060000 /* 1:64 */
+#define MK_DEVCFG1_WDTPS_32			0x00050000 /* 1:32 */
+#define MK_DEVCFG1_WDTPS_16			0x00040000 /* 1:16 */
+#define MK_DEVCFG1_WDTPS_8			0x00030000 /* 1:8 */
+#define MK_DEVCFG1_WDTPS_4			0x00020000 /* 1:4 */
+#define MK_DEVCFG1_WDTPS_2			0x00010000 /* 1:2 */
+#define MK_DEVCFG1_WDTPS_1			0x00000000 /* 1:1 */
+#define MK_DEVCFG1_FCKSM_MASK		0x0000C000 /* Clock Switching and Monitoring Selection mask */
+#define MK_DEVCFG1_FCKSM_3			0x0000C000 /* Clock switching enabled, clock monitoring enabled */
+#define MK_DEVCFG1_FCKSM_2			0x00008000 /* Clock switching disabled, clock monitoring enabled */
+#define MK_DEVCFG1_FCKSM_1			0x00004000 /* Clock switching enabled, clock monitoring disabled */
+#define MK_DEVCFG1_FCKSM_0			0x00000000 /* Clock switching disabled, clock monitoring disabled */
+#define MK_DEVCFG1_OSCIOFNC			0x00000400 /* CLKO output is disabled */
+#define MK_DEVCFG1_POSCMOD_MASK		0x00000300 /* Primary Oscillator Configuration mask */
+#define MK_DEVCFG1_POSCMOD_DISABLED	0x00000300 /* Posc is disabled */
+#define MK_DEVCFG1_POSCMOD_HS		0x00000200 /* HS Oscillator mode is selected */
+#define MK_DEVCFG1_POSCMOD_RESERVED	0x00000100 /* Reserved */
+#define MK_DEVCFG1_POSCMOD_EC		0x00000000 /* EX mode is selected */
+#define MK_DEVCFG1_IESO			0x00000080 /* Internal External Switchoved mode enabled, Two-Speed Startup enabled */
+#define MK_DEVCFG1_FSOSCEN		0x00000040 /* Enable Sosc (if using osillator instead of crystal, bit should be 0) */
+#define MK_DEVCFG1_DMTINV_MASK	0x00000038 /* Deadman Timer Count Window Interval mask */
+#define MK_DEVCFG1_DMTINV_127_128	0x00000038 /* Windows is 127/128 counter value */
+#define MK_DEVCFG1_DMTINV_63_64		0x00000030 /* Windows is 63/64 counter value */
+#define MK_DEVCFG1_DMTINV_31_32		0x00000028 /* Windows is 31/32 counter value */
+#define MK_DEVCFG1_DMTINV_15_16		0x00000020 /* Windows is 15/16 counter value */
+#define MK_DEVCFG1_DMTINV_7_8		0x00000018 /* Windows is 7/8 counter value */
+#define MK_DEVCFG1_DMTINV_3_4		0x00000010 /* Windows is 3/4 counter value */
+#define MK_DEVCFG1_DMTINV_1_2		0x00000008 /* Windows is 1/2 counter value */
+#define MK_DEVCFG1_DMTINV_0			0x00000000 /* Windows value is zero */
+#define MK_DEVCFG1_FNOSC_MASK		0x00000007 /* Oscillator selection bits */
+#define MK_DEVCFG1_FNOSC_LPRC		0x00000005 /* Low-power RC Oscillator (LPRC) */
+#define MK_DEVCFG1_FNOSC_SOSC		0x00000004 /* Secondary Oscillator */
+#define MK_DEVCFG1_FNOSC_USBPLL		0x00000003 /* USB PLL - UPLL Module, set by UPLLCON */
+#define MK_DEVCFG1_FNOSC_POSC		0x00000002 /* Primary oscillator (Posc) - HS, EC */
+#define MK_DEVCFG1_FNOSC_SYSTEMPLL	0x00000001 /* System PLL - SPLL Module, set by SPLLCON */
+#define MK_DEVCFG1_FNOSC_FRC		0x00000000 /* Fast RC Oscillator + divider by FRCDIV (1,2,4,8,16,32,64,256) */
+
+/*
+ * DEVCFG0 register.
+ */
+#define MK_DEVCFG0_EJTAGBEN			0x40000000 /* Normal EJTAG functionality */
+#define MK_DEVCFG0_POSCBOOST		0x00200000 /* POSC, Boost the kick start of the oscillator */
+#define MK_DEVCFG0_POSCGAIN_MASK	0x00180000 /* Primary oscillator gain control */
+#define MK_DEVCFG0_POSCGAIN_3		0x00180000 /* Gain level 3 (highest) */
+#define MK_DEVCFG0_POSCGAIN_2		0x00100000 /* Gain level 2 */
+#define MK_DEVCFG0_POSCGAIN_1		0x00080000 /* Gain level 1 */
+#define MK_DEVCFG0_POSCGAIN_0		0x00000000 /* Gain level 0 (lowest) */
+#define MK_DEVCFG0_SOSCBOOST		0x00040000 /* SOSC, Boost the kisk start of the oscillator */
+#define MK_DEVCFG0_SOSCGAIN_MASK	0x00030000 /* Secondary oscillator gain control */
+#define MK_DEVCFG0_SOSCGAIN_3		0x00030000 /* Gain level 3 (highest) */
+#define MK_DEVCFG0_SOSCGAIN_2		0x00020000 /* Gain level 2 */
+#define MK_DEVCFG0_SOSCGAIN_1		0x00010000 /* Gain level 1 */
+#define MK_DEVCFG0_SOSCGAIN_0		0x00000000 /* Gain level 0 (lowest) */
+#define MK_DEVCFG0_SMCLR			0x00008000 /* MCLR pin generates a normal system Reset */
+#define MK_DEVCFG0_DBGPER_MASK		0x00007000 /* Debug mode CPU Access Permissions mask */
+#define MK_DEVCFG0_DBGPER_GRP2		0x00004000 /* Allow/deny access to Permission Group 2 regions */
+#define MK_DEVCFG0_DBGPER_GRP1		0x00002000 /* Allow/deny access to Permission Group 1 regions */
+#define MK_DEVCFG0_DBGPER_GRP0		0x00001000 /* Allow/deny access to Permission Group 0 regions */
+#define MK_DEVCFG0_SPECIALDEBUGGERBIT	0x00000800 /* Only used by debuggers/emulators. Not used otherwise */
+#define MK_DEVCFG0_FSLEEP			0x00000400 /* Flash is powered down then device is in sleep mode */
+#define MK_DEVCFG0_BOOTISA			0x00000040 /* Boot code and Exception code is MIPS32 */
+#define MK_DEVCFG0_TRCEN			0x00000020 /* Trace features in the CPU are enabled */
+#define MK_DEVCFG0_ICESEL_MASK		0x00000018 /* ICSP Channel Select mask */
+#define MK_DEVCFG0_ICESEL_1			0x00000018 /* PGEC1/PGED1 is used */
+#define MK_DEVCFG0_ICESEL_2			0x00000010 /* PGEC2/PGED2 is used */
+#define MK_DEVCFG0_ICESEL_3			0x00000008 /* PGEC3/PGED3 is used */
+#define MK_DEVCFG0_ICESEL_RESERVED	0x00000000 /* Reserved */
+#define MK_DEVCFG0_JTAGEN			0x00000004 /* JTAG is enabled */
+#define MK_DEFCFG0_DEBUG_MASK		0x00000003 /* Background debugger mask */
+#define MK_DEFCFG0_DEBUG_3			0x00000003 /* 4-wire JTAG enabled, ICSP disabled, ICD module disabled */
+#define MK_DEFCFG0_DEBUG_2			0x00000002 /* 4-wire JTAG enabled, ICSP disabled, ICD module enabled */
+#define MK_DEFCFG0_DEBUG_1			0x00000001 /* 4-wire JTAG disabled, ICSP enabled, ICD module disabled */
+#define MK_DEFCFG0_DEBUG_0			0x00000000 /* 4-wire JTAG disabled, ICSP enabled, ICD module enabled */
+
+/*
+ * DEVCP register.
+ */
+#define MK_DEVCP0_CP				0x10000000 /* Protection disabled */
+
+/*
+ * DEVSIGN register.
+ * Nothing really to do?
+ */
+
+
+
 #endif
+
+
+
+
+
+
+
+
+

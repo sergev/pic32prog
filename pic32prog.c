@@ -25,6 +25,8 @@
 #include "localize.h"
 #include "adapter.h"
 
+#include "pic32.h"
+
 #ifndef VERSION
 #define VERSION         "2.0."GITCOUNT
 #endif
@@ -36,7 +38,7 @@
 #define FLASHP_BASE     0x1d000000
 #define BOOTP_BASE      0x1fc00000
 #define FLASH_BYTES     (2048 * 1024)
-#define BOOT_BYTES      (80 * 1024)
+#define BOOT_BYTES      (512 * 1024)	// Fix for MK family, space is 404kB big
 
 /* Macros for converting between hex and binary. */
 #define NIBBLE(x)       (isdigit(x) ? (x)-'0' : tolower(x)+10-'a')
@@ -56,11 +58,49 @@ unsigned boot_bytes;
 unsigned flash_bytes;
 unsigned devcfg_offset;         /* Offset of devcfg registers in boot data */
 int total_bytes;
+int interface = INTERFACE_DEFAULT;  /* Optionally specified JTAG or ICSP */
+int interface_speed = 0;            /* Optional clock speed of interface */
 
+// PIC32MX, MZ DEVCFG definitions
 #define devcfg3 (*(unsigned*) &boot_data [devcfg_offset])
 #define devcfg2 (*(unsigned*) &boot_data [devcfg_offset + 4])
 #define devcfg1 (*(unsigned*) &boot_data [devcfg_offset + 8])
 #define devcfg0 (*(unsigned*) &boot_data [devcfg_offset + 12])
+
+// PIC32MK DEVCFG definitions
+#define bf1devcfg3 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000])
+#define bf1devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 4])
+#define bf1devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 8])
+#define bf1devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 12])
+#define bf1devcp 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 28])
+#define bf1devsign 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 44])
+#define bf1seq 		(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 48])
+
+#define bf2devcfg3 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000])
+#define bf2devcfg2 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 4])
+#define bf2devcfg1 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 8])
+#define bf2devcfg0 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 12])
+#define bf2devcp 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 28])
+#define bf2devsign 	(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 44])
+#define bf2seq 		(*(unsigned*) &boot_data [devcfg_offset + 0x40000 + 0x20000 + 48])
+
+
+
+// PIC32MM definitions
+#define offset_first 0xc0
+#define offset_alternate 0x40
+#define fdevopt  (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x04])
+#define ficd     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x08])
+#define fpor     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x0c])
+#define fwdt     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x10])
+#define foscsel  (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x14])
+#define fsec     (*(unsigned*) &boot_data [devcfg_offset + offset_first + 0x18])
+#define afdevopt  (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x04])
+#define aficd     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x08])
+#define afpor     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x0c])
+#define afwdt     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x10])
+#define afoscsel  (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x14])
+#define afsec     (*(unsigned*) &boot_data [devcfg_offset + offset_alternate + 0x18])
 
 unsigned progress_count;
 int verify_only;
@@ -138,6 +178,7 @@ void store_data(unsigned address, unsigned byte)
     } else {
         /* Ignore incorrect data. */
         //fprintf(stderr, _("%08X: address out of flash memory\n"), address);
+		fprintf(stdout, "Else statement\n");
         return;
     }
     total_bytes++;
@@ -159,6 +200,7 @@ int read_srec(char *filename)
         perror(filename);
         exit(1);
     }
+
     while (fgets((char*) buf, sizeof(buf), fd)) {
         if (buf[0] == '\n')
             continue;
@@ -348,7 +390,7 @@ static int is_boot_block_dirty(unsigned offset)
 
     for (i=0; i<blocksz; i++, offset++) {
         /* Skip devcfg registers. */
-        if (offset >= devcfg_offset && offset < devcfg_offset+16)
+		if (offset >= devcfg_offset && offset < devcfg_offset+16)
             continue;
         if (boot_data [offset] != 0xff)
             return 1;
@@ -360,7 +402,7 @@ void do_probe()
 {
     /* Open and detect the device. */
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -441,7 +483,7 @@ int verify_block(target_t *mc, unsigned addr)
 void do_erase()
 {
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -463,7 +505,7 @@ void do_program(char *filename)
 
     /* Open and detect the device. */
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -490,14 +532,68 @@ void do_program(char *filename)
 
     /* Verify DEVCFGx values. */
     if (boot_used) {
-        if (devcfg0 == 0xffffffff) {
-            fprintf(stderr, _("DEVCFG values are missing -- check your HEX file!\n"));
-            exit(1);
+        if (FAMILY_MM == target->family->name_short){
+            /* Check if both values have something in them.
+             * DEVOPT (and other) have some permanent 1 bits. Use those.
+               It would be more sensible, to set some bits to 0 in read_*, and compare to that... */
+			
+            if ( ((fdevopt&0x0f00) != 0x0f00) || ((afdevopt&0x0f00) != 0x0f00)){
+                fprintf(stderr, _("Configuration bits are missing -- check your HEX file!\n"));
+                if (debug_level > 0){
+                    fprintf(stderr, "Read config bits are:\n");
+                    fprintf(stderr, "Fdevopt:  %08x\n", fdevopt);
+                    fprintf(stderr, "Ficd:     %08x\n", ficd);
+                    fprintf(stderr, "Fpor:     %08x\n", fpor);
+                    fprintf(stderr, "Fwdt:     %08x\n", fwdt);
+                    fprintf(stderr, "Foscsel:  %08x\n", foscsel);
+                    fprintf(stderr, "Fsec:     %08x\n", fsec);
+                    fprintf(stderr, "AFdevopt: %08x\n", afdevopt);
+                    fprintf(stderr, "AFicd:    %08x\n", aficd);
+                    fprintf(stderr, "AFpor:    %08x\n", afpor);
+                    fprintf(stderr, "AFwdt:    %08x\n", afwdt);
+                    fprintf(stderr, "AFoscsel: %08x\n", afoscsel);
+                    fprintf(stderr, "AFsec:    %08x\n", afsec);
+                }
+                exit(1);
+            }
         }
-        if (devcfg_offset == 0xffc0) {
-            /* For MZ family, clear bits DEVSIGN0[31] and ADEVSIGN0[31]. */
-            boot_data[0xFFEF] &= 0x7f;
-            boot_data[0xFF6F] &= 0x7f;
+		else if (FAMILY_MK == target->family->name_short){
+			/* Check if some bits were set to high */
+            if ( (bf1devcfg0 & 0x0F000000) != 0x0F000000 ){
+                fprintf(stderr, _("Configuration bits are missing -- check your HEX file!\n"));
+                exit(1);
+            }
+
+			
+		    // This is a bit of a hack, but OK.
+		    // Any unused data should be 0xFFFFFFFF in the flash and here. But some isn't (special values, etc).
+		    // For example, there's a clash in the Lower Alias Boot region. 
+		    // CRC here calculates based on 0xFFFFFFFF, but GET_CRC calculates based on real data.
+
+			// Also, because even though the registers exist, but MPLAB doesn't do anything with it...
+			bf1devsign &= 0x7FFFFFFF;
+			bf2devsign &= 0x7FFFFFFF;
+
+		    uint32_t copyFrom = 0x1fc43fc0 - BOOTP_BASE;
+			uint32_t copyTo = 0x1fc03fc0 - BOOTP_BASE;
+			uint32_t length = 0x40;
+			uint32_t counter = 0;
+			for(counter = 0; counter < length; counter++){
+				boot_data[copyTo + counter] = boot_data[copyFrom + counter];
+			}
+
+
+		}
+        else{
+            if (devcfg0 == 0xffffffff) {
+                fprintf(stderr, _("DEVCFG values are missing -- check your HEX file!\n"));
+                exit(1);
+            }
+            if (devcfg_offset == 0xffc0) {
+                /* For MZ family, clear bits DEVSIGN0[31] and ADEVSIGN0[31]. */
+                boot_data[0xFFEF] &= 0x7f;
+                boot_data[0xFF6F] &= 0x7f;
+            }
         }
     }
 
@@ -571,8 +667,21 @@ void do_program(char *filename)
             printf(_("# done      \n"));
             if (! boot_dirty [devcfg_offset / blocksz]) {
                 /* Write chip configuration. */
-                target_program_devcfg(target,
-                    devcfg0, devcfg1, devcfg2, devcfg3);
+                if (FAMILY_MM == target->family->name_short){
+                    target_program_devcfg(target, fdevopt, ficd, fpor, fwdt, 
+                                            foscsel, fsec, afdevopt, aficd, 
+                                            afpor, afwdt, afoscsel, afsec, 0, 0);
+                }
+				else if (FAMILY_MK == target->family->name_short){
+					target_program_devcfg(target, bf1devcfg0, bf1devcfg1,
+						bf1devcfg2, bf1devcfg3, bf1devcp, bf1devsign, bf1seq,
+						bf2devcfg0, bf2devcfg1, bf2devcfg2, bf2devcfg3,
+						bf2devcp, bf2devsign, bf2seq);
+				}
+                else{
+                    target_program_devcfg(target, devcfg0, devcfg1, devcfg2, devcfg3,
+                                            0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+                }
                 boot_dirty [devcfg_offset / blocksz] = 1;
             }
         }
@@ -628,7 +737,7 @@ void do_read(char *filename, unsigned base, unsigned nbytes)
 
     /* Open and detect the device. */
     atexit(quit);
-    target = target_open(target_port, target_speed);
+    target = target_open(target_port, target_speed, interface, interface_speed);
     if (! target) {
         fprintf(stderr, _("Error detecting device -- check cable!\n"));
         exit(1);
@@ -750,7 +859,7 @@ int main(int argc, char **argv)
 #endif
     signal(SIGTERM, interrupted);
 
-    while ((ch = getopt_long(argc, argv, "vDhrpeCVWSd:b:B:",
+    while ((ch = getopt_long(argc, argv, "vDhrpeCVWSd:b:B:i:s:",
       long_options, 0)) != -1) {
         switch (ch) {
         case 'v':
@@ -803,6 +912,30 @@ int main(int argc, char **argv)
         case 'S':
             ++skip_verify;
             continue;
+        case 'i':
+            if (strcmp(optarg, "jtag") == 0 || strcmp(optarg, "JTAG") == 0){
+                interface = INTERFACE_JTAG;
+                if (debug_level > 0){
+                    fprintf(stderr, "Using JTAG interface, if available\n");
+                }
+            }
+            else if ( strcmp(optarg, "icsp") == 0 || strcmp(optarg, "ICSP") == 0){
+                interface = INTERFACE_ICSP;
+                if (debug_level > 0){
+                    fprintf(stderr, "Using ICSP interface, if available\n");
+                }
+            }
+            else{
+                fprintf(stderr, "Unknown interface \"%s\" specified\n", optarg);
+                return 0;
+            }
+            continue;
+        case 's':
+            interface_speed = strtoul(optarg, 0, 0);
+            if (debug_level > 0){
+                fprintf(stderr, "Using clock speed of %d khz, if available\n", interface_speed);
+            }
+            continue;
         }
 usage:
         printf("%s.\n\n", copyright);
@@ -826,6 +959,8 @@ usage:
         printf("       -d device           Use specified serial or USB device\n");
         printf("       -b baudrate         Serial speed, default 115200\n");
         printf("       -B alt_baud         Request an alternative baud rate\n");
+        printf("       -i interface        Choose JTAG or ICSP (if supported)\n");
+        printf("       -s clock_speed      Speed of interface in khz, if supported\n");
         printf("       -e                  Erase chip\n");
         printf("       -p                  Leave board powered on\n");
         printf("       -D                  Debug mode\n");

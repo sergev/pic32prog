@@ -13,7 +13,11 @@
 /*
  * Print configuration for MX1/2 family.
  */
-void print_mx1(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3)
+void print_mx1(unsigned cfg0, unsigned cfg1, unsigned cfg2, unsigned cfg3,
+				unsigned cfg4, unsigned cfg5, unsigned cfg6, unsigned cfg7,
+				unsigned cfg8, unsigned cfg9, unsigned cfg10, unsigned cfg11,
+				unsigned cfg12, unsigned cfg13, unsigned cfg14, unsigned cfg15,
+				unsigned cfg16, unsigned cfg17)
 {
     /*--------------------------------------
      * Configuration register 0
