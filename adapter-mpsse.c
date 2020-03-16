@@ -835,7 +835,7 @@ static void mpsse_enter_icsp(mpsse_adapter_t *a)
  */
 static void serial_execution(mpsse_adapter_t *a)
 {
-    uint32_t counter = 2000;
+    uint32_t counter = 20;
     uint32_t counterPre = 0;
 
     if (a->serial_execution_mode)
@@ -909,16 +909,16 @@ static void serial_execution(mpsse_adapter_t *a)
         mpsse_sendCommand(a, ETAP_CONTROL, 1);
 
         // At least on the MK chip, the first read is negative. Read again, and it's ok.
-        counterPre = 10;
+        counterPre = 11;
         do{
             status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);    // Send data, readflag, immediate, don't care
-        }while(!(status & CONTROL_PROBEN) && counterPre-- > 0); 
+        }while(!(status & CONTROL_PROBEN) && counterPre-- > 1); 
 
 //        if (!(status & CONTROL_PRACC)){   
         if (!(status & CONTROL_PROBEN)){   
             fprintf(stderr, "Failed to enter serial execution. Status was %08x\n", (uint32_t)status);
             if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){  
-                /* For these chips, ICSP & JTAG pins are shared. Can do a trick */
+                /* For these chips, ICSP & JTAG pins are (sometimes) shared. Can do a trick */
                 if (FAMILY_MX1 == a->adapter.family_name_short
                     || FAMILY_MX3 == a->adapter.family_name_short)
                 {
@@ -1000,9 +1000,9 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
     unsigned addr_hi = (addr >> 16) & 0xFFFF;
     unsigned word = 0;
 
-    /* Workaround for PIC32MM. If not in serial execution mode,
-     * read byte twice after enering serial execution,
-     * as first byte will be garbage. */
+    /* Workaround for PIC32MM. If not in serial execution mode yet,
+     * read word twice after enering serial execution,
+     * as first word will be garbage. */
     unsigned times = (a->serial_execution_mode)?0:1;
 
     serial_execution(a);
@@ -1621,7 +1621,7 @@ failed: libusb_release_interface(a->usbdev, 0);
     mpsse_setPins(a, 0, 1, 0, 0, 1); // No Reset, LED, no ICSP, no ICSP_OE, immediate
 
     unsigned idcode = 0;
-    uint32_t counter = 10;
+    uint32_t counter = 11;
     do{
         if (INTERFACE_ICSP == interface){
             mpsse_enter_icsp(a);
@@ -1648,7 +1648,7 @@ failed: libusb_release_interface(a->usbdev, 0);
                     a->name, idcode);
             fprintf(stderr, "IDCODE not valid, retrying\n");
         }
-    }while((idcode & 0xfff) != 0x053 && counter-- > 0);
+    }while((idcode & 0xfff) != 0x053 && counter-- > 1);
     if(counter == 0){
         mpsse_setPins(a, 0, 0, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
         fprintf(stderr, "Couldn't read IDCODE, exiting\n");
