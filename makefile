@@ -8,7 +8,7 @@ CCARCH          =
 
 # Linux
 ifeq ($(UNAME),Linux)
-    LIBS        += -Wl,-Bstatic -lusb-1.0 -Wl,-Bdynamic -lpthread -ludev
+    LIBS        += -Wl,-Bdynamic -lusb-1.0 -lpthread -ludev
     HIDLIB      = hidapi/libusb/.libs/libhidapi-libusb.a
 endif
 
