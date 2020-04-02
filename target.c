@@ -60,7 +60,7 @@ family_t family_mk  = { "mk", FAMILY_MK,
  * We don't really care at the end of the day.
  */
 static const
-family_t family_bl  = { "bootloader",
+family_t family_bl  = { "bootloader", FAMILY_BOOTLOADER,
                         80, 0,      1024, 0,         0,           0,    0      };
 
 /*
