@@ -187,9 +187,10 @@ int serial_read(unsigned char *data, int len, int timeout_msec)
     }
 #else
     struct timeval timeout, to2;
-    long got;
+    long desc, rs, got;
     fd_set rfds;
 
+    got = 0;
     timeout.tv_sec = timeout_msec / 1000;
     timeout.tv_usec = timeout_msec % 1000 * 1000;
 again:
@@ -197,8 +198,8 @@ again:
     FD_ZERO(&rfds);
     FD_SET(fd, &rfds);
 
-    got = select(fd + 1, &rfds, 0, 0, &to2);
-    if (got < 0) {
+    desc = select(fd + 1, &rfds, 0, 0, &to2);
+    if (desc < 0) {
         if (errno == EINTR || errno == EAGAIN) {
             if (debug_level > 1)
                 printf("serial_read: retry on select\n");
@@ -208,18 +209,21 @@ again:
         exit(-1);
     }
 #endif
-    if (got == 0) {
+    if (desc == 0) {
         if (debug_level > 1)
             printf("serial_read: no characters to read\n");
         return 0;
     }
 
 #if ! defined(__WIN32__) && ! defined(WIN32)
-    got = read(fd, data, (len > 1024) ? 1024 : len);
-    if (got < 0) {
+    rs = read(fd, data + got, (len > 1024) ? 1024 : len - got);
+    if (rs < 0) {
         fprintf(stderr, "serial_read: read error\n");
         exit(-1);
     }
+    got += rs;
+    if (got < len)
+        goto again;
 #endif
     return got;
 }
