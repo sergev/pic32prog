@@ -20,7 +20,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
-#if defined(__FreeBSD__) || defined(__DragonFly__)
+#if defined(__FreeBSD__) || defined(__DragonFly__) || defined(__APPLE__)
 #   include <libusb.h>
 #else
 #   include <libusb-1.0/libusb.h>
@@ -44,7 +44,7 @@ typedef struct {
     const char *product;
     uint16_t extra_output;      /* Default OE settings, etc. */
     uint16_t icsp_control;      /* Selecting ICSP mode. 0 == JTAG, 1 == ICSP */
-    uint16_t icsp_inverted; 
+    uint16_t icsp_inverted;
     uint16_t icsp_oe_control;   /* Selecting data direction in ICSP mode. 0 == OUTPUT, 1 == INPUT */
     uint16_t icsp_oe_inverted;
 } device_t;
@@ -269,7 +269,7 @@ static void mpsse_flush_output(mpsse_adapter_t *a)
     if (INTERFACE_ICSP == a->interface){
         /* Since data is LSB, shift data to far right */
         icspTemp = icspTemp>>((63+1) - a->bytes_to_read);
-        memcpy(a->input, &icspTemp, sizeof(uint64_t));        
+        memcpy(a->input, &icspTemp, sizeof(uint64_t));
     }
     if (debug_level > 1) {
         int i;
@@ -281,7 +281,7 @@ static void mpsse_flush_output(mpsse_adapter_t *a)
     a->bytes_to_read = 0;
 }
 
-/*  Renamed function to mpsse_setPins, since it does more than just reset. 
+/*  Renamed function to mpsse_setPins, since it does more than just reset.
  *  Now controls state of reset (always SYSRST), LED,
  *  ICSP select and ICSP output enable pins */
 
@@ -472,9 +472,9 @@ static void mpsse_send(mpsse_adapter_t *a,
                 mpsse_setPins(a, 0, 1, 1, 1, 0);   /* No Reset, LED, ICSP, ICSP_OE == INPUT, not immediate */
 
                 /* During reading, WTDI NEEDS TO BE HERE! Without it won't work properly */
-                a->output [a->bytes_to_write++] = (tms_prolog_nbits == 1 && read_flag) ? 
+                a->output [a->bytes_to_write++] = (tms_prolog_nbits == 1 && read_flag) ?
                     (BITMODE + LSB + RTDO + CLKWNEG + WTDI) :  /* Read in bit mode, LSB first, on TDO, on POSITIVE EDGE */
-                    (BITMODE + LSB + CLKWNEG + WTDI) ;         
+                    (BITMODE + LSB + CLKWNEG + WTDI) ;
                 a->output [a->bytes_to_write++] = 2-1;    /* Always write 2 bits - dummy in this case */
                 a->output [a->bytes_to_write++] = 0;
                 if (tms_prolog_nbits == 1 && read_flag){
@@ -483,8 +483,8 @@ static void mpsse_send(mpsse_adapter_t *a,
 
                 mpsse_setPins(a, 0, 1, 1, 0, 0);   /* No Reset, LED, ICSP, ICSP_OE == OUTPUT, not immediate */
             }
-         
-            
+
+
         }
 
         /* Write all data bits */
@@ -511,7 +511,7 @@ static void mpsse_send(mpsse_adapter_t *a,
                 mpsse_setPins(a, 0, 1, 1, 0, 0);   /* No Reset, LED, ICSP, ICSP_OE == OUTPUT, not immediate */
             }
         }
-    
+
          /* Write the TMS epilog */
         if (tms_epilog_nbits > 0)
         {
@@ -531,8 +531,8 @@ static void mpsse_send(mpsse_adapter_t *a,
 
                 mpsse_setPins(a, 0, 1, 1, 0, 0);   /* No Reset, LED, ICSP, ICSP_OE == OUTPUT, not immediate */
             }
-         
-            
+
+
         }
 
     }
@@ -587,7 +587,7 @@ static uint32_t mpsse_bitReversal(uint32_t input){
 }
 
 static void mpsse_setMode(mpsse_adapter_t *a, uint32_t mode, uint32_t immediate){
-    
+
     if (SET_MODE_TAP_RESET == mode){
         /* TMS 1-1-1-1-1-0 */
         mpsse_send(a, TMS_HEADER_RESET_TAP_NBITS, TMS_HEADER_RESET_TAP_VAL, 0, 0, 0, 0, 0);
@@ -626,7 +626,7 @@ static void mpsse_sendCommand(mpsse_adapter_t *a, uint32_t command, uint32_t imm
         exit(-1);   // TODO make exit procedure
     }
 
-    if (MTAP_COMMAND != command && TAP_SW_MTAP != command 
+    if (MTAP_COMMAND != command && TAP_SW_MTAP != command
         && TAP_SW_ETAP != command && MTAP_IDCODE != command){   // MTAP commands
         mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
                     MTAP_COMMAND_NBITS, command,
@@ -634,7 +634,7 @@ static void mpsse_sendCommand(mpsse_adapter_t *a, uint32_t command, uint32_t imm
                     0);
     }
     else if (ETAP_ADDRESS != command && ETAP_DATA != command    // ETAP commands
-            && ETAP_CONTROL != command && ETAP_EJTAGBOOT != command 
+            && ETAP_CONTROL != command && ETAP_EJTAGBOOT != command
             && ETAP_FASTDATA != command && ETAP_NORMALBOOT != command){
         mpsse_send(a, TMS_HEADER_COMMAND_NBITS, TMS_HEADER_COMMAND_VAL,
                     ETAP_COMMAND_NBITS, command,
@@ -648,10 +648,10 @@ static void mpsse_sendCommand(mpsse_adapter_t *a, uint32_t command, uint32_t imm
 }
 
 
-static uint64_t mpsse_xferData(mpsse_adapter_t *a, uint32_t nBits, 
+static uint64_t mpsse_xferData(mpsse_adapter_t *a, uint32_t nBits,
                 uint32_t iData, uint32_t readFlag, uint32_t immediate){
     mpsse_send(a, TMS_HEADER_XFERDATA_NBITS, TMS_HEADER_XFERDATA_VAL,
-                    nBits, iData, 
+                    nBits, iData,
                     TMS_FOOTER_XFERDATA_NBITS, TMS_FOOTER_XFERDATA_VAL,
                     readFlag);
     if (readFlag){
@@ -695,11 +695,11 @@ static void mpsse_xferInstruction(mpsse_adapter_t *a, unsigned instruction)
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
     do {
-        ctl = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN 
+        ctl = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN
             | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1, 1);    // Send data, readflag, immediate don't care
         // For MK family, PRACC doesn't cut it.
 //        if ((! (ctl & CONTROL_PRACC))){
-        if (!(ctl & CONTROL_PROBEN)){  
+        if (!(ctl & CONTROL_PROBEN)){
             fprintf(stderr, "xfer instruction, ctl was %08x\n", ctl);
             maxCounter++;
             if (maxCounter > 40){
@@ -761,7 +761,7 @@ static void mpsse_close(adapter_t *adapter, int power_on)
 {
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
-    mpsse_sendCommand(a, TAP_SW_ETAP, 1);  
+    mpsse_sendCommand(a, TAP_SW_ETAP, 1);
     mpsse_setMode(a, SET_MODE_TAP_RESET, 1);   // Send TAP reset, immediate
     mdelay(10);
 
@@ -826,7 +826,7 @@ static void mpsse_enter_icsp(mpsse_adapter_t *a)
 		mpsse_setPins(a, 0, 1, 0, 0, 1);	// Same thing as above, just no ICSP.
 	}
     mpsse_flush_output(a);
-    a->interface = tempInterface;  /* Sets up mpsse_send with proper clocking again */ 
+    a->interface = tempInterface;  /* Sets up mpsse_send with proper clocking again */
 
 }
 
@@ -876,7 +876,7 @@ static void serial_execution(mpsse_adapter_t *a)
         mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
         /* Put CPU in Serial Exec Mode */
         mpsse_sendCommand(a, ETAP_EJTAGBOOT, 1); // Send command, immediate
-        
+
         if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){
             mpsse_setPins(a, 0, 1, 0, 0, 1);   // No reset, LED, no ICSP, no ICSP_OE, immediate
             mpsse_flush_output(a);
@@ -900,7 +900,7 @@ static void serial_execution(mpsse_adapter_t *a)
             mpsse_sendCommand(a, TAP_SW_ETAP, 1);
             mpsse_setMode(a, SET_MODE_TAP_RESET, 1);    // Reset TAP, immediate
         }
-    
+
         /* What is the value of ECR, after trying to connect */
         mdelay(10);
         mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
@@ -912,12 +912,12 @@ static void serial_execution(mpsse_adapter_t *a)
         counterPre = 11;
         do{
             status = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN | CONTROL_PROBTRAP), 1, 1);    // Send data, readflag, immediate, don't care
-        }while(!(status & CONTROL_PROBEN) && counterPre-- > 1); 
+        }while(!(status & CONTROL_PROBEN) && counterPre-- > 1);
 
-//        if (!(status & CONTROL_PRACC)){   
-        if (!(status & CONTROL_PROBEN)){   
+//        if (!(status & CONTROL_PRACC)){
+        if (!(status & CONTROL_PROBEN)){
             fprintf(stderr, "Failed to enter serial execution. Status was %08x\n", (uint32_t)status);
-            if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){  
+            if (INTERFACE_JTAG == a->interface || INTERFACE_DEFAULT == a->interface){
                 /* For these chips, ICSP & JTAG pins are (sometimes) shared. Can do a trick */
                 if (FAMILY_MX1 == a->adapter.family_name_short
                     || FAMILY_MX3 == a->adapter.family_name_short)
@@ -927,14 +927,14 @@ static void serial_execution(mpsse_adapter_t *a)
 				    // We need to go 0, enter ICSP, go 1, go 0, repeat this do-while loop.
 				    // NOTE!! This needs to be done on the TMS LINE! TDI should be held low, probably.
 				    mpsse_setPins(a, 1, 1, 0, 0, 1);   // Reset, LED, no ICSP, no ICSP_OE, immediate - immediate here means something else...
-               		mpsse_flush_output(a);
+			mpsse_flush_output(a);
 				    mdelay(5);
-				    
+
 				    mpsse_setMode(a, SET_MODE_ICSP_SYNC, 1);
 				    mdelay(5);
 
 				    mpsse_setPins(a, 0, 1, 0, 0, 1);   // no Reset, LED, no ICSP, no ICSP_OE, immediate - immediate here means something else...
-               		mpsse_flush_output(a);
+			mpsse_flush_output(a);
 				    mdelay(5);
                 }
                 else{
@@ -943,12 +943,12 @@ static void serial_execution(mpsse_adapter_t *a)
                 }
 
 				// Reset will be asserted in the beginning of the loop again.
-				mdelay(100);			
+				mdelay(100);
             }
         }
-        
+
     }while(!(status & CONTROL_PROBEN) && counter-- > 1);    // Repeat, until we sucessefully enter serial execution. Extend if necessary, to more than PROBEN!
-    
+
     if (counter == 0){
         fprintf(stderr, "Couldn't enter serial execution, quitting\n");
     }
@@ -967,7 +967,7 @@ static unsigned get_pe_response(mpsse_adapter_t *a)
     // Wait until CPU is ready
     // Check if Processor Access bit (bit 18) is set
     do {
-        ctl = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN 
+        ctl = mpsse_xferData(a, 32, (CONTROL_PRACC | CONTROL_PROBEN
                 | CONTROL_PROBTRAP | CONTROL_EJTAGBRK), 1, 1);    // Send data, readflag, immediate don't care
     } while (! (ctl & CONTROL_PRACC));
 
@@ -1023,7 +1023,7 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
 
             /* Send command. */
             mpsse_sendCommand(a, ETAP_FASTDATA, 1);
-            /* Get fastdata. */    
+            /* Get fastdata. */
             /* Send zeroes, read response, immediate don't care. Shift by 1 to get rid of PrACC */
             word = mpsse_xferFastData(a, 0, 1, 1) >> 1;
         }
@@ -1032,12 +1032,12 @@ static unsigned mpsse_read_word(adapter_t *adapter, unsigned addr)
 			mpsse_xferInstruction(a, 0xFF2041B3);					// lui s3, FAST_DATA_REG(32:16). Set address of fastdata register
 			mpsse_xferInstruction(a, 0x000041A8 | (addr_hi<<16));	// lui t0, DATA_ADDRESS(31:16)
 			mpsse_xferInstruction(a, 0x00005108 | (addr_lo<<16));	// ori t0, DATA_ADDRESS(15:0)
-	 		mpsse_xferInstruction(a, 0x0000FD28);					// lw t1, 0(t0) - read data
-	 		mpsse_xferInstruction(a, 0x0000F933);					// sw t1, 0(s3) - store data to fast register
+			mpsse_xferInstruction(a, 0x0000FD28);					// lw t1, 0(t0) - read data
+			mpsse_xferInstruction(a, 0x0000F933);					// sw t1, 0(s3) - store data to fast register
 			mpsse_xferInstruction(a, 0x0c000c00);					// Nop, 2x
 			mpsse_xferInstruction(a, 0x0c000c00);					// Nop, 2x, again. Without this (4x nop), you will get garbage after a few bytes!
 																	// Extra Nops make it even worse, always get 0s
-	 		
+
 			/* Send command. */
 			mpsse_sendCommand(a, ETAP_FASTDATA, 1);
 
@@ -1173,14 +1173,14 @@ static void mpsse_load_executive(adapter_t *adapter,
 
         /* Download the PE instructions. */
         /* Step 8 - jump to PE. */
-        mpsse_xferFastData(a, 0, 0, 1);             /* Don't read, immediate */                  
+        mpsse_xferFastData(a, 0, 0, 1);             /* Don't read, immediate */
         mpsse_xferFastData(a, 0xDEAD0000, 0, 1);    /* Don't read, immediate */
         mdelay(10);
         mpsse_xferFastData(a, PE_EXEC_VERSION << 16, 0, 1); /* Don't read, immediate */
     }
     else{
         /* Else MM family */
-        // Step 1. Setup PIC32MM RAM address for the PE 
+        // Step 1. Setup PIC32MM RAM address for the PE
 		mpsse_xferInstruction(a, 0xa00041a4);    // lui a0, 0xa000
 		mpsse_xferInstruction(a, 0x02005084);    // ori a0, a0, 0x200 A total of 0xa000_0200
 
@@ -1216,13 +1216,13 @@ static void mpsse_load_executive(adapter_t *adapter,
 
 		// Send PE_ADDRESS, Address os PE program block from PE Hex file
 		mpsse_xferFastData(a, 0xA0000300, 0, 1);	// Taken from the .hex file.
-		
+
 		// Send PE_SIZE, number as 32-bit words of the program block from the PE Hex file
 		mpsse_xferFastData(a, nwords, 0, 1);        // Data, don't read, immediate (wasn't before)
 
 		if (debug_level > 0){
 			fprintf(stderr, "%s: download PE, nwords = %d\n", a->name, nwords);
-			//mdelay(3000);		
+			//mdelay(3000);
 		}
 		for (i=0; i<nwords; i++) {
 			mpsse_xferFastData(a, *pe++, 0, 0);     // Data, don't read, no immediate
@@ -1239,7 +1239,7 @@ static void mpsse_load_executive(adapter_t *adapter,
 		mdelay(10);
 		mpsse_xferFastData(a, PE_EXEC_VERSION << 16, 0, 1);     // Data, don't read, immediate (wasn't before)
     }
-    
+
     unsigned version = get_pe_response(a);
     if (version != (PE_EXEC_VERSION << 16 | pe_version)) {
         fprintf(stderr, "%s: bad PE version = %08x, expected %08x\n",
@@ -1283,7 +1283,7 @@ static void mpsse_erase_chip(adapter_t *adapter)
         }
     }while(!(status & MCHP_STATUS_CFGRDY) || (status & MCHP_STATUS_FCBUSY));
 
-    mpsse_setMode(a, SET_MODE_TAP_RESET, 1); 
+    mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
     mdelay(25);
 }
 
@@ -1325,7 +1325,7 @@ static void mpsse_program_word(adapter_t *adapter,
 
 static void mpsse_program_double_word(adapter_t *adapter, unsigned addr, unsigned word0, unsigned word1){
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
-    
+
     if (FAMILY_MM != a->adapter.family_name_short){
         fprintf(stderr, "Program double word is only available on MM family. Quitting\n");
     }
@@ -1347,17 +1347,17 @@ static void mpsse_program_double_word(adapter_t *adapter, unsigned addr, unsigne
     mpsse_xferFastData(a, addr, 0, 1);  	/* Send address. */ // Data, don't read, immediate
     mpsse_xferFastData(a, word0, 0, 1);  	/* Send 1st word. */    // Data, don't read, immediate, was not before
     mpsse_xferFastData(a, word1, 0, 1);  	/* Send 2nd word. */    // Data, don't read, immediate, was not before
- 
+
     unsigned response = get_pe_response(a);
     if (response != (PE_DOUBLE_WORD_PGRM << 16)) {
         fprintf(stderr, "%s: failed to program double words 0x%08x 0x%08x at 0x%08x, reply = %08x\n",
             a->name, word0, word1, addr, response);
         exit(-1);
     }
-	
+
 }
 
-static void mpsse_program_quad_word(adapter_t *adapter, unsigned addr, 
+static void mpsse_program_quad_word(adapter_t *adapter, unsigned addr,
             unsigned word0, unsigned word1, unsigned word2, unsigned word3){
     mpsse_adapter_t *a = (mpsse_adapter_t*) adapter;
 
@@ -1386,14 +1386,14 @@ static void mpsse_program_quad_word(adapter_t *adapter, unsigned addr,
     mpsse_xferFastData(a, word1, 0, 1);  	/* Send 2nd word. */    // Data, don't read, immediate, was not before
     mpsse_xferFastData(a, word2, 0, 1);  	/* Send 1st word. */    // Data, don't read, immediate, was not before
     mpsse_xferFastData(a, word3, 0, 1);  	/* Send 2nd word. */    // Data, don't read, immediate, was not before
- 
+
     unsigned response = get_pe_response(a);
     if (response != (PE_QUAD_WORD_PGRM << 16)) {
         fprintf(stderr, "%s: failed to program quad words 0x%08x 0x%08x 0x%08x 0x%08x at 0x%08x, reply = %08x\n",
             a->name, word0, word1, word2, word3, addr, response);
         exit(-1);
     }
-	
+
 }
 
 /*
@@ -1416,7 +1416,7 @@ static void mpsse_program_row(adapter_t *adapter, unsigned addr,
 
     /* Use PE to write flash memory. */
     /* Send command. */
-    mpsse_sendCommand(a, ETAP_FASTDATA, 1); 
+    mpsse_sendCommand(a, ETAP_FASTDATA, 1);
 
     mpsse_xferFastData(a, PE_ROW_PROGRAM << 16 | words_per_row, 0, 1);  // Data, don't read, immediate
     mpsse_xferFastData(a, addr, 0, 1);  /* Send address. */             // Data, don't read, immediate
@@ -1484,7 +1484,7 @@ static void mpsse_verify_data(adapter_t *adapter,
  * When adapter not found, return 0.
  * Parameters vid, pid and serial are not used.
  */
-adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial, 
+adapter_t *adapter_open_mpsse(int vid, int pid, const char *serial,
                                 int interface, int speed)
 {
     mpsse_adapter_t *a;
@@ -1628,12 +1628,12 @@ failed: libusb_release_interface(a->usbdev, 0);
         }
 
         /* Delay required for ICSP */
-        mdelay(5);     
+        mdelay(5);
 
         /* Reset the JTAG TAP controller: TMS 1-1-1-1-1-0.
          * After reset, the IDCODE register is always selected.
          * Read out 32 bits of data. */
-        
+
 
         mpsse_setMode(a, SET_MODE_TAP_RESET, 1);
         mpsse_sendCommand(a, TAP_SW_MTAP, 1);
@@ -1661,12 +1661,12 @@ failed: libusb_release_interface(a->usbdev, 0);
     {
         mpsse_setPins(a, 1, 1, 0, 0, 1); // Reset, LED, no ICSP, no ICSP_OE, immediate
 
-        // So, the MM family's JTAG doesn't work in RESET...      
-        // Works like this for all the others as well.  
+        // So, the MM family's JTAG doesn't work in RESET...
+        // Works like this for all the others as well.
         mdelay(10);
         mpsse_setPins(a, 0, 1, 0, 0, 1); // No reset, LED, no ICSP, no ICSP_OE, immediate
-        
-    } 
+
+    }
     mdelay(10);
 
     /* Check status. */
@@ -1678,7 +1678,7 @@ failed: libusb_release_interface(a->usbdev, 0);
     mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_FLASH_ENABLE, 0, 1);
     /* Xfer data. */
     unsigned status = mpsse_xferData(a, MTAP_COMMAND_DR_NBITS, MCHP_STATUS, 1, 1);
-    
+
     if (debug_level > 0)
         fprintf(stderr, "%s: status %04x\n", a->name, status);
     if ((status & (MCHP_STATUS_CFGRDY | MCHP_STATUS_FCBUSY)) != (MCHP_STATUS_CFGRDY)) {

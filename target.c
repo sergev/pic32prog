@@ -32,10 +32,10 @@ extern print_func_t print_mk;
  */
                     /*-Boot-Devcfg--Row---Print------Code--------Nwords-Version-*/
 static const
-family_t family_mm_gpl  = { "mm_gpl", FAMILY_MM, 
+family_t family_mm_gpl  = { "mm_gpl", FAMILY_MM,
                         4, 0x1700,  256, print_mm,  pic32_pemm_gpl,  555, 0x0510 };
 static const
-family_t family_mm_gpm  = { "mm_gpm", FAMILY_MM, 
+family_t family_mm_gpm  = { "mm_gpm", FAMILY_MM,
                         4, 0x1700,  256, print_mm,  pic32_pemm_gpm,  555, 0x0510 };
 
 static const
@@ -447,7 +447,7 @@ found:
  * To select other protocols, add a prefix to the port name,
  * like "bitbang:COM5".
  */
-static adapter_t *open_serial_adapter(const char *port_name, int baud_rate, 
+static adapter_t *open_serial_adapter(const char *port_name, int baud_rate,
 										int interface, int speed)
 {
     const char *prefix, *delimiter;
@@ -661,7 +661,7 @@ void target_print_devcfg(target_t *t)
         uint32_t devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
         uint32_t offset_first = 0xc0;
         uint32_t offset_alternate = 0x40;
-        
+
         uint32_t fdevopt = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x04);
         uint32_t ficd    = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x08);
         uint32_t fpor    = t->adapter->read_word(t->adapter, devcfg_addr + offset_first + 0x0c);
@@ -675,9 +675,9 @@ void target_print_devcfg(target_t *t)
         uint32_t afoscsel = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x14);
         uint32_t afsec    = t->adapter->read_word(t->adapter, devcfg_addr + offset_alternate + 0x18);
         if (fdevopt == 0 || afdevopt == 0){
-            fprintf(stderr, "Failed to read config value, or values are garbage\n");            
+            fprintf(stderr, "Failed to read config value, or values are garbage\n");
             return;
-        } 
+        }
         print_mm(fdevopt, ficd, fpor, fwdt, foscsel, fsec,
                                 afdevopt, aficd, afpor, afwdt, afoscsel, afsec,
 								0, 0, 0, 0, 0, 0);
@@ -685,7 +685,7 @@ void target_print_devcfg(target_t *t)
     else if (FAMILY_MK == t->family->name_short){
 		// Offset is set to BF1DEVCFG3 in Boot Flash 1!
         uint32_t devcfg_addr    = 0x1fc40000 + target_devcfg_offset(t);
-		
+
 		// Boot flash 1 area
         uint32_t bf1devcfg3     = t->adapter->read_word(t->adapter, devcfg_addr);
         uint32_t bf1devcfg2     = t->adapter->read_word(t->adapter, devcfg_addr + 0x04);
@@ -710,13 +710,14 @@ void target_print_devcfg(target_t *t)
         uint32_t devsn2         = t->adapter->read_word(t->adapter, 0x1FC45028);
         uint32_t devsn3         = t->adapter->read_word(t->adapter, 0x1FC4502C);
 
-		t->family->print_devcfg(bf1devcfg3, bf1devcfg2, bf1devcfg1, bf1devcfg0,
-				bf1devcp, bf1devsign, bf1seq,
-				bf2devcfg3, bf2devcfg2, bf2devcfg1, bf2devcfg0,
-				bf2devcp, bf2devsign, bf2seq,
-				devsn0, devsn1, devsn2, devsn3);
-    }
-    else{
+        if (t->family->print_devcfg) {
+            t->family->print_devcfg(bf1devcfg3, bf1devcfg2, bf1devcfg1, bf1devcfg0,
+                                    bf1devcp, bf1devsign, bf1seq,
+                                    bf2devcfg3, bf2devcfg2, bf2devcfg1, bf2devcfg0,
+                                    bf2devcp, bf2devsign, bf2seq,
+                                    devsn0, devsn1, devsn2, devsn3);
+        }
+    } else {
         /* MX, MZ */
         unsigned devcfg_addr = 0x1fc00000 + target_devcfg_offset(t);
         unsigned devcfg3 = t->adapter->read_word(t->adapter, devcfg_addr);
@@ -730,9 +731,11 @@ void target_print_devcfg(target_t *t)
         if (devcfg3 == 0 && devcfg2 == 0 && devcfg1 == 0 && devcfg0 == 0)
             return;
 
-        printf(_("Configuration:\n"));
-        t->family->print_devcfg(devcfg0, devcfg1, devcfg2, devcfg3,
-                                0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        if (t->family->print_devcfg) {
+            printf(_("Configuration:\n"));
+            t->family->print_devcfg(devcfg0, devcfg1, devcfg2, devcfg3,
+                                    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0);
+        }
     }
 }
 
@@ -861,8 +864,8 @@ void target_program_block(target_t *t, unsigned addr,
  * Program the configuration registers.
  */
 void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
-        uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5, 
-        uint32_t arg6, uint32_t arg7, uint32_t arg8, uint32_t arg9, 
+        uint32_t arg2, uint32_t arg3, uint32_t arg4, uint32_t arg5,
+        uint32_t arg6, uint32_t arg7, uint32_t arg8, uint32_t arg9,
         uint32_t arg10, uint32_t arg11, uint32_t arg12, uint32_t arg13)
 {
     if (! t->family->devcfg_offset)
@@ -895,8 +898,8 @@ void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
     }
 	else if (FAMILY_MK == t->family->name_short){
         devcfg_addr = devcfg_addr + 0x40000;    // Offset to Boot flash 1
-    
-        // Note, the MK family says to only use program_quad_word, 
+
+        // Note, the MK family says to only use program_quad_word,
         // when writing into the sequence and configuration spaces.
         fprintf(stderr, "%s:\nbf1devcfg0 = %08x, bf1devcfg1 = %08x,\n", __func__, arg0, arg1);
         fprintf(stderr, "bf1devcfg2 = %08x, bf1devcfg3 = %08x,\n", arg2, arg3);
@@ -911,7 +914,7 @@ void target_program_devcfg(target_t *t, uint32_t arg0, uint32_t arg1,
         // Writes must be aligned to a four word boundary! Bits 0 & 1 should be 0.
         // -> TWe can align to xxx0. So DEVCFG bits can be one write,
         // -> DEVCP one, DEVSIGN one, and SEQ one. Pad the unused bytes with 1s.
-  
+
         // bf1devcfg3, bf1devcfg2, bf1devcfg1, bf1devcfg0. Address at 3FC0
         t->adapter->program_quad_word(t->adapter, devcfg_addr, arg3, arg2, arg1, arg0);
         // bf1devcp. Address at 3FDC, with start of write at 3FD0

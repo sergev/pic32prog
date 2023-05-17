@@ -28,13 +28,6 @@ endif
 ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation
     HIDLIB      = hidapi/mac/.libs/libhidapi.a
-    UNIV_ARCHS  = $(shell grep '^universal_archs' /opt/local/etc/macports/macports.conf)
-    ifneq ($(findstring i386,$(UNIV_ARCHS)),)
-        CCARCH  += -arch i386
-    endif
-    ifneq ($(findstring x86_64,$(UNIV_ARCHS)),)
-        CCARCH  += -arch x86_64
-    endif
     CC          += $(CCARCH)
 endif
 
@@ -48,9 +41,9 @@ PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
 CFLAGS          += -DUSE_MPSSE
 PROG_OBJS       += adapter-mpsse.o
 ifeq ($(UNAME),Darwin)
-    # Use 'sudo port install libusb'
-    CFLAGS      += -I/opt/local/include
-    LIBS        += /opt/local/lib/libusb-1.0.a -lobjc
+    # Use 'brew install libusb'
+    CFLAGS      += $(shell pkg-config --cflags libusb-1.0)
+    LIBS        += $(shell pkg-config --libs libusb-1.0)
 endif
 
 all:            pic32prog
@@ -75,7 +68,7 @@ pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo: pic32prog-ru.po
 		cp pic32prog-ru-cp866.mo ru/LC_MESSAGES/pic32prog.mo
 
 clean:
-		rm -f *~ *.o core pic32prog adapter-mpsse pic32prog.po hidapi/ar-lib hidapi/compile
+		rm -f *~ *.o core pic32prog adapter-mpsse pic32prog.po
 		if [ -f hidapi/Makefile ]; then make -C hidapi clean; fi
 
 install:	pic32prog #pic32prog-ru.mo
