@@ -26,6 +26,7 @@ extern const unsigned pic32_pemm_gpl[];
 extern const unsigned pic32_pemm_gpm[];
 extern const unsigned pic32_pemk[];
 
+#define FAMILY_BOOTLOADER	-1
 #define FAMILY_MX1	0
 #define FAMILY_MX3	1
 #define FAMILY_MZ	2
