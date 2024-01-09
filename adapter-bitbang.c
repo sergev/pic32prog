@@ -765,19 +765,17 @@ static void bitbang_load_executive(adapter_t *adapter,
         /* Step 5. */
         unsigned opcode1 = 0x3c060000 | pic32_pe_loader[i];
         unsigned opcode2 = 0x34c60000 | pic32_pe_loader[i+1];
+        unsigned opcode3 = 0xac860000 | (i * 2);
 
         xfer_instruction(a, opcode1);      // lui a2, PE_loader_hi++
         xfer_instruction(a, opcode2);      // ori a2, PE_loader_lo++
-        xfer_instruction(a, 0xac860000);   // sw  a2, 0(a0)
-        xfer_instruction(a, 0x24840004);   // addiu a0, 4
+        xfer_instruction(a, opcode3);      // sw  a2, PE_offset(a0)
     }
     printf(" 5");
     fflush(stdout);
 
     /* Jump to PE loader (step 6). */
-    xfer_instruction(a, 0x3c19a000);   // lui t9, 0xa000
-    xfer_instruction(a, 0x37390800);   // ori t9, 0x800  - t9 has a0000800
-    xfer_instruction(a, 0x03200008);   // jr  t9
+    xfer_instruction(a, 0x00800008);   // jr  a0
     xfer_instruction(a, 0x00000000);   // nop
     printf(" 6");
     fflush(stdout);
