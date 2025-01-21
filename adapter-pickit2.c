@@ -51,6 +51,7 @@ typedef struct {
 #define MICROCHIP_VID           0x04d8
 #define PICKIT2_PID             0x0033  /* Microchip PICkit 2 */
 #define PICKIT3_PID             0x900a  /* Microchip PICkit 3 */
+#define MICROSTICK_II_PID       0x8107  /* Microstick II Starter Kit */
 #define CHIPKIT_PID             0x8108  /* chipKIT Programmer */
 
 /*
@@ -1047,6 +1048,8 @@ adapter_t *adapter_open_pickit3(int vid, int pid, const char *serial)
         hiddev = hid_open(MICROCHIP_VID, PICKIT3_PID, 0);
         if (! hiddev)
             hiddev = hid_open(MICROCHIP_VID, CHIPKIT_PID, 0);
+        if (! hiddev)
+            hiddev = hid_open(MICROCHIP_VID, MICROSTICK_II_PID, 0);
     }
     if (! hiddev) {
         if (vid)

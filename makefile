@@ -16,14 +16,6 @@ endif
 ifeq ($(UNAME),Darwin)
     LIBS        += -framework IOKit -framework CoreFoundation
     HIDLIB      = hidapi/mac/.libs/libhidapi.a
-    UNIV_ARCHS  = $(shell grep '^universal_archs' /opt/local/etc/macports/macports.conf)
-    ifneq ($(findstring i386,$(UNIV_ARCHS)),)
-        CCARCH  += -arch i386
-    endif
-    ifneq ($(findstring x86_64,$(UNIV_ARCHS)),)
-        CCARCH  += -arch x86_64
-    endif
-    CC          += $(CCARCH)
 endif
 
 PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
@@ -36,9 +28,9 @@ PROG_OBJS       = pic32prog.o target.o executive.o serial.o \
 CFLAGS          += -DUSE_MPSSE
 PROG_OBJS       += adapter-mpsse.o
 ifeq ($(UNAME),Darwin)
-    # Use 'sudo port install libusb'
-    CFLAGS      += -I/opt/local/include
-    LIBS        += /opt/local/lib/libusb-1.0.a -lobjc
+    # Use 'brew install libusb'
+    CFLAGS      += -I/usr/local/include
+    LIBS        += /usr/local/lib/libusb-1.0.a -lobjc
 endif
 
 all:            pic32prog
